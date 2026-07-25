@@ -21,6 +21,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Two matches in one line looked like one match shown twice.** Each match row printed
+  the whole line, before and after — so two dates in a sentence produced four nearly
+  identical lines. The context around a match is now clipped to 30 characters per side,
+  which also keeps long lines from overflowing the panel.
 - **The displayed pattern was not the pattern that ran.** `g` is always forced (a rule
   without it would replace only the first match), but the panel showed the model's raw
   flags — so `/#alt/i` was displayed while `/#alt/gi` was executed. Anyone copying the

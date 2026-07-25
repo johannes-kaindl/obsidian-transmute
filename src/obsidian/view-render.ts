@@ -2,6 +2,7 @@ import { setIcon } from "obsidian";
 import type { SessionState } from "../core/session";
 import type { ScopeKind } from "../core/settings";
 import { effectiveFlags } from "../core/regex/compile";
+import { clipContext } from "../core/snippet";
 import type { Hit } from "../core/types";
 import { t } from "../vendor/kit/i18n";
 
@@ -48,16 +49,19 @@ function scopeSwitch(parent: El, model: PanelModel, handlers: PanelHandlers): vo
 function hitLine(parent: El, hit: Hit): void {
   const localStart = hit.start - hit.lineStart;
   const localEnd = hit.end - hit.lineStart;
+  // Gekuerzter Kontext: liegen mehrere Treffer in einer Zeile, stuende die Zeile sonst
+  // je Treffer zweimal komplett da — das liest sich wie ein doppelter Treffer.
+  const { lead, lag } = clipContext(hit.before, localStart, localEnd);
 
   const before = parent.createDiv({ cls: "transmute-before" });
-  before.createSpan({ text: hit.before.slice(0, localStart) });
+  before.createSpan({ text: lead });
   before.createSpan({ text: hit.matched, cls: "transmute-mark transmute-mark-old" });
-  before.createSpan({ text: hit.before.slice(localEnd) });
+  before.createSpan({ text: lag });
 
   const after = parent.createDiv({ cls: "transmute-after" });
-  after.createSpan({ text: hit.before.slice(0, localStart) });
+  after.createSpan({ text: lead });
   after.createSpan({ text: hit.replacement, cls: "transmute-mark transmute-mark-new" });
-  after.createSpan({ text: hit.before.slice(localEnd) });
+  after.createSpan({ text: lag });
 }
 
 function renderPreview(
