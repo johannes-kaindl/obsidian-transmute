@@ -89,6 +89,46 @@ describe("renderPanel", () => {
     expect(root.textContent).toContain("/foo/g");
   });
 
+  // Regression 0.2.0: angezeigt wurde /#alt/i, ausgefuehrt aber /#alt/gi. Wer das
+  // Muster kopiert oder daraus lernt, bekam ein anderes Muster als das gelaufene.
+  it("zeigt die Flags, mit denen das Muster tatsaechlich lief", () => {
+    const root = makeFakeEl();
+    renderPanel(
+      root,
+      {
+        ...base,
+        state: {
+          phase: "preview",
+          rule: { regex: "#alt", flags: "i", replacement: "#neu", explanation: "" },
+          hits: [hit()],
+          selected: [true],
+          timedOutAtLine: null,
+        },
+      },
+      handlers,
+    );
+    expect(root.textContent).toContain("/#alt/gi");
+  });
+
+  it("zeigt neben dem Suchmuster auch das Ersetzungsmuster", () => {
+    const root = makeFakeEl();
+    renderPanel(
+      root,
+      {
+        ...base,
+        state: {
+          phase: "preview",
+          rule: { regex: "(\\d+)", flags: "g", replacement: "Nr. $1", explanation: "" },
+          hits: [hit()],
+          selected: [true],
+          timedOutAtLine: null,
+        },
+      },
+      handlers,
+    );
+    expect(root.textContent).toContain("Nr. $1");
+  });
+
   it("markiert die Fundstelle ueber lineStart, nicht per Textsuche", () => {
     const root = makeFakeEl();
     // Zwei gleiche Vorkommen in einer Zeile: eine indexOf-Suche wuerde das erste
@@ -127,7 +167,9 @@ describe("renderPanel", () => {
       },
       handlers,
     );
-    expect(root.textContent).toContain("No matches");
+    // Die Meldung darf die Ursache nicht der Anweisung zuschieben — sie stimmt genauso
+    // oft, wenn der Text gar nicht (mehr) enthaelt, wonach gesucht wird.
+    expect(root.textContent).toContain("found nothing in this text");
   });
 
   it("meldet einen Zeitbudget-Abbruch mit Zeilennummer", () => {

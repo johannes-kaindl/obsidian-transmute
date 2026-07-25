@@ -65,6 +65,19 @@
   word-break: break-all;
 }
 
+.transmute-replacement {
+  display: flex;
+  gap: var(--size-4-2);
+  align-items: baseline;
+  margin-top: var(--size-4-1);
+}
+
+.transmute-replacement-label {
+  color: var(--text-muted);
+  font-size: var(--font-smaller);
+  flex-shrink: 0;
+}
+
 .transmute-explanation {
   color: var(--text-muted);
   font-size: var(--font-smaller);

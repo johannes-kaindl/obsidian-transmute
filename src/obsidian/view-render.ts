@@ -1,6 +1,7 @@
 import { setIcon } from "obsidian";
 import type { SessionState } from "../core/session";
 import type { ScopeKind } from "../core/settings";
+import { effectiveFlags } from "../core/regex/compile";
 import type { Hit } from "../core/types";
 import { t } from "../vendor/kit/i18n";
 
@@ -66,7 +67,11 @@ function renderPreview(
   handlers: PanelHandlers,
 ): void {
   const pattern = parent.createDiv({ cls: "transmute-pattern" });
-  pattern.createEl("code", { text: `/${state.rule.regex}/${state.rule.flags}` });
+  // effectiveFlags, nicht rule.flags: angezeigt werden muss, was lief.
+  pattern.createEl("code", { text: `/${state.rule.regex}/${effectiveFlags(state.rule.flags)}` });
+  const replacement = pattern.createDiv({ cls: "transmute-replacement" });
+  replacement.createSpan({ text: t("view.replacement"), cls: "transmute-replacement-label" });
+  replacement.createEl("code", { text: state.rule.replacement });
   if (state.rule.explanation.length > 0) {
     pattern.createDiv({ text: state.rule.explanation, cls: "transmute-explanation" });
   }

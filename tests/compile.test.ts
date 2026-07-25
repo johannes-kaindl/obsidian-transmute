@@ -1,9 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { compileRule, isMultilinePattern } from "../src/core/regex/compile";
+import { compileRule, effectiveFlags, isMultilinePattern } from "../src/core/regex/compile";
 import type { RuleDraft } from "../src/core/types";
 
 const draft = (over: Partial<RuleDraft>): RuleDraft => ({
   regex: "a", flags: "", replacement: "b", explanation: "", ...over,
+});
+
+describe("effectiveFlags", () => {
+  // Die Anzeige muss zeigen, was WIRKLICH lief. Ein angezeigtes /x/i, das als /x/gi
+  // ausgefuehrt wurde, ist fuer jemanden, der das Muster kopieren oder daraus lernen
+  // will, schlicht falsch.
+  it("ergaenzt g, weil compileRule es erzwingt", () => {
+    expect(effectiveFlags("i")).toBe("gi");
+    expect(effectiveFlags("")).toBe("g");
+  });
+
+  it("dupliziert ein vorhandenes g nicht", () => {
+    expect(effectiveFlags("gi")).toBe("gi");
+  });
+
+  it("stimmt mit den Flags des kompilierten Musters ueberein", () => {
+    const res = compileRule(draft({ regex: "x", flags: "i" }));
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.re.flags).toBe(effectiveFlags("i"));
+  });
 });
 
 describe("compileRule", () => {

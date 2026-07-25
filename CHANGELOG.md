@@ -15,8 +15,21 @@ All notable changes to this project are documented here. The format follows
   filled it goes into the prompt as its own line; blank or whitespace-only is omitted
   rather than sent as an empty target.
 
+- The **replacement pattern** is now shown next to the search pattern. Previously the
+  panel showed only what was matched, never what it would be turned into — which is half
+  the rule, and the half you need to judge whether it is right.
+
 ### Fixed
 
+- **The displayed pattern was not the pattern that ran.** `g` is always forced (a rule
+  without it would replace only the first match), but the panel showed the model's raw
+  flags — so `/#alt/i` was displayed while `/#alt/gi` was executed. Anyone copying the
+  pattern out or learning from it got a different rule than the one they saw. The flags
+  are now normalised exactly as `RegExp` reports them.
+- **"No matches" blamed the instruction.** The old wording ("try refining the instruction")
+  claimed a cause it cannot know: the far more common reason is that the text no longer
+  contains what is being searched for — for instance because the rule was already applied.
+  The message now states the fact and names both possibilities.
 - **Selecting text and running a rule reported "nothing selected".** In reading view there
   is no editor selection at all — a highlight there is a plain browser selection the editor
   never sees. Reading view is now its own, specific message ("switch the note to editing
