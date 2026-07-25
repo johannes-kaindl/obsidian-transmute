@@ -17,6 +17,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Selecting text and running a rule reported "nothing selected".** In reading view there
+  is no editor selection at all — a highlight there is a plain browser selection the editor
+  never sees. Reading view is now its own, specific message ("switch the note to editing
+  view") instead of a misleading one. The same cause made whole-note runs find nothing in
+  reading view.
+- **Undo took two presses.** Applying replaced the entire document with the new text. It now
+  writes one editor transaction containing one change per selected match: a single undo
+  step, untouched text left untouched, cursor and scroll position preserved.
 - **Every action failed with "open a note first" while a note was open.** The panel looked
   up the note with `getActiveViewOfType`, but clicking into the sidebar makes the panel
   itself the active view — so there was no "active" note to find. It now asks the main

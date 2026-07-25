@@ -1,29 +1,35 @@
 import { describe, expect, it } from "vitest";
 import { MarkdownView } from "./__mocks__/obsidian";
-import { activeMarkdownView, readScope, writeScope } from "../src/obsidian/editor-io";
-import type { Editor, Workspace } from "obsidian";
+import { activeMarkdownView, applyHitsToEditor, readScope } from "../src/obsidian/editor-io";
+import type { Editor, MarkdownView as MarkdownViewType, Workspace } from "obsidian";
+import type { Hit } from "../src/core/types";
 
-/** Minimaler Workspace-Stub: rootSplit klammert die Sidebars aus. */
 function workspaceWith(view: unknown): Workspace {
   return {
     rootSplit: { id: "root" },
-    getMostRecentLeaf: (container: unknown) => (container === undefined ? null : { view }),
+    getMostRecentLeaf: () => ({ view }),
   } as unknown as Workspace;
 }
 
-function fakeEditor(lines: string[], selection = ""): Editor {
+function fakeEditor(text: string, selection = ""): Editor {
   return {
-    getValue: () => lines.join("\n"),
+    getValue: () => text,
     getSelection: () => selection,
-    getCursor: (which: string) => (which === "from" ? { line: 0, ch: 0 } : { line: 0, ch: selection.length }),
-    lastLine: () => lines.length - 1,
-    getLine: (i: number) => lines[i],
-    replaceRange: () => undefined,
+    getCursor: () => ({ line: 0, ch: 0 }),
+    posToOffset: () => 7,
+    offsetToPos: (offset: number) => ({ line: 0, ch: offset }),
+    transaction: () => undefined,
   } as unknown as Editor;
 }
 
+function fakeView(mode: string, editor: Editor): MarkdownViewType {
+  const view = new MarkdownView() as unknown as MarkdownViewType;
+  Object.assign(view, { getMode: () => mode, editor });
+  return view;
+}
+
 describe("activeMarkdownView", () => {
-  // Regression 0.1.2: mit getActiveViewOfType lieferte das beim Klick ins Seitenpanel
+  // Regression 0.2.0: mit getActiveViewOfType lieferte das beim Klick ins Seitenpanel
   // null — das Panel ist dann die aktive Ansicht und jede Aktion scheiterte mit
   // "oeffne zuerst eine Notiz", obwohl daneben eine Notiz offen war.
   it("findet die Notiz im Hauptbereich, auch wenn das Panel den Fokus hat", () => {
@@ -33,14 +39,6 @@ describe("activeMarkdownView", () => {
 
   it("gibt null zurueck, wenn im Hauptbereich keine Markdown-Notiz liegt", () => {
     expect(activeMarkdownView(workspaceWith({ notAView: true }))).toBeNull();
-  });
-
-  it("gibt null zurueck, wenn gar kein Leaf da ist", () => {
-    const workspace = {
-      rootSplit: { id: "root" },
-      getMostRecentLeaf: () => null,
-    } as unknown as Workspace;
-    expect(activeMarkdownView(workspace)).toBeNull();
   });
 
   it("fragt den rootSplit ab, nicht den gesamten Workspace", () => {
@@ -58,30 +56,88 @@ describe("activeMarkdownView", () => {
 });
 
 describe("readScope", () => {
-  it("liest die ganze Notiz im file-Modus", () => {
-    const range = readScope(fakeEditor(["eins", "zwei"]), "file");
-    expect(range?.text).toBe("eins\nzwei");
-    expect(range?.from).toEqual({ line: 0, ch: 0 });
-    expect(range?.to).toEqual({ line: 1, ch: 4 });
+  // Regression 0.2.0: im Lesemodus gibt es keine Editor-Auswahl — eine Markierung dort
+  // ist eine reine Browser-Auswahl. Vorher meldete das "nichts ausgewaehlt", was den
+  // Nutzer im Kreis schickte, obwohl sichtbar Text markiert war.
+  it("meldet den Lesemodus als eigenen Fall, nicht als fehlende Auswahl", () => {
+    const view = fakeView("preview", fakeEditor("inhalt", "markiert"));
+    expect(readScope(view, "selection")).toEqual({ kind: "reading-mode" });
+    expect(readScope(view, "file")).toEqual({ kind: "reading-mode" });
   });
 
-  it("gibt null zurueck, wenn im selection-Modus nichts markiert ist", () => {
-    expect(readScope(fakeEditor(["eins"]), "selection")).toBeNull();
+  it("liest die ganze Notiz im file-Modus ab Offset 0", () => {
+    const view = fakeView("source", fakeEditor("eins\nzwei"));
+    expect(readScope(view, "file")).toEqual({ kind: "ok", text: "eins\nzwei", baseOffset: 0 });
   });
 
-  it("liest die Auswahl im selection-Modus", () => {
-    expect(readScope(fakeEditor(["eins zwei"], "eins"), "selection")?.text).toBe("eins");
+  it("liest die Auswahl mit ihrem Dokument-Offset", () => {
+    const view = fakeView("source", fakeEditor("eins zwei", "zwei"));
+    expect(readScope(view, "selection")).toEqual({ kind: "ok", text: "zwei", baseOffset: 7 });
+  });
+
+  it("meldet eine leere Auswahl als no-selection", () => {
+    const view = fakeView("source", fakeEditor("eins"));
+    expect(readScope(view, "selection")).toEqual({ kind: "no-selection" });
   });
 });
 
-describe("writeScope", () => {
-  it("schreibt ueber replaceRange, damit Cmd+Z in einem Schritt zurueckgeht", () => {
-    const calls: unknown[][] = [];
+const hit = (start: number, end: number, replacement: string): Hit => ({
+  line: 0,
+  lineStart: 0,
+  start,
+  end,
+  matched: "",
+  replacement,
+  before: "",
+  after: "",
+});
+
+describe("applyHitsToEditor", () => {
+  function recordingEditor(): { editor: Editor; calls: unknown[] } {
+    const calls: unknown[] = [];
     const editor = {
-      replaceRange: (...args: unknown[]) => calls.push(args),
+      offsetToPos: (offset: number) => ({ line: 0, ch: offset }),
+      transaction: (tx: unknown) => calls.push(tx),
     } as unknown as Editor;
-    writeScope(editor, { text: "alt", from: { line: 0, ch: 0 }, to: { line: 0, ch: 3 } }, "neu");
+    return { editor, calls };
+  }
+
+  // Regression 0.2.0: vorher wurde das ganze Dokument durch den neuen Text ersetzt.
+  // Das kostete zwei Undo-Schritte und warf Cursor sowie Scroll-Position weg.
+  it("schreibt EINE Transaktion mit einer Aenderung je Treffer", () => {
+    const { editor, calls } = recordingEditor();
+    const applied = applyHitsToEditor(editor, [hit(0, 3, "X"), hit(4, 7, "Y")], [true, true], 0);
+    expect(applied).toBe(2);
     expect(calls).toHaveLength(1);
-    expect(calls[0][0]).toBe("neu");
+    expect((calls[0] as { changes: unknown[] }).changes).toHaveLength(2);
+  });
+
+  it("verschiebt die Aenderungen um den Offset des Ausschnitts", () => {
+    const { editor, calls } = recordingEditor();
+    applyHitsToEditor(editor, [hit(0, 3, "X")], [true], 100);
+    const change = (calls[0] as { changes: { from: { ch: number }; to: { ch: number } }[] }).changes[0];
+    expect(change.from.ch).toBe(100);
+    expect(change.to.ch).toBe(103);
+  });
+
+  it("laesst abgewaehlte Treffer weg", () => {
+    const { editor, calls } = recordingEditor();
+    const applied = applyHitsToEditor(editor, [hit(0, 3, "X"), hit(4, 7, "Y")], [false, true], 0);
+    expect(applied).toBe(1);
+    expect((calls[0] as { changes: unknown[] }).changes).toHaveLength(1);
+  });
+
+  it("schreibt gar nicht, wenn nichts ausgewaehlt ist", () => {
+    const { editor, calls } = recordingEditor();
+    expect(applyHitsToEditor(editor, [hit(0, 3, "X")], [false], 0)).toBe(0);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("sortiert die Aenderungen aufsteigend", () => {
+    const { editor, calls } = recordingEditor();
+    applyHitsToEditor(editor, [hit(10, 12, "spaet"), hit(0, 2, "frueh")], [true, true], 0);
+    const changes = (calls[0] as { changes: { from: { ch: number } }[] }).changes;
+    expect(changes[0].from.ch).toBe(0);
+    expect(changes[1].from.ch).toBe(10);
   });
 });

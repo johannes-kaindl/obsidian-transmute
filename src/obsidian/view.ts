@@ -1,9 +1,8 @@
-import { ItemView, Notice, Scope, type WorkspaceLeaf } from "obsidian";
-import { applyHits } from "../core/apply";
+import { ItemView, MarkdownView, Notice, Scope, type WorkspaceLeaf } from "obsidian";
 import type { SessionState, TransmuteSession } from "../core/session";
 import type { ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
-import { activeMarkdownView, readScope, writeScope } from "./editor-io";
+import { activeMarkdownView, applyHitsToEditor, readScope, type ScopeRead } from "./editor-io";
 import { renderPanel, type PanelHandlers } from "./view-render";
 
 export const VIEW_TYPE_TRANSMUTE = "transmute-panel";
@@ -93,25 +92,30 @@ export class TransmuteView extends ItemView {
     };
   }
 
-  private currentScope(): { text: string; range: ReturnType<typeof readScope> } | null {
-    const markdown = activeMarkdownView(this.app.workspace);
-    if (markdown === null) {
+  /** Liest den Arbeitsbereich und meldet den Grund, wenn es nicht geht. */
+  private currentScope(): { view: MarkdownView; read: Extract<ScopeRead, { kind: "ok" }> } | null {
+    const view = activeMarkdownView(this.app.workspace);
+    if (view === null) {
       new Notice(t("error.noEditor"));
       return null;
     }
-    const range = readScope(markdown.editor, this.scopeKind);
-    if (range === null) {
+    const read = readScope(view, this.scopeKind);
+    if (read.kind === "reading-mode") {
+      new Notice(t("error.readingMode"));
+      return null;
+    }
+    if (read.kind === "no-selection") {
       new Notice(t("error.noSelection"));
       return null;
     }
-    return { text: range.text, range };
+    return { view, read };
   }
 
   private async generate(): Promise<void> {
     if (this.instruction.trim().length === 0) return;
     const scope = this.currentScope();
     if (scope === null) return;
-    await this.deps.session().generate(this.instruction, scope.text, this.target);
+    await this.deps.session().generate(this.instruction, scope.read.text, this.target);
   }
 
   private async refine(): Promise<void> {
@@ -120,29 +124,24 @@ export class TransmuteView extends ItemView {
     if (scope === null) return;
     const refinement = this.refinement;
     this.refinement = "";
-    await this.deps.session().refine(refinement, scope.text, this.target);
+    await this.deps.session().refine(refinement, scope.read.text, this.target);
   }
 
   private apply(): void {
     const state: SessionState = this.deps.session().state;
     if (state.phase !== "preview") return;
 
-    const markdown = activeMarkdownView(this.app.workspace);
-    if (markdown === null) {
-      new Notice(t("error.noEditor"));
-      return;
-    }
-    const range = readScope(markdown.editor, this.scopeKind);
-    if (range === null) {
-      new Notice(t("error.noSelection"));
-      return;
-    }
+    const scope = this.currentScope();
+    if (scope === null) return;
 
-    const next = applyHits(range.text, state.hits, state.selected);
-    if (next === range.text) return;
+    const applied = applyHitsToEditor(
+      scope.view.editor,
+      state.hits,
+      state.selected,
+      scope.read.baseOffset,
+    );
+    if (applied === 0) return;
 
-    writeScope(markdown.editor, range, next);
-    const applied = state.selected.filter(Boolean).length;
     new Notice(t("view.applied", applied));
     this.deps.session().reset();
   }

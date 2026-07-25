@@ -1,7 +1,6 @@
-import { MarkdownView, type Editor, type EditorPosition, type Workspace } from "obsidian";
+import { MarkdownView, type Editor, type Workspace } from "obsidian";
 import type { ScopeKind } from "../core/settings";
-
-export type ScopeRange = { text: string; from: EditorPosition; to: EditorPosition };
+import type { Hit } from "../core/types";
 
 /**
  * Die zuletzt genutzte Notiz im Hauptbereich.
@@ -16,25 +15,60 @@ export function activeMarkdownView(workspace: Workspace): MarkdownView | null {
   return leaf?.view instanceof MarkdownView ? leaf.view : null;
 }
 
-export function readScope(editor: Editor, scope: ScopeKind): ScopeRange | null {
+export type ScopeRead =
+  /** baseOffset = Dokument-Offset, an dem der gelesene Ausschnitt beginnt. */
+  | { kind: "ok"; text: string; baseOffset: number }
+  | { kind: "reading-mode" }
+  | { kind: "no-selection" };
+
+/**
+ * Liest den Arbeitsbereich aus der Notiz.
+ *
+ * Im **Lesemodus** gibt es keine Editor-Auswahl und kein sicher beschreibbares Dokument —
+ * eine Markierung dort ist eine reine Browser-Auswahl, die der Editor nicht kennt. Das
+ * wird als eigener Fall gemeldet statt als „nichts ausgewählt": die Meldung soll sagen,
+ * was zu tun ist, nicht was fehlt.
+ */
+export function readScope(view: MarkdownView, scope: ScopeKind): ScopeRead {
+  if (view.getMode() !== "source") return { kind: "reading-mode" };
+
+  const editor = view.editor;
   if (scope === "selection") {
     const text = editor.getSelection();
-    if (text.length === 0) return null;
-    return { text, from: editor.getCursor("from"), to: editor.getCursor("to") };
+    if (text.length === 0) return { kind: "no-selection" };
+    return { kind: "ok", text, baseOffset: editor.posToOffset(editor.getCursor("from")) };
   }
-  const lastLine = editor.lastLine();
-  return {
-    text: editor.getValue(),
-    from: { line: 0, ch: 0 },
-    to: { line: lastLine, ch: editor.getLine(lastLine).length },
-  };
+  return { kind: "ok", text: editor.getValue(), baseOffset: 0 };
 }
 
 /**
- * Schreibt ueber replaceRange, NICHT ueber Vault.modify — nur so landet die Aenderung in
- * Obsidians Undo-Stack und Cmd+Z macht sie in EINEM Schritt rueckgaengig. Genau deshalb
- * braucht v0.1 kein eigenes Snapshot-System.
+ * Wendet die ausgewählten Treffer als EINE Transaktion an.
+ *
+ * Bewusst nicht „ganzes Dokument durch neuen Text ersetzen": eine Transaktion aus
+ * Einzeländerungen fasst Obsidian zu **einem** Undo-Schritt zusammen, lässt unberührten
+ * Text unberührt und erhält Cursor und Scroll-Position. Deshalb braucht v0.1 auch kein
+ * eigenes Snapshot-System — Cmd+Z genügt.
+ *
+ * @returns Anzahl angewandter Treffer.
  */
-export function writeScope(editor: Editor, range: ScopeRange, text: string): void {
-  editor.replaceRange(text, range.from, range.to);
+export function applyHitsToEditor(
+  editor: Editor,
+  hits: Hit[],
+  selected: boolean[],
+  baseOffset: number,
+): number {
+  const changes = hits
+    .map((hit, index) => ({ hit, keep: selected[index] === true }))
+    .filter((entry) => entry.keep)
+    .map((entry) => entry.hit)
+    .sort((a, b) => a.start - b.start)
+    .map((hit) => ({
+      from: editor.offsetToPos(baseOffset + hit.start),
+      to: editor.offsetToPos(baseOffset + hit.end),
+      text: hit.replacement,
+    }));
+
+  if (changes.length === 0) return 0;
+  editor.transaction({ changes });
+  return changes.length;
 }
