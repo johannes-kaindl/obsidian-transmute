@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Release pipeline: `npm run gate` now also builds `main.js`. The vendored release
+  workflow attests and uploads the bundle but never builds it itself — it relies on the
+  gate having produced it. Without that step the first release cut a tag whose GitHub
+  release was never created.
+
 ## [0.1.0] — 2026-07-25
 
 ### Added

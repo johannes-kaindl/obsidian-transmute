@@ -12,7 +12,7 @@
     "lint": "node scripts/check-no-inline-disables.mjs && eslint src",
     "lint:portal": "eslint -c eslint.portal.config.mjs src",
     "check:pure": "node scripts/check-pure.mjs",
-    "gate": "npm run lint && npm run typecheck && npm run typecheck:test && npm test && npm run check:pure",
+    "gate": "npm run lint && npm run typecheck && npm run typecheck:test && npm test && npm run check:pure && npm run build",
     "deploy": "npm run build && cp main.js manifest.json styles.css \"${OBSIDIAN_PLUGIN_DIR:?set OBSIDIAN_PLUGIN_DIR}\"/",
     "release": "test -f ../tools/release/release.mjs || { echo \"FEHLER: ../tools/release/ fehlt. Dieses Repo muss im Dach-Verzeichnis obsidian-plugins/ neben tools/ liegen.\" >&2; exit 1; }; node ../tools/release/release.mjs",
     "version-bump": "test -f ../tools/release/version-bump.mjs || { echo \"FEHLER: ../tools/release/ fehlt.\" >&2; exit 1; }; node ../tools/release/version-bump.mjs",
