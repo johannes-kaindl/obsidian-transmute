@@ -10,6 +10,9 @@ export type TransmuteSettings = {
   sampleChars: number;
   budgetMs: number;
   defaultScope: ScopeKind;
+  /** Zweites, optionales Feld fuer das Ziel-Muster einblenden (Default aus:
+   *  viele Anweisungen haben gar kein Ziel-Muster). */
+  showTargetField: boolean;
 };
 
 export const DEFAULT_SETTINGS: TransmuteSettings = {
@@ -20,6 +23,7 @@ export const DEFAULT_SETTINGS: TransmuteSettings = {
   sampleChars: 2000,
   budgetMs: 2000,
   defaultScope: "file",
+  showTargetField: false,
 };
 
 export function loadSettings(raw: unknown): TransmuteSettings {

@@ -9,11 +9,15 @@ export type PanelModel = {
   scope: ScopeKind;
   instruction: string;
   refinement: string;
+  /** Zweites Feld nur zeigen, wenn in den Einstellungen freigeschaltet. */
+  showTarget: boolean;
+  target: string;
 };
 
 export type PanelHandlers = {
   onScope(scope: ScopeKind): void;
   onInstruction(value: string): void;
+  onTarget(value: string): void;
   onRefinement(value: string): void;
   onGenerate(): void;
   onRefine(): void;
@@ -127,6 +131,17 @@ export function renderPanel(root: El, model: PanelModel, handlers: PanelHandlers
   });
   input.value = model.instruction;
   input.addEventListener("input", () => handlers.onInstruction(input.value));
+
+  if (model.showTarget) {
+    const targetLabel = root.createDiv({ text: t("view.target"), cls: "transmute-label" });
+    targetLabel.setAttribute("id", "transmute-target-label");
+    const targetInput = root.createEl("input", {
+      attr: { type: "text", placeholder: t("view.targetPlaceholder"), "aria-labelledby": "transmute-target-label" },
+      cls: "transmute-target",
+    });
+    targetInput.value = model.target;
+    targetInput.addEventListener("input", () => handlers.onTarget(targetInput.value));
+  }
 
   const generate = root.createEl("button", { text: t("view.generate"), cls: "mod-cta" });
   generate.addEventListener("click", () => handlers.onGenerate());

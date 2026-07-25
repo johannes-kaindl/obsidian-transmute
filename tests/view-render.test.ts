@@ -7,6 +7,7 @@ import "../src/core/i18n/strings";
 const handlers: PanelHandlers = {
   onScope: vi.fn(),
   onInstruction: vi.fn(),
+  onTarget: vi.fn(),
   onRefinement: vi.fn(),
   onGenerate: vi.fn(),
   onRefine: vi.fn(),
@@ -15,7 +16,13 @@ const handlers: PanelHandlers = {
   onSetAll: vi.fn(),
 };
 
-const base: Omit<PanelModel, "state"> = { scope: "file", instruction: "", refinement: "" };
+const base: Omit<PanelModel, "state"> = {
+  scope: "file",
+  instruction: "",
+  refinement: "",
+  showTarget: false,
+  target: "",
+};
 
 const hit = (over: Partial<Hit> = {}): Hit => ({
   line: 0,
@@ -41,6 +48,16 @@ describe("renderPanel", () => {
     const root = makeFakeEl();
     renderPanel(root, { ...base, state: { phase: "idle" } }, handlers);
     expect(root.textContent).not.toContain("Transmute");
+  });
+
+  it("zeigt das Ziel-Feld nur, wenn es freigeschaltet ist", () => {
+    const off = makeFakeEl();
+    renderPanel(off, { ...base, state: { phase: "idle" } }, handlers);
+    expect(off.textContent).not.toContain("Replace with");
+
+    const on = makeFakeEl();
+    renderPanel(on, { ...base, showTarget: true, state: { phase: "idle" } }, handlers);
+    expect(on.textContent).toContain("Replace with");
   });
 
   it("leert den Container vor jedem Rendern", () => {

@@ -67,3 +67,25 @@ describe("buildRetryPrompt", () => {
     expect(msgs.at(-2)?.content).toBe("kaputt");
   });
 });
+
+describe("optionales Ziel-Muster", () => {
+  it("laesst die Zeile weg, wenn kein Ziel gesetzt ist", () => {
+    const withoutTarget = buildInitialPrompt("x", "y").map((m) => m.content).join("\n");
+    expect(withoutTarget).not.toContain("The replacement should produce");
+  });
+
+  it("traegt das Ziel-Muster in den Erstlauf", () => {
+    const msgs = buildInitialPrompt("x", "y", "JJJJ-MM-TT");
+    expect(msgs.map((m) => m.content).join("\n")).toContain("JJJJ-MM-TT");
+  });
+
+  it("ignoriert ein Ziel-Muster aus reinen Leerzeichen", () => {
+    const msgs = buildInitialPrompt("x", "y", "   ");
+    expect(msgs.map((m) => m.content).join("\n")).not.toContain("The replacement should produce");
+  });
+
+  it("traegt das Ziel-Muster auch beim Nachschaerfen", () => {
+    const msgs = buildRefinePrompt([], "enger", [], "probe", "JJJJ-MM-TT");
+    expect(msgs.map((m) => m.content).join("\n")).toContain("JJJJ-MM-TT");
+  });
+});

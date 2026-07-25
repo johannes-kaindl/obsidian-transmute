@@ -29,7 +29,13 @@ export function sampleHits(hits: Hit[], max: number, maxChars: number): string[]
   });
 }
 
-export function buildInitialPrompt(instruction: string, sample: string): ChatMessage[] {
+/** Optionales Ziel-Muster aus dem zweiten Eingabefeld (Setting showTargetField).
+ *  Leer = weglassen, nicht als leere Zeile mitschicken. */
+function targetLine(target: string): string[] {
+  return target.trim().length === 0 ? [] : [`The replacement should produce: ${target.trim()}`, ""];
+}
+
+export function buildInitialPrompt(instruction: string, sample: string, target = ""): ChatMessage[] {
   return [
     { role: "system", content: SYSTEM },
     {
@@ -37,6 +43,7 @@ export function buildInitialPrompt(instruction: string, sample: string): ChatMes
       content: [
         `Instruction: ${instruction}`,
         "",
+        ...targetLine(target),
         "Here is a sample of the text it will run on:",
         "---",
         sample,
@@ -46,7 +53,13 @@ export function buildInitialPrompt(instruction: string, sample: string): ChatMes
   ];
 }
 
-export function buildRefinePrompt(rounds: Round[], refinement: string, hits: Hit[], sample: string): ChatMessage[] {
+export function buildRefinePrompt(
+  rounds: Round[],
+  refinement: string,
+  hits: Hit[],
+  sample: string,
+  target = "",
+): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: "system", content: SYSTEM }];
   for (const round of rounds) {
     messages.push({ role: "user", content: `Instruction: ${round.instruction}` });
@@ -63,6 +76,7 @@ export function buildRefinePrompt(rounds: Round[], refinement: string, hits: Hit
       "",
       `Now refine it: ${refinement}`,
       "",
+      ...targetLine(target),
       "Sample of the text:",
       "---",
       sample,

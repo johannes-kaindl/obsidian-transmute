@@ -11,12 +11,14 @@ export const VIEW_TYPE_TRANSMUTE = "transmute-panel";
 export type TransmuteViewDeps = {
   session(): TransmuteSession;
   defaultScope(): ScopeKind;
+  showTargetField(): boolean;
 };
 
 export class TransmuteView extends ItemView {
   private scopeKind: ScopeKind;
   private instruction = "";
   private refinement = "";
+  private target = "";
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -67,6 +69,9 @@ export class TransmuteView extends ItemView {
       onInstruction: (value) => {
         this.instruction = value;
       },
+      onTarget: (value) => {
+        this.target = value;
+      },
       onRefinement: (value) => {
         this.refinement = value;
       },
@@ -106,7 +111,7 @@ export class TransmuteView extends ItemView {
     if (this.instruction.trim().length === 0) return;
     const scope = this.currentScope();
     if (scope === null) return;
-    await this.deps.session().generate(this.instruction, scope.text);
+    await this.deps.session().generate(this.instruction, scope.text, this.target);
   }
 
   private async refine(): Promise<void> {
@@ -115,7 +120,7 @@ export class TransmuteView extends ItemView {
     if (scope === null) return;
     const refinement = this.refinement;
     this.refinement = "";
-    await this.deps.session().refine(refinement, scope.text);
+    await this.deps.session().refine(refinement, scope.text, this.target);
   }
 
   private apply(): void {
@@ -150,6 +155,8 @@ export class TransmuteView extends ItemView {
         scope: this.scopeKind,
         instruction: this.instruction,
         refinement: this.refinement,
+        showTarget: this.deps.showTargetField(),
+        target: this.target,
       },
       this.handlers(),
     );

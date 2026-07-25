@@ -71,6 +71,7 @@ export class TransmuteSettingTab extends PluginSettingTab {
           { name: t("set.sampleChars"), desc: t("set.sampleCharsDesc"), control: { type: "number", key: "sampleChars", min: 200 } },
           { name: t("set.budgetMs"), desc: t("set.budgetMsDesc"), control: { type: "number", key: "budgetMs", min: 200 } },
           { name: t("set.suppressReasoning"), desc: t("set.suppressReasoningDesc"), control: { type: "toggle", key: "suppressReasoning" } },
+          { name: t("set.showTargetField"), desc: t("set.showTargetFieldDesc"), control: { type: "toggle", key: "showTargetField" } },
         ],
       },
     ];
@@ -220,6 +221,8 @@ export class TransmuteSettingTab extends PluginSettingTab {
         return s.budgetMs;
       case "suppressReasoning":
         return s.suppressReasoning;
+      case "showTargetField":
+        return s.showTargetField;
       default:
         return undefined;
     }
@@ -249,6 +252,9 @@ export class TransmuteSettingTab extends PluginSettingTab {
         break;
       case "suppressReasoning":
         s.suppressReasoning = Boolean(value);
+        break;
+      case "showTargetField":
+        s.showTargetField = Boolean(value);
         break;
       default:
         return;

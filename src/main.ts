@@ -61,6 +61,7 @@ export default class TransmutePlugin extends Plugin {
         new TransmuteView(leaf, {
           session: () => this.sessionInstance,
           defaultScope: () => this.settings.defaultScope,
+          showTargetField: () => this.settings.showTargetField,
         }),
     );
 

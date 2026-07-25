@@ -61,16 +61,16 @@ export class TransmuteSession {
     this.set({ ...this.current, selected: this.current.selected.map(() => value) });
   }
 
-  async generate(instruction: string, text: string): Promise<void> {
+  async generate(instruction: string, text: string, target = ""): Promise<void> {
     this.rounds = [];
     const sample = sampleForPrompt(text, this.options().sampleChars);
-    await this.run(instruction, buildInitialPrompt(instruction, sample), text);
+    await this.run(instruction, buildInitialPrompt(instruction, sample, target), text);
   }
 
-  async refine(refinement: string, text: string): Promise<void> {
+  async refine(refinement: string, text: string, target = ""): Promise<void> {
     const sample = sampleForPrompt(text, this.options().sampleChars);
     const hits = this.current.phase === "preview" ? this.current.hits : [];
-    await this.run(refinement, buildRefinePrompt(this.rounds, refinement, hits, sample), text);
+    await this.run(refinement, buildRefinePrompt(this.rounds, refinement, hits, sample, target), text);
   }
 
   /** Ein Retry-Budget pro Runde, geteilt ueber alle Fehlerklassen — kleine Modelle
