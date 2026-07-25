@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Every action failed with "open a note first" while a note was open.** The panel looked
+  up the note with `getActiveViewOfType`, but clicking into the sidebar makes the panel
+  itself the active view — so there was no "active" note to find. It now asks the main
+  area (`getMostRecentLeaf(rootSplit)`), which ignores the sidebars. Covered by a
+  regression test.
+
+### Changed
+
+- The primary button is now **Preview** instead of **Generate** — it produces a preview;
+  the separate Apply button is what actually changes the note.
+- Panel layout: dropped the redundant heading (the tab already carries the title), added
+  padding, equal-width scope buttons, and the pattern is set off on its own surface.
+
 ## [0.1.1] — 2026-07-25
 
 ### Fixed

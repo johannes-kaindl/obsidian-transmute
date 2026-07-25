@@ -30,11 +30,17 @@ const hit = (over: Partial<Hit> = {}): Hit => ({
 });
 
 describe("renderPanel", () => {
-  it("zeigt im idle-Zustand Titel und Eingabe", () => {
+  it("zeigt im idle-Zustand Bereichswahl und Vorschau-Knopf", () => {
     const root = makeFakeEl();
     renderPanel(root, { ...base, state: { phase: "idle" } }, handlers);
-    expect(root.textContent).toContain("Transmute");
-    expect(root.textContent).toContain("Generate");
+    expect(root.textContent).toContain("Whole note");
+    expect(root.textContent).toContain("Preview");
+  });
+
+  it("doppelt den Reiter-Titel nicht als Ueberschrift", () => {
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, state: { phase: "idle" } }, handlers);
+    expect(root.textContent).not.toContain("Transmute");
   });
 
   it("leert den Container vor jedem Rendern", () => {

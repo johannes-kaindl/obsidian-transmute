@@ -118,7 +118,7 @@ export function renderPanel(root: El, model: PanelModel, handlers: PanelHandlers
   root.empty();
   root.addClass("transmute-panel");
 
-  root.createEl("h4", { text: t("view.title") });
+  // Kein eigener Titel: der Reiter traegt ihn bereits (Obsidian-Konvention fuer Panels).
   scopeSwitch(root, model, handlers);
 
   const input = root.createEl("textarea", {

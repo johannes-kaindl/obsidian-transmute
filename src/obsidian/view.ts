@@ -1,9 +1,9 @@
-import { ItemView, MarkdownView, Notice, Scope, type WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, Scope, type WorkspaceLeaf } from "obsidian";
 import { applyHits } from "../core/apply";
 import type { SessionState, TransmuteSession } from "../core/session";
 import type { ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
-import { readScope, writeScope } from "./editor-io";
+import { activeMarkdownView, readScope, writeScope } from "./editor-io";
 import { renderPanel, type PanelHandlers } from "./view-render";
 
 export const VIEW_TYPE_TRANSMUTE = "transmute-panel";
@@ -89,7 +89,7 @@ export class TransmuteView extends ItemView {
   }
 
   private currentScope(): { text: string; range: ReturnType<typeof readScope> } | null {
-    const markdown = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const markdown = activeMarkdownView(this.app.workspace);
     if (markdown === null) {
       new Notice(t("error.noEditor"));
       return null;
@@ -122,7 +122,7 @@ export class TransmuteView extends ItemView {
     const state: SessionState = this.deps.session().state;
     if (state.phase !== "preview") return;
 
-    const markdown = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const markdown = activeMarkdownView(this.app.workspace);
     if (markdown === null) {
       new Notice(t("error.noEditor"));
       return;
