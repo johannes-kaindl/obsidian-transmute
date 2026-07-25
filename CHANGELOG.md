@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-07-25
+
 ### Fixed
 
 - Release pipeline: `npm run gate` now also builds `main.js`. The vendored release
