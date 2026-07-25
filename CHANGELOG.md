@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Optional **"replace with"** field for the target pattern, enabled by a setting and off
+  by default. Many instructions have no target pattern at all ("strip trailing
+  whitespace", "make headings one level deeper"), so a mandatory second field would be in
+  the way — but if you think in classic find/replace terms, you can switch it on. When
+  filled it goes into the prompt as its own line; blank or whitespace-only is omitted
+  rather than sent as an empty target.
+
 ### Fixed
 
 - **Every action failed with "open a note first" while a note was open.** The panel looked
