@@ -14,6 +14,8 @@ export type PanelModel = {
   /** Zweites Feld nur zeigen, wenn in den Einstellungen freigeschaltet. */
   showTarget: boolean;
   target: string;
+  /** Name der Notiz, an der die Runde haengt — null, solange keine gemerkt ist. */
+  pinnedName: string | null;
 };
 
 export type PanelHandlers = {
@@ -70,6 +72,12 @@ function renderPreview(
   model: PanelModel,
   handlers: PanelHandlers,
 ): void {
+  // Sichtbar machen, woran die Runde haengt: gemerkt ohne Anzeige waere nur eine andere
+  // Art von Ueberraschung.
+  if (model.pinnedName !== null) {
+    parent.createDiv({ text: t("view.pinned", model.pinnedName), cls: "transmute-pinned" });
+  }
+
   const pattern = parent.createDiv({ cls: "transmute-pattern" });
   // effectiveFlags, nicht rule.flags: angezeigt werden muss, was lief.
   pattern.createEl("code", { text: `/${state.rule.regex}/${effectiveFlags(state.rule.flags)}` });

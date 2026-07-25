@@ -53,6 +53,12 @@
   gap: var(--size-4-2);
 }
 
+.transmute-pinned {
+  color: var(--text-muted);
+  font-size: var(--font-smaller);
+  margin-bottom: var(--size-4-2);
+}
+
 .transmute-pattern {
   padding: var(--size-4-2);
   border-radius: var(--radius-s);

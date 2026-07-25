@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MarkdownView } from "./__mocks__/obsidian";
-import { activeMarkdownView, applyHitsToEditor, readScope } from "../src/obsidian/editor-io";
+import { activeMarkdownView, applyHitsToEditor, readScope, viewForPath } from "../src/obsidian/editor-io";
 import type { Editor, MarkdownView as MarkdownViewType, Workspace } from "obsidian";
 import type { Hit } from "../src/core/types";
 
@@ -52,6 +52,38 @@ describe("activeMarkdownView", () => {
     } as unknown as Workspace;
     activeMarkdownView(workspace);
     expect(asked).toEqual({ id: "root" });
+  });
+});
+
+describe("viewForPath", () => {
+  function workspaceWithLeaves(views: unknown[]): Workspace {
+    return {
+      iterateRootLeaves: (cb: (leaf: unknown) => void) => {
+        for (const view of views) cb({ view });
+      },
+    } as unknown as Workspace;
+  }
+
+  function viewFor(path: string): MarkdownViewType {
+    const view = new MarkdownView() as unknown as MarkdownViewType;
+    Object.assign(view, { file: { path } });
+    return view;
+  }
+
+  // Damit eine Regel an ihrer Notiz haengen bleibt: beim Nachschaerfen darf es egal sein,
+  // welcher Reiter gerade Fokus hat.
+  it("findet die Notiz zum Pfad, auch wenn ein anderer Reiter vorn ist", () => {
+    const wanted = viewFor("Ordner/Ziel.md");
+    const workspace = workspaceWithLeaves([viewFor("Andere.md"), wanted]);
+    expect(viewForPath(workspace, "Ordner/Ziel.md")).toBe(wanted);
+  });
+
+  it("gibt null zurueck, wenn die Notiz nicht mehr offen ist", () => {
+    expect(viewForPath(workspaceWithLeaves([viewFor("Andere.md")]), "Weg.md")).toBeNull();
+  });
+
+  it("ignoriert Blaetter ohne Markdown-Ansicht", () => {
+    expect(viewForPath(workspaceWithLeaves([{ file: { path: "Ziel.md" } }]), "Ziel.md")).toBeNull();
   });
 });
 

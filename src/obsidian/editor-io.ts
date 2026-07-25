@@ -15,6 +15,21 @@ export function activeMarkdownView(workspace: Workspace): MarkdownView | null {
   return leaf?.view instanceof MarkdownView ? leaf.view : null;
 }
 
+/**
+ * Die offene Notiz zu einem Pfad — unabhaengig davon, welcher Reiter gerade Fokus hat.
+ *
+ * Damit bleibt eine Regel an der Notiz haengen, an der sie erzeugt wurde. Sonst muesste
+ * man beim Nachschaerfen erst den richtigen Reiter suchen, obwohl laengst feststeht,
+ * worum es geht.
+ */
+export function viewForPath(workspace: Workspace, path: string): MarkdownView | null {
+  const found: MarkdownView[] = [];
+  workspace.iterateRootLeaves((leaf) => {
+    if (leaf.view instanceof MarkdownView && leaf.view.file?.path === path) found.push(leaf.view);
+  });
+  return found[0] ?? null;
+}
+
 export type ScopeRead =
   /** baseOffset = Dokument-Offset, an dem der gelesene Ausschnitt beginnt. */
   | { kind: "ok"; text: string; baseOffset: number }

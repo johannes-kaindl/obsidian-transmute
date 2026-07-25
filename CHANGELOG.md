@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A rule now sticks to the note it was created on.** Preview pins that note; refining
+  and applying go to it regardless of which tab has focus, and the panel names the note
+  it is working on. Previously every step looked at whatever note was active, so
+  switching tabs mid-round produced a warning about a question that was already settled.
+- **Applying is refused if the note changed since the preview.** Matches carry offsets
+  into the text as it was read; after an edit those same offsets point at different text,
+  and applying would silently replace the wrong spans. This was reachable before — the
+  pinning work exposed it. The note is now checked against the previewed snapshot first.
 - Optional **"replace with"** field for the target pattern, enabled by a setting and off
   by default. Many instructions have no target pattern at all ("strip trailing
   whitespace", "make headings one level deeper"), so a mandatory second field would be in

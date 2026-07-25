@@ -2,10 +2,14 @@ import { ItemView, MarkdownView, Notice, Scope, type WorkspaceLeaf } from "obsid
 import type { SessionState, TransmuteSession } from "../core/session";
 import type { ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
-import { activeMarkdownView, applyHitsToEditor, readScope, type ScopeRead } from "./editor-io";
+import { textUnchanged } from "../core/anchor";
+import { activeMarkdownView, applyHitsToEditor, readScope, viewForPath } from "./editor-io";
 import { renderPanel, type PanelHandlers } from "./view-render";
 
 export const VIEW_TYPE_TRANSMUTE = "transmute-panel";
+
+/** Die Notiz, an der die laufende Runde haengt — samt des Textstands von der Vorschau. */
+type Pinned = { path: string; name: string; text: string; baseOffset: number };
 
 export type TransmuteViewDeps = {
   session(): TransmuteSession;
@@ -18,6 +22,7 @@ export class TransmuteView extends ItemView {
   private instruction = "";
   private refinement = "";
   private target = "";
+  private pinned: Pinned | null = null;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -92,10 +97,18 @@ export class TransmuteView extends ItemView {
     };
   }
 
-  /** Liest den Arbeitsbereich und meldet den Grund, wenn es nicht geht. */
-  private currentScope(): { view: MarkdownView; read: Extract<ScopeRead, { kind: "ok" }> } | null {
+  /**
+   * Liest den Arbeitsbereich aus der aktiven Notiz und merkt sie sich fuer die Runde.
+   * Meldet den Grund, wenn es nicht geht.
+   */
+  private pinScope(): Pinned | null {
     const view = activeMarkdownView(this.app.workspace);
     if (view === null) {
+      new Notice(t("error.noEditor"));
+      return null;
+    }
+    const path = view.file?.path;
+    if (path === undefined) {
       new Notice(t("error.noEditor"));
       return null;
     }
@@ -108,41 +121,57 @@ export class TransmuteView extends ItemView {
       new Notice(t("error.noSelection"));
       return null;
     }
-    return { view, read };
+    return { path, name: view.file?.basename ?? path, text: read.text, baseOffset: read.baseOffset };
+  }
+
+  /** Die gemerkte Notiz wiederfinden — welcher Reiter Fokus hat, ist dabei egal. */
+  private pinnedView(): MarkdownView | null {
+    if (this.pinned === null) return null;
+    const view = viewForPath(this.app.workspace, this.pinned.path);
+    if (view === null) new Notice(t("error.noteGone", this.pinned.name));
+    return view;
   }
 
   private async generate(): Promise<void> {
     if (this.instruction.trim().length === 0) return;
-    const scope = this.currentScope();
-    if (scope === null) return;
-    await this.deps.session().generate(this.instruction, scope.read.text, this.target);
+    const pinned = this.pinScope();
+    if (pinned === null) return;
+    this.pinned = pinned;
+    await this.deps.session().generate(this.instruction, pinned.text, this.target);
   }
 
+  /**
+   * Nachschaerfen laeuft gegen den gemerkten Textstand, nicht gegen die aktive Notiz.
+   * Sonst muesste man erst den richtigen Reiter suchen, obwohl die Runde laengst an
+   * einer bestimmten Notiz haengt.
+   */
   private async refine(): Promise<void> {
-    if (this.refinement.trim().length === 0) return;
-    const scope = this.currentScope();
-    if (scope === null) return;
+    if (this.refinement.trim().length === 0 || this.pinned === null) return;
     const refinement = this.refinement;
     this.refinement = "";
-    await this.deps.session().refine(refinement, scope.read.text, this.target);
+    await this.deps.session().refine(refinement, this.pinned.text, this.target);
   }
 
   private apply(): void {
     const state: SessionState = this.deps.session().state;
-    if (state.phase !== "preview") return;
+    if (state.phase !== "preview" || this.pinned === null) return;
 
-    const scope = this.currentScope();
-    if (scope === null) return;
+    const view = this.pinnedView();
+    if (view === null) return;
 
-    const applied = applyHitsToEditor(
-      scope.view.editor,
-      state.hits,
-      state.selected,
-      scope.read.baseOffset,
-    );
+    // Die Treffer tragen Offsets in den Text von damals. Wurde die Notiz seither
+    // bearbeitet, zeigen dieselben Offsets auf anderen Text — dann lieber gar nichts
+    // schreiben als stillschweigend die falschen Stellen ersetzen.
+    if (!textUnchanged(view.editor.getValue(), this.pinned.baseOffset, this.pinned.text)) {
+      new Notice(t("error.noteChanged"));
+      return;
+    }
+
+    const applied = applyHitsToEditor(view.editor, state.hits, state.selected, this.pinned.baseOffset);
     if (applied === 0) return;
 
     new Notice(t("view.applied", applied));
+    this.pinned = null;
     this.deps.session().reset();
   }
 
@@ -156,6 +185,7 @@ export class TransmuteView extends ItemView {
         refinement: this.refinement,
         showTarget: this.deps.showTargetField(),
         target: this.target,
+        pinnedName: this.pinned?.name ?? null,
       },
       this.handlers(),
     );

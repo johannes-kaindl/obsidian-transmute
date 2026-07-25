@@ -22,6 +22,7 @@ const base: Omit<PanelModel, "state"> = {
   refinement: "",
   showTarget: false,
   target: "",
+  pinnedName: null,
 };
 
 const hit = (over: Partial<Hit> = {}): Hit => ({
@@ -127,6 +128,26 @@ describe("renderPanel", () => {
       handlers,
     );
     expect(root.textContent).toContain("Nr. $1");
+  });
+
+  it("nennt die Notiz, an der die Runde haengt", () => {
+    const root = makeFakeEl();
+    renderPanel(
+      root,
+      {
+        ...base,
+        pinnedName: "Projektnotizen",
+        state: {
+          phase: "preview",
+          rule: { regex: "a", flags: "g", replacement: "b", explanation: "" },
+          hits: [hit()],
+          selected: [true],
+          timedOutAtLine: null,
+        },
+      },
+      handlers,
+    );
+    expect(root.textContent).toContain("Projektnotizen");
   });
 
   it("markiert die Fundstelle ueber lineStart, nicht per Textsuche", () => {
