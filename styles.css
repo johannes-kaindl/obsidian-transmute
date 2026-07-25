@@ -1,0 +1,162 @@
+/* Nur Theme-CSS-Variablen (UI-STANDARD). Kein Styling auf .setting-item*, kein !important. */
+
+.transmute-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-3);
+}
+
+.transmute-scope {
+  display: flex;
+  gap: var(--size-4-1);
+}
+
+.transmute-scope-btn.is-active {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.transmute-instruction,
+.transmute-refine textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--font-text);
+}
+
+.transmute-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+}
+
+.transmute-pattern code {
+  font-family: var(--font-monospace);
+  font-size: var(--font-smaller);
+  word-break: break-all;
+}
+
+.transmute-explanation {
+  color: var(--text-muted);
+  font-size: var(--font-smaller);
+  margin-top: var(--size-4-1);
+}
+
+.transmute-warning {
+  color: var(--text-warning);
+  font-size: var(--font-smaller);
+}
+
+.transmute-empty {
+  color: var(--text-muted);
+}
+
+.transmute-hits-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--size-4-2);
+  color: var(--text-muted);
+  font-size: var(--font-smaller);
+}
+
+.transmute-link {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  color: var(--text-accent);
+  cursor: pointer;
+  font-size: var(--font-smaller);
+}
+
+.transmute-hits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.transmute-hit {
+  display: flex;
+  gap: var(--size-4-2);
+  align-items: flex-start;
+  padding-bottom: var(--size-4-2);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.transmute-hit-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.transmute-lineno {
+  color: var(--text-faint);
+  font-size: var(--font-smallest);
+}
+
+.transmute-before,
+.transmute-after {
+  font-family: var(--font-monospace);
+  font-size: var(--font-smaller);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.transmute-before {
+  color: var(--text-muted);
+}
+
+.transmute-mark {
+  border-radius: var(--radius-s);
+  padding: 0 2px;
+}
+
+/* Getroffener Text und Ersetzung: unterschiedlicher Hintergrund UND unterschiedliche
+   Schriftauszeichnung — Farbe allein traegt die Unterscheidung nicht (WCAG 1.4.1). */
+.transmute-mark-old {
+  background-color: var(--background-modifier-error);
+  text-decoration: line-through;
+}
+
+.transmute-mark-new {
+  background-color: var(--background-modifier-success);
+  font-weight: var(--font-semibold);
+}
+
+.transmute-actions {
+  display: flex;
+  gap: var(--size-4-2);
+}
+
+.transmute-error {
+  color: var(--text-error);
+}
+
+.transmute-error pre {
+  white-space: pre-wrap;
+  font-size: var(--font-smallest);
+  color: var(--text-muted);
+}
+
+.transmute-busy {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  color: var(--text-muted);
+}
+
+.transmute-ep-status.is-ok {
+  color: var(--text-success);
+}
+
+.transmute-ep-status.is-error {
+  color: var(--text-error);
+}
+
+.transmute-ep-status.is-active {
+  font-weight: var(--font-bold);
+}
+
+.transmute-ep-warn {
+  color: var(--text-warning);
+}

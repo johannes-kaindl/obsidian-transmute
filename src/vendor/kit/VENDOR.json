@@ -1,0 +1,7 @@
+{
+  "source": "obsidian-kit",
+  "version": "0.15.0",
+  "sha": "06eba63",
+  "vendored": "endpoint endpoint_diagnostics settings i18n think-splitter reasoning",
+  "note": "Verbatim snapshot. Never hand-edit — change the kit, then re-run tools/sync-kit.sh."
+}

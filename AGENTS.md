@@ -248,10 +248,12 @@ Offen für Jay:
 
 ## Dach-Kontext (obsidian-plugins)
 
-Dieses Repo liegt unter dem Koordinations-Dach `/Users/Shared/code/obsidian-plugins/` und ist ein
+Dieses Repo liegt unter dem Koordinations-Dach `obsidian-plugins/` (Elternverzeichnis) und ist ein
 **eigenständiges Git-Repo** (PROF-OBS-09: kein Monorepo, eigener Release-Takt, Kit per git-Tag).
 **Vor dem Lösen eines Problems:** `../AGENTS.md` (Kit-first-Regel) und `../REGISTRY.md`
 (Lösungs-Registry) prüfen. **Vor jeder UI-Arbeit:** `../UI-STANDARD.md`.
 
-**Cockpit:** `10_Pallas/25_Coding/obsidian-transmute/` (Stand, Tasks, Session-Log,
-Entscheidungen — mnemetisches Substrat/SSOT).
+**Cockpit:** `$VAULT/25_Coding/obsidian-transmute/` (Stand, Tasks, Session-Log, Entscheidungen —
+mnemetisches Substrat/SSOT). **SDD-Artefakte (Spec/Plan) liegen dort unter `_SDD/`, nicht im Repo**
+(CORE-META-14) — das Repo behält die verdichtete Design-Essenz hier und im CHANGELOG.
+**Nie absolute Pfade außerhalb des Repos in Repo-Dateien** — Platzhalter (`$VAULT/…`) verwenden.

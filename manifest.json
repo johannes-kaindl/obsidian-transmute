@@ -1,0 +1,10 @@
+{
+  "id": "transmute",
+  "name": "Transmute",
+  "version": "0.1.0",
+  "minAppVersion": "1.8.7",
+  "description": "Search and replace by intent — a local LLM writes the regex, you review every match before it runs.",
+  "author": "Johannes Kaindl",
+  "authorUrl": "https://github.com/johannes-kaindl",
+  "isDesktopOnly": false
+}
