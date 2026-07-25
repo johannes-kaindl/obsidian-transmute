@@ -33,6 +33,21 @@ Diese sechs Punkte sind der Kern der Differenzierung — wer hier kürzt, kürzt
 5. **Scope-Kontrolle** — Datei / Selektion / Vault, gefiltert nach Tag, Pfad, Frontmatter.
 6. **Lokales LLM als Default** — privacy-first (LM Studio / MLX / Ollama), Cloud optional.
 
+**Modellagnostik ist Pflicht, kein Nice-to-have** (wie in allen Schwester-Plugins): nirgends ein
+hartkodierter Modellname, kein Feature, das nur ein Server kann. Konkret:
+
+- Das Modell kommt **aus der Modell-Liste des Endpunkts** (`GET /v1/models` → `extractModelIds`),
+  nie aus einer Konstante. Default = leer/erstes verfügbares, nicht „qwen…".
+- **Kein `response_format: json_schema`-Zwang** — das können LM Studio, Ollama und MLX
+  unterschiedlich gut. Der JSON-Vertrag wird über den *Prompt* hergestellt und **tolerant geparst**
+  (Code-Fences strippen, erstes balanciertes JSON-Objekt nehmen), plus genau ein Retry mit dem
+  Fehler zurück ans Modell.
+- **Reasoning-Modelle mitdenken:** die lokal vorhandenen Qwen3.6 sind Thinker. `<think>`-Blöcke
+  müssen **vor** dem JSON-Parsen abgetrennt werden (Kit `think-splitter.ts`), und wo der Server es
+  unterstützt, wird Reasoning unterdrückt (Kit `reasoning.ts` `suppressParams`) — Regex-Generierung
+  braucht keine sichtbare Gedankenkette.
+- Ein Modell, das den Vertrag nicht hält, ist ein **Fehlerpfad mit klarer Meldung**, kein Crash.
+
 **Abgrenzung nach außen (gehört so in die README):** `ksawl/obsidian-alchemist` bewegt sich im
 selben Bildfeld (Alchemie/Transmutation, „vault hygiene"), deckt aber Vault-Hygiene allgemein ab
 — nicht NL→Regex-Replace. Explizit benennen, nicht ignorieren.
@@ -54,7 +69,41 @@ Wesentlichen die Regex-Domäne (Prompt, Validierung, Scope-Auflösung, Snapshot/
 | Endpunkt-Diagnose (refused/unknown-host/timeout/not-an-llm-api) + Presets | `obsidian-kit/pure` → `endpoint_diagnostics.ts` (`classifyEndpointStatus`/`validateEndpointInput`/`ENDPOINT_PRESETS`) | im Kit @0.5.0 |
 | Settings-Merge (`loadData` → Defaults) | `obsidian-kit/pure` → `settings.ts` (`mergeSettings`) | im Kit @0.4.0 |
 | i18n (EN kanonisch, EN/DE) | `obsidian-kit/pure` → `i18n.ts` | im Kit — PROF-OBS-07 ist Pflicht |
-| Reasoning-Suppression/Detektion, `<think>`-Split (falls ein Reasoning-Modell genutzt wird) | `obsidian-kit/pure` → `reasoning.ts`, `think-splitter.ts` | im Kit @0.6.0 |
+| Reasoning-Suppression + `<think>`-Split (die lokalen Qwen3.6 sind Thinker) | `obsidian-kit/pure` → `reasoning.ts`, `think-splitter.ts` | im Kit @0.6.0 |
+| Kontextlängen-Info | `obsidian-kit/pure` → `model-context.ts` | im Kit |
+
+### Endpoint-Management: das reifste Paket übernehmen, nicht neu bauen
+
+Der Endpunkt-Teil ist im Ökosystem **ausgereift** — er wird als Ganzes übernommen. Best-of aus
+zwei Repos (beide gehören zum „guten Schnitt": pure Model-Datei + schmaler Host-Vertrag +
+injizierte Probe):
+
+- **UI + pure Editor-Logik → `yijing-oracle`** (jüngster Stand, 0.3.0/2026-07-16):
+  `src/obsidian/settings/endpoint-list.ts` (`buildEndpointList`, 106 Zeilen: Zeile je Endpunkt +
+  Adder-Leerzeile, Status-Icon pro Zeile mit Form **und** Farbe **und** `aria-label` (WCAG 1.4.1),
+  Warn-Icon aus `validateEndpointInput`, Trash-Button, Preset-Buttons, aktiv-Marker aus der Probe)
+  + `src/core/settings/endpoint-editor-model.ts` (`applyEndpointEdit`/`activeIndexFromStatuses`/
+  `statusKindKey`/`warnRuleKey`, pure). **Warum yijing und nicht vault-crews:** yijing ist die
+  i18n-fähige Fassung — `statusKindKey`/`warnRuleKey` liefern Übersetzungs-Keys statt Text. Das
+  Kit-Feld `EndpointStatus.klartext` ist **hart deutsch** und würde in einem EN/DE-Plugin bei
+  englischer Oberfläche deutschen Text zeigen.
+- **Laufzeit-Auflösung → `vim-dojo`:** `src/llm/endpointResolver.ts` (`EndpointResolver` —
+  Session-Cache + geteilter In-flight-Promise, fehlgeschlagene Resolves werden *nicht* gecacht;
+  das Kit macht bewusst nur einen Resolver-Durchlauf und überlässt Caching dem Aufrufer),
+  `endpointProbe.ts` (Probe → Status **+ Modell-Liste in einem Zug**) und `modelList.ts`
+  (`extractModelIds`, robust gegen kaputte `data`-Arrays) — letzteres ist die Quelle für das
+  Modell-Dropdown und damit die technische Basis der Modellagnostik.
+- **Nicht kopieren:** `vault-rag/src/settings.ts` `buildEndpointList` und
+  `image-to-markdown/src/settings.ts` (inline) — Copy-Paste-Zweig, die pure Logik liegt dort im
+  Modul, das `obsidian` importiert, Tests ziehen die DOM-Schicht mit.
+- **Zwei Gotchas, die zum Muster gehören:** Commit auf **`blur`**, nicht `onChange` (sonst hängt
+  der Adder jeden Tastendruck als eigene Zeile an: `h`, `ht`, `htt`, …) — und Handler dürfen den
+  Render-Index nicht festhalten, sondern lösen Zeilen über ihren **Wert** auf (ein Blur-Commit
+  einer anderen Zeile mutiert die Liste synchron, bevor der Klick-Handler läuft).
+
+Mit der Übernahme wird transmute das **3. Exemplar des guten Schnitts** → im nächsten
+`/drift-audit` ist die Kit-Extraktion des Zeilen-Editors zu bewerten (Registry nennt dafür
+9 offene Generalisierungen; **nicht** nebenbei mitmachen, das ist ein eigenes Vorhaben).
 
 **Übernehmen (aus Nachbar-Plugins kopieren — Registry-Katalog, nicht Kit):**
 
@@ -182,11 +231,20 @@ Aus `docs/transmute-repo-spec.md` §9 — nach Workspace-Standard bereits **ents
   leeren Remote keinen Workflow). Einrichtung über den Dach-Skill `plugin-release-setup`.
 - **Lizenz: AGPL-3.0 (`LICENSE`) + CC BY-SA 4.0 (`LICENSE-DOCS`)** — Workspace-Konsistenz.
 
+- **Modellagnostisch, mit dem was lokal da ist** (Jay-Entscheidung 2026-07-25) — kein Modell wird
+  für dieses Plugin nachgeladen, kein Modellname wird hartkodiert. Die Spec-Frage „4-bit vs. 8-bit"
+  ist damit gegenstandslos: Referenz-Setup ist die vorhandene **LM-Studio-Instanz auf `:1234`**
+  (Bestand 2026-07-25: `qwen/qwen3.6-35b-a3b` — der Spec-Kandidat, MoE also schnell —
+  `qwen/qwen3.6-27b`, `google/gemma-4-31b-qat`, `google/gemma-4-26b-a4b-qat`, `gemma-4-e4b`,
+  `gemma-4-e2b`; dazu Embeddings, für uns irrelevant). Ollama `:11434` hält nur ein
+  Embedding-Modell, MLX `:8080` läuft nicht — beides bleibt trotzdem über die Endpunkt-Liste
+  ansprechbar.
+
 Offen für Jay:
 
-- **Ziel-Modell für die Regex-Qualität** — Kandidat Qwen3.6-35B-A3B (4-bit vs. 8-bit), vorab per
-  Touchstone/`debrief-lab`-Muster auf NL→Regex evaluieren. Regex ist eine präzisionsempfindliche
-  Aufgabe; das ist die riskanteste offene Annahme des ganzen Vorhabens.
+- **Nichts Blockierendes.** Die verbleibende empirische Frage — hält der NL→Regex-Prompt über
+  *mehrere* der vorhandenen Modelle? — ist eine Mess-, keine Entscheidungsaufgabe (TaskNote im
+  Cockpit; Werkzeug: `debrief-lab`-Muster, Prompt-Tuning ohne Plugin-Rebuild).
 
 ## Dach-Kontext (obsidian-plugins)
 
