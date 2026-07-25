@@ -164,6 +164,7 @@ export function renderPanel(root: El, model: PanelModel, handlers: PanelHandlers
       const busy = body.createDiv({ cls: "transmute-busy" });
       setIcon(busy.createSpan(), "loader");
       busy.createSpan({ text: t("view.working") });
+      body.createDiv({ text: t("view.workingHint"), cls: "transmute-busy-hint" });
       break;
     }
     case "preview":

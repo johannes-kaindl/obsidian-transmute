@@ -187,9 +187,32 @@
 
 .transmute-busy {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--size-4-2);
   color: var(--text-muted);
+}
+
+.transmute-busy .svg-icon {
+  animation: transmute-spin 1s linear infinite;
+}
+
+/* Ohne Bewegung bleibt das Symbol stehen — die Meldung traegt die Information ohnehin. */
+@media (prefers-reduced-motion: reduce) {
+  .transmute-busy .svg-icon {
+    animation: none;
+  }
+}
+
+@keyframes transmute-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.transmute-busy-hint {
+  color: var(--text-faint);
+  font-size: var(--font-smaller);
+  margin-top: var(--size-4-1);
 }
 
 .transmute-ep-status.is-ok {

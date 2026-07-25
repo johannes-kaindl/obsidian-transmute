@@ -15,6 +15,10 @@ All notable changes to this project are documented here. The format follows
   filled it goes into the prompt as its own line; blank or whitespace-only is omitted
   rather than sent as an empty target.
 
+- The waiting state now **spins and says what is happening** — that the model is writing
+  the pattern, and that nothing in the note changes before Apply. A static line gave no
+  way to tell "still working" from "crashed". The spin is dropped under
+  `prefers-reduced-motion`.
 - The **replacement pattern** is now shown next to the search pattern. Previously the
   panel showed only what was matched, never what it would be turned into — which is half
   the rule, and the half you need to judge whether it is right.
