@@ -1,0 +1,114 @@
+# Transmute
+
+> 🇬🇧 English · [🇩🇪 Deutsch](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/README.de.md)
+
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/LICENSE)
+[![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-lightgrey.svg)](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/LICENSE-DOCS)
+[![Release](https://img.shields.io/gitea/v/release/jkaindl/obsidian-transmute?gitea_url=https%3A%2F%2Fcodeberg.org&label=release)](https://codeberg.org/jkaindl/obsidian-transmute/releases)
+![Platform](https://img.shields.io/badge/platform-Obsidian%201.8.7%2B%20·%20desktop%20%26%20mobile-7c3aed)
+
+**Describe what to replace in plain language — a local LLM writes the regular expression, and you review every match before anything is written.**
+
+## Features
+
+- **Natural-language search & replace.** Type what should change (e.g. "turn dates from DD.MM.YYYY into YYYY-MM-DD") and a local OpenAI-compatible LLM turns it into a JavaScript regular expression, a replacement pattern, and a one-sentence plain-language explanation of what the pattern matches.
+- **Preview before anything is written.** Every match is shown before/after, line by line, with its own checkbox. Nothing changes in your note until you click **"Apply"** — and only the checked matches are written.
+- **No separate undo system needed.** Applying writes through the editor, so the change lands in Obsidian's own undo stack — **Cmd+Z reverts it in one step**, exactly like any other edit.
+- **Iterative refinement.** Not quite right? Type a follow-up such as "but not inside code blocks" and click **"Refine"** — the plugin sends the conversation history *and* the actual matches found so far back to the model, so it can see what it got wrong.
+- **Scope control.** Run on the whole note or on your current selection; the default is configurable in settings.
+- **Model-agnostic by design.** No model name is ever hard-coded. The model list is read live from the endpoint's `GET /v1/models`; leaving the setting empty lets the server pick whichever model is loaded.
+- **Ordered endpoint fallback list.** Configure several OpenAI-compatible servers; the plugin tries them in order and uses the first one that answers, with one-click presets for LM Studio and Ollama and a per-row reachability status.
+- **Reasoning models handled correctly.** `<think>` blocks are stripped before the JSON answer is parsed, and — where the server supports it — reasoning is actively suppressed so thinking models answer faster and don't leak their chain of thought into the note.
+- **A runaway pattern can't hang the editor.** Every generated pattern is screened by a static heuristic (nested quantifiers, quantified alternation, unbounded backreferences) *before* it ever runs, and execution itself is bounded by a per-line time budget.
+- **Tolerant of imperfect model output.** The model's answer is parsed leniently — code fences are stripped, the first balanced JSON object is extracted — and a single retry with the concrete parse or validation error is sent back to the model before giving up with a clear message.
+- **Bilingual interface.** English is canonical; the UI follows Obsidian's display language and ships a full German translation.
+
+### In detail
+
+Transmute solves a gap Obsidian leaves open: the built-in search is read-only, and the existing regex plugins (Regex Find/Replace, Search and Replace Regex, Apply Patterns) all assume you already know how to write a regular expression. Transmute lets you describe the edit in your own words instead. A ribbon icon (`replace`, label "Transmute") and the command **"Open panel"** open a sidebar panel: pick a scope, describe the change, click **"Generate"**, and the model's pattern is compiled, screened for catastrophic-backtracking risk, and run against your text — never blindly. The resulting hits are shown with highlighting; select or deselect individual matches (or use **"Select all"** / **"Select none"**), refine the instruction as many times as you like, and only write the note once you are satisfied.
+
+## Requirements
+
+- **Obsidian 1.8.7+** (desktop or mobile).
+- **An OpenAI-compatible local server** (e.g. [LM Studio](https://lmstudio.ai) or [Ollama](https://ollama.com)) with a chat-capable model loaded. New to local LLMs? The **[local LLM setup guide](https://uplink.jkaindl.de/llm-setup)** walks you through server, model and mobile access end to end. The endpoint and model are configured in the plugin settings — nothing leaves your machine.
+
+## Install
+
+### Community plugins (recommended)
+
+Search for **Transmute** in **Settings → Community plugins → Browse**, then click **Install** and **Enable**.
+
+### Manual
+
+Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://codeberg.org/jkaindl/obsidian-transmute/releases) and place them in `<vault>/.obsidian/plugins/transmute/`, then enable the plugin under **Settings → Community plugins**.
+
+### From source
+
+```bash
+git clone https://codeberg.org/jkaindl/obsidian-transmute
+cd obsidian-transmute
+npm install
+npm run build   # produces main.js
+```
+
+Then copy `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/plugins/transmute/` and reload Obsidian.
+
+## Usage
+
+1. Point the plugin at your local server (see [Configuration](#configuration) below) and make sure a model is loaded.
+2. Click the ribbon icon **"Transmute"** (or run the command **"Open panel"**) to open the panel in the sidebar.
+3. Pick a scope: **"Whole note"** or **"Selection"**.
+4. Describe the change in the instruction box, e.g. *"turn dates from DD.MM.YYYY into YYYY-MM-DD"*, and click **"Generate"**.
+5. Review the preview: the generated pattern, its plain-language explanation, and every match with a before/after line and a checkbox. Deselect anything you don't want, or use **"Select all"** / **"Select none"**.
+6. Not quite right? Type a follow-up in the refine box (e.g. *"but not inside code blocks"*) and click **"Refine"** — the model sees the previous rounds and the actual matches it produced.
+7. Click **"Apply"**. Only the checked matches are written, and the change lands in Obsidian's normal undo stack — **Cmd+Z** reverts it in one step.
+
+### Configuration
+
+Open **Settings → Community plugins → Transmute**. Settings are grouped under **"Connection"** and **"Behaviour"**.
+
+| Setting | Default | Effect |
+|---|---|---|
+| **Endpoints** | `["http://127.0.0.1:1234"]` | Ordered list of OpenAI-compatible servers, tried in order; the first reachable one is used. One-click presets for LM Studio and Ollama, plus a per-row reachability status and a "Test connections" button. |
+| **Model** | `""` (empty) | Which model to request. Empty lets the server choose whichever is loaded. A dropdown is filled from the active endpoint's `/v1/models`; use the reload button to refresh it. |
+| **Request timeout (ms)** | `120000` | How long to wait for the model to answer before giving up. |
+| **Default scope** | `file` (Whole note) | Which scope a new rule starts with — "Whole note" or "Selection". Switchable per run in the panel. |
+| **Text sample sent to the model** | `2000` (characters) | How much of the scope text is sent along with the instruction, so the model can see what it is matching against. |
+| **Time budget for running the pattern (ms)** | `2000` | A pattern that runs longer than this on a line-by-line scan is stopped, and the matches found so far are shown with a notice. |
+| **Ask reasoning models to skip thinking** | `true` | Sends reasoning-suppression parameters to the endpoint (and strips `<think>` blocks from the answer either way) so reasoning-capable local models answer faster and more reliably. |
+
+**Endpoint tip:** enter the base URL **without** a trailing `/v1` — the client appends `/v1` itself (a trailing `/v1` is stripped automatically either way, so both forms work).
+
+## How it works
+
+Transmute sends your instruction, plus a sample of the scope text, to the configured endpoint's `/v1/chat/completions` and asks for a single JSON object — `regex`, `flags`, `replacement`, `explanation` — never prose. The answer is parsed leniently (code fences and any `<think>` block are stripped, the first balanced JSON object is extracted), and one retry with the concrete error is sent back to the model if the first answer doesn't parse or validate.
+
+Before the generated pattern ever runs, a static heuristic screens it for constructs known to cause catastrophic backtracking — nested quantifiers, quantified alternation over identical branches, unbounded backreferences — and rejects it with a plain-language reason if it looks dangerous. A pattern that passes is then executed line by line against the scope text under a configurable time budget; multi-line patterns (an `s`/`m` flag, or a literal `\n` in the pattern) run once against the full text instead, since a time budget only makes sense between discrete steps.
+
+Nothing is written to your note until you click **"Apply"**. At that point, only the checked matches are applied — in reverse order, so earlier replacements never shift the offsets of later ones — and the result is written through Obsidian's editor API (`editor.replaceRange`), which is what puts the change on the normal undo stack.
+
+## Manual
+
+The full documentation follows the [Diátaxis](https://diataxis.fr) framework — see [docs/manual/index.md](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/docs/manual/index.md):
+
+- **Tutorial** — get from zero to your first applied replacement.
+- **How-to guides** — task-focused recipes (multiple endpoints, refining a rule, undoing, handling an unsafe-pattern error).
+- **Reference** — settings, commands, error messages, the JSON contract.
+- **Explanation** — why preview-before-apply is the core of the design, why there is no separate snapshot system, and why the safety guard has no web worker to lean on.
+
+See the [changelog](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/CHANGELOG.md) for release notes.
+
+## Related
+
+**[ksawl/obsidian-alchemist](https://github.com/ksawl/obsidian-alchemist)** shares the alchemy/transmutation imagery but a different job: it is a general vault-hygiene toolkit. Transmute is narrowly about turning a plain-language instruction into a reviewed, applied regex replacement — it does not aim to cover vault hygiene more broadly.
+
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/CONTRIBUTING.md) for the workflow (test-driven, `main` always green, feature work in `feat/<name>`, Conventional Commits) and [AGENTS.md](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/AGENTS.md) for the architecture and module conventions. The canonical repository lives on [Codeberg](https://codeberg.org/jkaindl/obsidian-transmute); GitHub (`johannes-kaindl/obsidian-transmute`) is a mirror.
+
+## License
+
+- **Code:** [AGPL-3.0-or-later](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/LICENSE). A commercial dual-license is available on request if the AGPL copyleft does not fit your use case.
+- **Documentation and text:** [CC BY-SA 4.0](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/LICENSE-DOCS).
+
+Copyright © 2026 Johannes Kaindl.
