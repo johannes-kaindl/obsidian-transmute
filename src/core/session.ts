@@ -1,3 +1,4 @@
+import { sameMatches } from "./anchor";
 import { buildInitialPrompt, buildRefinePrompt, buildRetryPrompt, sampleForPrompt } from "./llm/prompt";
 import { parseRuleResponse } from "./llm/response";
 import type { CompleteResult } from "./llm/client";
@@ -10,6 +11,8 @@ export type SessionState =
   | { phase: "generating" }
   | { phase: "preview"; rule: RuleDraft; hits: Hit[]; selected: boolean[]; timedOutAtLine: number | null }
   | { phase: "error"; messageKey: string; args: string[]; raw: string | null };
+
+export type Revalidation = { kind: "ok"; hits: Hit[] } | { kind: "changed" };
 
 export type SessionDeps = {
   complete(messages: ChatMessage[]): Promise<CompleteResult>;
@@ -59,6 +62,33 @@ export class TransmuteSession {
   setAll(value: boolean): void {
     if (this.current.phase !== "preview") return;
     this.set({ ...this.current, selected: this.current.selected.map(() => value) });
+  }
+
+  /**
+   * Treffer gegen den aktuellen Text neu berechnen, statt auf alte Positionen zu
+   * vertrauen.
+   *
+   * Positionen altern schnell: schon ein Linter, der beim Speichern `updated:` ins
+   * Frontmatter schreibt, verschiebt alles dahinter. Deshalb wird beim Anwenden die Regel
+   * noch einmal ausgefuehrt und nur geprueft, ob **dieselben Ersetzungen** herauskommen
+   * wie in der Vorschau. Kommt etwas anderes heraus, wurde am Fundtext selbst gearbeitet
+   * — dann lieber gar nichts schreiben.
+   */
+  revalidate(text: string): Revalidation {
+    if (this.current.phase !== "preview") return { kind: "changed" };
+
+    const compiled = compileRule(this.current.rule);
+    if (!compiled.ok) return { kind: "changed" };
+
+    const result = runRule(
+      text,
+      compiled.re,
+      this.current.rule.replacement,
+      isMultilinePattern(this.current.rule),
+      { budgetMs: this.options().budgetMs, now: () => this.deps.now() },
+    );
+    if (!sameMatches(this.current.hits, result.hits)) return { kind: "changed" };
+    return { kind: "ok", hits: result.hits };
   }
 
   async generate(instruction: string, text: string, target = ""): Promise<void> {

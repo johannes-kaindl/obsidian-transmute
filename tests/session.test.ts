@@ -106,3 +106,38 @@ describe("TransmuteSession", () => {
     if (session.state.phase === "preview") expect(session.state.selected.every((s) => !s)).toBe(true);
   });
 });
+
+describe("TransmuteSession.revalidate", () => {
+  async function previewed() {
+    const complete = vi.fn().mockResolvedValue({ ok: true, content: answer("#alt") });
+    const session = new TransmuteSession({ complete, now: () => 0 }, options);
+    await session.generate("tag umbenennen", "Ein #alt Tag.");
+    return session;
+  }
+
+  // Der reale Ausloeser: ein Linter schreibt beim Speichern "updated:" ins Frontmatter.
+  // Der Fundtext ist unveraendert, nur seine Position hat sich verschoben — das darf
+  // das Anwenden nicht blockieren.
+  it("akzeptiert verschobenen Text, solange dieselben Ersetzungen herauskommen", async () => {
+    const session = await previewed();
+    const fresh = session.revalidate("---\nupdated: 13:51\n---\n\nEin #alt Tag.");
+    expect(fresh.kind).toBe("ok");
+    if (fresh.kind === "ok") expect(fresh.hits[0].matched).toBe("#alt");
+  });
+
+  it("meldet eine Aenderung, wenn ein Treffer dazugekommen ist", async () => {
+    const session = await previewed();
+    expect(session.revalidate("Ein #alt Tag und noch ein #alt Tag.").kind).toBe("changed");
+  });
+
+  it("meldet eine Aenderung, wenn der Fundtext weg ist", async () => {
+    const session = await previewed();
+    expect(session.revalidate("Nichts mehr davon.").kind).toBe("changed");
+  });
+
+  it("meldet eine Aenderung, wenn gar keine Vorschau laeuft", () => {
+    const complete = vi.fn();
+    const session = new TransmuteSession({ complete, now: () => 0 }, options);
+    expect(session.revalidate("egal").kind).toBe("changed");
+  });
+});

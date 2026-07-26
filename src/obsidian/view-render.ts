@@ -26,6 +26,7 @@ export type PanelHandlers = {
   onGenerate(): void;
   onRefine(): void;
   onApply(): void;
+  onDiscard(): void;
   onToggle(index: number): void;
   onSetAll(value: boolean): void;
 };
@@ -124,6 +125,9 @@ function renderPreview(
   const actions = parent.createDiv({ cls: "transmute-actions" });
   const refine = actions.createEl("button", { text: t("view.refine") });
   refine.addEventListener("click", () => handlers.onRefine());
+
+  const discard = actions.createEl("button", { text: t("view.discard") });
+  discard.addEventListener("click", () => handlers.onDiscard());
 
   const apply = actions.createEl("button", { text: t("view.apply"), cls: "mod-cta" });
   const applicable = state.hits.some((_, i) => state.selected[i]);

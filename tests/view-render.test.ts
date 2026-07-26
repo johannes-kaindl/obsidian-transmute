@@ -13,6 +13,7 @@ const handlers: PanelHandlers = {
   onRefine: vi.fn(),
   onApply: vi.fn(),
   onToggle: vi.fn(),
+  onDiscard: vi.fn(),
   onSetAll: vi.fn(),
 };
 

@@ -2,14 +2,14 @@ import { ItemView, MarkdownView, Notice, Scope, type WorkspaceLeaf } from "obsid
 import type { SessionState, TransmuteSession } from "../core/session";
 import type { ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
-import { textUnchanged } from "../core/anchor";
+import { locateRegion } from "../core/anchor";
 import { activeMarkdownView, applyHitsToEditor, readScope, viewForPath } from "./editor-io";
 import { renderPanel, type PanelHandlers } from "./view-render";
 
 export const VIEW_TYPE_TRANSMUTE = "transmute-panel";
 
 /** Die Notiz, an der die laufende Runde haengt — samt des Textstands von der Vorschau. */
-type Pinned = { path: string; name: string; text: string; baseOffset: number };
+type Pinned = { path: string; name: string; scope: ScopeKind; text: string; baseOffset: number };
 
 export type TransmuteViewDeps = {
   session(): TransmuteSession;
@@ -88,6 +88,12 @@ export class TransmuteView extends ItemView {
       onApply: () => {
         this.apply();
       },
+      onDiscard: () => {
+        // Die Anweisung bleibt stehen: verworfen wird das Ergebnis, nicht der Gedanke.
+        this.refinement = "";
+        this.pinned = null;
+        this.deps.session().reset();
+      },
       onToggle: (index) => {
         this.deps.session().toggle(index);
       },
@@ -121,7 +127,28 @@ export class TransmuteView extends ItemView {
       new Notice(t("error.noSelection"));
       return null;
     }
-    return { path, name: view.file?.basename ?? path, text: read.text, baseOffset: read.baseOffset };
+    return {
+      path,
+      name: view.file?.basename ?? path,
+      scope: this.scopeKind,
+      text: read.text,
+      baseOffset: read.baseOffset,
+    };
+  }
+
+  /**
+   * Der Bereich, auf den die Regel angewendet wird, im *aktuellen* Dokument.
+   *
+   * Bei „Ganze Notiz" ist das schlicht der jetzige Text. Bei „Auswahl" muss der damalige
+   * Ausschnitt wiedergefunden werden — er kann sich verschoben haben, ohne sich geaendert
+   * zu haben.
+   */
+  private currentRegion(documentText: string): { text: string; offset: number } | null {
+    if (this.pinned === null) return null;
+    if (this.pinned.scope === "file") return { text: documentText, offset: 0 };
+
+    const offset = locateRegion(documentText, this.pinned.baseOffset, this.pinned.text);
+    return offset === null ? null : { text: this.pinned.text, offset };
   }
 
   /** Die gemerkte Notiz wiederfinden — welcher Reiter Fokus hat, ist dabei egal. */
@@ -159,15 +186,22 @@ export class TransmuteView extends ItemView {
     const view = this.pinnedView();
     if (view === null) return;
 
-    // Die Treffer tragen Offsets in den Text von damals. Wurde die Notiz seither
-    // bearbeitet, zeigen dieselben Offsets auf anderen Text — dann lieber gar nichts
-    // schreiben als stillschweigend die falschen Stellen ersetzen.
-    if (!textUnchanged(view.editor.getValue(), this.pinned.baseOffset, this.pinned.text)) {
+    const region = this.currentRegion(view.editor.getValue());
+    if (region === null) {
       new Notice(t("error.noteChanged"));
       return;
     }
 
-    const applied = applyHitsToEditor(view.editor, state.hits, state.selected, this.pinned.baseOffset);
+    // Nicht auf die alten Positionen vertrauen, sondern die Regel gegen den jetzigen Text
+    // neu ausfuehren. Geschrieben wird nur, wenn dabei dieselben Ersetzungen herauskommen
+    // wie in der Vorschau.
+    const fresh = this.deps.session().revalidate(region.text);
+    if (fresh.kind === "changed") {
+      new Notice(t("error.noteChanged"));
+      return;
+    }
+
+    const applied = applyHitsToEditor(view.editor, fresh.hits, state.selected, region.offset);
     if (applied === 0) return;
 
     new Notice(t("view.applied", applied));
