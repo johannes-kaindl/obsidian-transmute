@@ -1,6 +1,6 @@
 {
   "name": "transmute",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Search and replace by intent — a local LLM writes the regex, you review every match before it runs.",
   "type": "module",
   "scripts": {
