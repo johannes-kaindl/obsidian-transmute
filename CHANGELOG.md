@@ -26,7 +26,8 @@ All notable changes to this project are documented here. The format follows
 - The waiting state now **spins and says what is happening** — that the model is writing
   the pattern, and that nothing in the note changes before Apply. A static line gave no
   way to tell "still working" from "crashed". The spin is dropped under
-  `prefers-reduced-motion`.
+  `prefers-reduced-motion`. There is only that one sentence: a second line next to the
+  spinner ("Asking the model…") said what the spinner already says.
 - The **replacement pattern** is now shown next to the search pattern. Previously the
   panel showed only what was matched, never what it would be turned into — which is half
   the rule, and the half you need to judge whether it is right.

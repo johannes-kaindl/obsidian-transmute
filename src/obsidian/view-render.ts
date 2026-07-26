@@ -171,8 +171,9 @@ export function renderPanel(root: El, model: PanelModel, handlers: PanelHandlers
     case "generating": {
       const busy = body.createDiv({ cls: "transmute-busy" });
       setIcon(busy.createSpan(), "loader");
+      // Nur der Satz, der etwas erklaert. Ein zusaetzliches "Frage das Modell…" neben
+      // dem Kreisel sagt dasselbe wie der Kreisel und steht dem Satz im Weg.
       busy.createSpan({ text: t("view.working") });
-      body.createDiv({ text: t("view.workingHint"), cls: "transmute-busy-hint" });
       break;
     }
     case "preview":

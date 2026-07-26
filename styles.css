@@ -200,6 +200,7 @@
 
 .transmute-busy .svg-icon {
   animation: transmute-spin 1s linear infinite;
+  flex-shrink: 0;
 }
 
 /* Ohne Bewegung bleibt das Symbol stehen — die Meldung traegt die Information ohnehin. */
@@ -213,12 +214,6 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-.transmute-busy-hint {
-  color: var(--text-faint);
-  font-size: var(--font-smaller);
-  margin-top: var(--size-4-1);
 }
 
 .transmute-ep-status.is-ok {
