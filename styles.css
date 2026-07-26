@@ -231,3 +231,45 @@
 .transmute-ep-warn {
   color: var(--text-warning);
 }
+
+.transmute-versions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-2-1);
+  margin-bottom: var(--size-4-2);
+}
+
+.transmute-version {
+  display: flex;
+  align-items: baseline;
+  gap: var(--size-4-1);
+  width: 100%;
+  text-align: left;
+  padding: var(--size-2-2) var(--size-4-1);
+  background-color: transparent;
+  box-shadow: none;
+  font-size: var(--font-smaller);
+  color: var(--text-muted);
+}
+
+.transmute-version.is-active {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.transmute-version-no {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.transmute-version-label {
+  flex-grow: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transmute-version-count {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}

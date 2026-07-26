@@ -14,6 +14,7 @@ const handlers: PanelHandlers = {
   onApply: vi.fn(),
   onToggle: vi.fn(),
   onDiscard: vi.fn(),
+  onSelectVersion: vi.fn(),
   onSetAll: vi.fn(),
 };
 
@@ -78,10 +79,8 @@ describe("renderPanel", () => {
         ...base,
         state: {
           phase: "preview",
-          rule: { regex: "foo", flags: "g", replacement: "bar", explanation: "matcht foo" },
-          hits: [hit()],
-          selected: [true],
-          timedOutAtLine: null,
+          versions: [{ instruction: "i", rule: { regex: "foo", flags: "g", replacement: "bar", explanation: "matcht foo" }, hits: [hit()], selected: [true], timedOutAtLine: null }],
+          active: 0,
         },
       },
       handlers,
@@ -101,10 +100,8 @@ describe("renderPanel", () => {
         ...base,
         state: {
           phase: "preview",
-          rule: { regex: "#alt", flags: "i", replacement: "#neu", explanation: "" },
-          hits: [hit()],
-          selected: [true],
-          timedOutAtLine: null,
+          versions: [{ instruction: "i", rule: { regex: "#alt", flags: "i", replacement: "#neu", explanation: "" }, hits: [hit()], selected: [true], timedOutAtLine: null }],
+          active: 0,
         },
       },
       handlers,
@@ -120,10 +117,8 @@ describe("renderPanel", () => {
         ...base,
         state: {
           phase: "preview",
-          rule: { regex: "(\\d+)", flags: "g", replacement: "Nr. $1", explanation: "" },
-          hits: [hit()],
-          selected: [true],
-          timedOutAtLine: null,
+          versions: [{ instruction: "i", rule: { regex: "(\\d+)", flags: "g", replacement: "Nr. $1", explanation: "" }, hits: [hit()], selected: [true], timedOutAtLine: null }],
+          active: 0,
         },
       },
       handlers,
@@ -140,10 +135,8 @@ describe("renderPanel", () => {
         pinnedName: "Projektnotizen",
         state: {
           phase: "preview",
-          rule: { regex: "a", flags: "g", replacement: "b", explanation: "" },
-          hits: [hit()],
-          selected: [true],
-          timedOutAtLine: null,
+          versions: [{ instruction: "i", rule: { regex: "a", flags: "g", replacement: "b", explanation: "" }, hits: [hit()], selected: [true], timedOutAtLine: null }],
+          active: 0,
         },
       },
       handlers,
@@ -161,10 +154,8 @@ describe("renderPanel", () => {
         ...base,
         state: {
           phase: "preview",
-          rule: { regex: "aa", flags: "g", replacement: "X", explanation: "" },
-          hits: [hit({ start: 3, end: 5, matched: "aa", replacement: "X", before: "aa aa", after: "aa X" })],
-          selected: [true],
-          timedOutAtLine: null,
+          versions: [{ instruction: "i", rule: { regex: "aa", flags: "g", replacement: "X", explanation: "" }, hits: [hit({ start: 3, end: 5, matched: "aa", replacement: "X", before: "aa aa", after: "aa X" })], selected: [true], timedOutAtLine: null }],
+          active: 0,
         },
       },
       handlers,
@@ -181,10 +172,8 @@ describe("renderPanel", () => {
         ...base,
         state: {
           phase: "preview",
-          rule: { regex: "zzz", flags: "g", replacement: "", explanation: "" },
-          hits: [],
-          selected: [],
-          timedOutAtLine: null,
+          versions: [{ instruction: "i", rule: { regex: "zzz", flags: "g", replacement: "", explanation: "" }, hits: [], selected: [], timedOutAtLine: null }],
+          active: 0,
         },
       },
       handlers,
@@ -202,10 +191,8 @@ describe("renderPanel", () => {
         ...base,
         state: {
           phase: "preview",
-          rule: { regex: "a", flags: "g", replacement: "b", explanation: "" },
-          hits: [hit()],
-          selected: [true],
-          timedOutAtLine: 41,
+          versions: [{ instruction: "i", rule: { regex: "a", flags: "g", replacement: "b", explanation: "" }, hits: [hit()], selected: [true], timedOutAtLine: 41 }],
+          active: 0,
         },
       },
       handlers,
@@ -232,5 +219,43 @@ describe("renderPanel", () => {
       handlers,
     );
     expect(root.textContent).toContain("ECONNREFUSED");
+  });
+});
+
+describe("renderPanel — Verlauf", () => {
+  const version = (instruction: string, count: number) => ({
+    instruction,
+    rule: { regex: "a", flags: "g", replacement: "b", explanation: "" },
+    hits: Array.from({ length: count }, () => hit()),
+    selected: Array.from({ length: count }, () => true),
+    timedOutAtLine: null,
+  });
+
+  it("zeigt keinen Verlauf, solange es nur einen Stand gibt", () => {
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, state: { phase: "preview", versions: [version("erste", 1)], active: 0 } }, handlers);
+    expect(root.textContent).not.toContain("erste");
+  });
+
+  it("listet ab dem zweiten Stand alle mit Anweisung und Trefferzahl", () => {
+    const root = makeFakeEl();
+    renderPanel(
+      root,
+      { ...base, state: { phase: "preview", versions: [version("erste", 2), version("zweite", 1)], active: 1 } },
+      handlers,
+    );
+    expect(root.textContent).toContain("erste");
+    expect(root.textContent).toContain("zweite");
+  });
+
+  it("zeigt den aktiven Stand, nicht immer den letzten", () => {
+    const root = makeFakeEl();
+    const versions = [
+      { ...version("erste", 1), rule: { regex: "ALT", flags: "g", replacement: "b", explanation: "" } },
+      { ...version("zweite", 1), rule: { regex: "NEU", flags: "g", replacement: "b", explanation: "" } },
+    ];
+    renderPanel(root, { ...base, state: { phase: "preview", versions, active: 0 } }, handlers);
+    expect(root.textContent).toContain("/ALT/g");
+    expect(root.textContent).not.toContain("/NEU/g");
   });
 });

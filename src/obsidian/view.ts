@@ -1,5 +1,5 @@
 import { ItemView, MarkdownView, Notice, Scope, type WorkspaceLeaf } from "obsidian";
-import type { SessionState, TransmuteSession } from "../core/session";
+import type { TransmuteSession } from "../core/session";
 import type { ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
 import { locateRegion } from "../core/anchor";
@@ -87,6 +87,9 @@ export class TransmuteView extends ItemView {
       },
       onApply: () => {
         this.apply();
+      },
+      onSelectVersion: (index) => {
+        this.deps.session().selectVersion(index);
       },
       onDiscard: () => {
         // Die Anweisung bleibt stehen: verworfen wird das Ergebnis, nicht der Gedanke.
@@ -180,8 +183,8 @@ export class TransmuteView extends ItemView {
   }
 
   private apply(): void {
-    const state: SessionState = this.deps.session().state;
-    if (state.phase !== "preview" || this.pinned === null) return;
+    const active = this.deps.session().activeVersion;
+    if (active === null || this.pinned === null) return;
 
     const view = this.pinnedView();
     if (view === null) return;
@@ -201,7 +204,7 @@ export class TransmuteView extends ItemView {
       return;
     }
 
-    const applied = applyHitsToEditor(view.editor, fresh.hits, state.selected, region.offset);
+    const applied = applyHitsToEditor(view.editor, fresh.hits, active.selected, region.offset);
     if (applied === 0) return;
 
     new Notice(t("view.applied", applied));

@@ -27,6 +27,7 @@ export type PanelHandlers = {
   onRefine(): void;
   onApply(): void;
   onDiscard(): void;
+  onSelectVersion(index: number): void;
   onToggle(index: number): void;
   onSetAll(value: boolean): void;
 };
@@ -67,6 +68,32 @@ function hitLine(parent: El, hit: Hit): void {
   after.createSpan({ text: lag });
 }
 
+/**
+ * Der Verlauf als klickbare Liste.
+ *
+ * Nachschaerfen ist Probieren — und Probieren heisst, dass der dritte Versuch schlechter
+ * sein kann als der erste. Ohne Verlauf waere der erste dann verloren. Ab zwei Staenden
+ * sichtbar; bei einem gaebe es nichts zu waehlen.
+ * (Muster aus image-to-markdown, `syncRefineLog` — ohne dessen Streaming-Zweig.)
+ */
+function versionList(
+  parent: El,
+  state: Extract<SessionState, { phase: "preview" }>,
+  handlers: PanelHandlers,
+): void {
+  if (state.versions.length < 2) return;
+
+  const list = parent.createDiv({ cls: "transmute-versions" });
+  state.versions.forEach((version, index) => {
+    const row = list.createEl("button", { cls: "transmute-version" });
+    row.toggleClass("is-active", index === state.active);
+    row.createSpan({ text: `${index + 1}.`, cls: "transmute-version-no" });
+    row.createSpan({ text: version.instruction, cls: "transmute-version-label" });
+    row.createSpan({ text: t("view.matches", version.hits.length), cls: "transmute-version-count" });
+    row.addEventListener("click", () => handlers.onSelectVersion(index));
+  });
+}
+
 function renderPreview(
   parent: El,
   state: Extract<SessionState, { phase: "preview" }>,
@@ -79,35 +106,38 @@ function renderPreview(
     parent.createDiv({ text: t("view.pinned", model.pinnedName), cls: "transmute-pinned" });
   }
 
+  const version = state.versions[state.active];
+  versionList(parent, state, handlers);
+
   const pattern = parent.createDiv({ cls: "transmute-pattern" });
   // effectiveFlags, nicht rule.flags: angezeigt werden muss, was lief.
-  pattern.createEl("code", { text: `/${state.rule.regex}/${effectiveFlags(state.rule.flags)}` });
+  pattern.createEl("code", { text: `/${version.rule.regex}/${effectiveFlags(version.rule.flags)}` });
   const replacement = pattern.createDiv({ cls: "transmute-replacement" });
   replacement.createSpan({ text: t("view.replacement"), cls: "transmute-replacement-label" });
-  replacement.createEl("code", { text: state.rule.replacement });
-  if (state.rule.explanation.length > 0) {
-    pattern.createDiv({ text: state.rule.explanation, cls: "transmute-explanation" });
+  replacement.createEl("code", { text: version.rule.replacement });
+  if (version.rule.explanation.length > 0) {
+    pattern.createDiv({ text: version.rule.explanation, cls: "transmute-explanation" });
   }
 
-  if (state.timedOutAtLine !== null) {
-    parent.createDiv({ text: t("view.timedOut", state.timedOutAtLine + 1), cls: "transmute-warning" });
+  if (version.timedOutAtLine !== null) {
+    parent.createDiv({ text: t("view.timedOut", version.timedOutAtLine + 1), cls: "transmute-warning" });
   }
 
-  if (state.hits.length === 0) {
+  if (version.hits.length === 0) {
     parent.createDiv({ text: t("view.noMatches"), cls: "transmute-empty" });
   } else {
     const head = parent.createDiv({ cls: "transmute-hits-head" });
-    head.createSpan({ text: t("view.matches", state.hits.length) });
+    head.createSpan({ text: t("view.matches", version.hits.length) });
     const none = head.createEl("button", { text: t("view.selectNone"), cls: "transmute-link" });
     none.addEventListener("click", () => handlers.onSetAll(false));
     const all = head.createEl("button", { text: t("view.selectAll"), cls: "transmute-link" });
     all.addEventListener("click", () => handlers.onSetAll(true));
 
     const list = parent.createDiv({ cls: "transmute-hits" });
-    state.hits.forEach((hit, index) => {
+    version.hits.forEach((hit, index) => {
       const row = list.createDiv({ cls: "transmute-hit" });
       const box = row.createEl("input", { attr: { type: "checkbox" } });
-      if (state.selected[index]) box.setAttribute("checked", "checked");
+      if (version.selected[index]) box.setAttribute("checked", "checked");
       box.addEventListener("change", () => handlers.onToggle(index));
       const body = row.createDiv({ cls: "transmute-hit-body" });
       body.createDiv({ text: t("view.line", hit.line + 1), cls: "transmute-lineno" });
@@ -130,7 +160,7 @@ function renderPreview(
   discard.addEventListener("click", () => handlers.onDiscard());
 
   const apply = actions.createEl("button", { text: t("view.apply"), cls: "mod-cta" });
-  const applicable = state.hits.some((_, i) => state.selected[i]);
+  const applicable = version.hits.some((_, i) => version.selected[i]);
   if (!applicable) apply.setAttribute("disabled", "true");
   apply.addEventListener("click", () => {
     if (applicable) handlers.onApply();

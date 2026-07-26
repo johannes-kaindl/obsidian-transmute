@@ -14,8 +14,8 @@ describe("TransmuteSession", () => {
     expect(seen).toContain("generating");
     expect(session.state.phase).toBe("preview");
     if (session.state.phase === "preview") {
-      expect(session.state.hits).toHaveLength(1);
-      expect(session.state.selected).toEqual([true]);
+      expect(session.activeVersion!.hits).toHaveLength(1);
+      expect(session.activeVersion!.selected).toEqual([true]);
     }
   });
 
@@ -66,7 +66,7 @@ describe("TransmuteSession", () => {
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     await session.generate("x", "foo");
     expect(session.state.phase).toBe("preview");
-    if (session.state.phase === "preview") expect(session.state.hits).toHaveLength(0);
+    if (session.state.phase === "preview") expect(session.activeVersion!.hits).toHaveLength(0);
   });
 
   it("meldet einen Endpunkt-Ausfall mit eigenem Key", async () => {
@@ -95,7 +95,7 @@ describe("TransmuteSession", () => {
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     await session.generate("x", "foo");
     session.toggle(0);
-    if (session.state.phase === "preview") expect(session.state.selected[0]).toBe(false);
+    if (session.state.phase === "preview") expect(session.activeVersion!.selected[0]).toBe(false);
   });
 
   it("setzt alle Treffer gemeinsam", async () => {
@@ -103,7 +103,7 @@ describe("TransmuteSession", () => {
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     await session.generate("x", "foo");
     session.setAll(false);
-    if (session.state.phase === "preview") expect(session.state.selected.every((s) => !s)).toBe(true);
+    if (session.state.phase === "preview") expect(session.activeVersion!.selected.every((s) => !s)).toBe(true);
   });
 });
 
@@ -139,5 +139,76 @@ describe("TransmuteSession.revalidate", () => {
     const complete = vi.fn();
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     expect(session.revalidate("egal").kind).toBe("changed");
+  });
+});
+
+describe("TransmuteSession — Verlauf", () => {
+  const rule = (regex: string) => ({ ok: true, content: answer(regex) });
+
+  async function twoRounds() {
+    const complete = vi
+      .fn()
+      .mockResolvedValueOnce(rule("#alt"))
+      .mockResolvedValueOnce(rule("#alt\\b"));
+    const session = new TransmuteSession({ complete, now: () => 0 }, options);
+    await session.generate("tag umbenennen", "Ein #alt Tag und ein #alter Begriff.");
+    await session.refine("nur exakt #alt", "Ein #alt Tag und ein #alter Begriff.");
+    return { session, complete };
+  }
+
+  it("haelt jeden Stand fest und zeigt den letzten", async () => {
+    const { session } = await twoRounds();
+    expect(session.state.phase).toBe("preview");
+    if (session.state.phase === "preview") {
+      expect(session.state.versions).toHaveLength(2);
+      expect(session.state.active).toBe(1);
+      expect(session.state.versions[0].instruction).toBe("tag umbenennen");
+      expect(session.state.versions[1].instruction).toBe("nur exakt #alt");
+    }
+  });
+
+  // Der Grund fuer das Feature: der dritte Versuch kann schlechter sein als der erste.
+  it("wechselt zu einem frueheren Stand zurueck, ohne die spaeteren zu verlieren", async () => {
+    const { session } = await twoRounds();
+    session.selectVersion(0);
+    expect(session.activeVersion?.rule.regex).toBe("#alt");
+    if (session.state.phase === "preview") expect(session.state.versions).toHaveLength(2);
+  });
+
+  it("ignoriert Wechsel auf einen Stand, den es nicht gibt", async () => {
+    const { session } = await twoRounds();
+    session.selectVersion(9);
+    expect(session.activeVersion?.rule.regex).toBe("#alt\\b");
+  });
+
+  it("haelt die Haekchen je Stand, nicht je Sitzung", async () => {
+    const { session } = await twoRounds();
+    session.setAll(false);
+    session.selectVersion(0);
+    expect(session.activeVersion?.selected.every((on) => on)).toBe(true);
+    session.selectVersion(1);
+    expect(session.activeVersion?.selected.some((on) => on)).toBe(false);
+  });
+
+  // Wer im Verlauf zurueckgeht und von dort nachschaerft, meint diesen Stand — nicht den
+  // letzten. Sonst waere die Rueckwahl folgenlos.
+  it("baut ein Nachschaerfen auf dem aktiven Stand auf, nicht auf dem letzten", async () => {
+    const { session, complete } = await twoRounds();
+    session.selectVersion(0);
+    complete.mockResolvedValueOnce(rule("#alt$"));
+    await session.refine("noch anders", "Ein #alt Tag.");
+
+    const messages = complete.mock.calls[2][0] as { role: string; content: string }[];
+    const assistantTurns = messages.filter((m) => m.role === "assistant");
+    expect(assistantTurns).toHaveLength(1);
+    expect(assistantTurns[0].content).toContain("#alt");
+    expect(assistantTurns[0].content).not.toContain("#alt\\\\b");
+  });
+
+  it("verwirft mit reset den ganzen Verlauf", async () => {
+    const { session } = await twoRounds();
+    session.reset();
+    expect(session.state.phase).toBe("idle");
+    expect(session.activeVersion).toBeNull();
   });
 });

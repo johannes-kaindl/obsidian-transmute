@@ -32,3 +32,19 @@ export type ChatMessage = { role: "system" | "user" | "assistant"; content: stri
 
 /** Eine Runde im Nachschaerf-Verlauf. */
 export type Round = { instruction: string; draft: RuleDraft | null };
+
+/**
+ * Ein Stand im Verlauf: was eingegeben wurde und was dabei herauskam.
+ *
+ * Datenmodell uebernommen aus image-to-markdown (`refine: { base, rounds, selected }`,
+ * `src/img_to_md_state.ts`). Dort haelt eine Runde den Ergebnistext, hier die Regel samt
+ * ihrer Treffer — die Auswahl-Haekchen gehoeren zum Stand, nicht zur Sitzung, sonst
+ * verliert ein Rueckwechsel sie.
+ */
+export type Version = {
+  instruction: string;
+  rule: RuleDraft;
+  hits: Hit[];
+  selected: boolean[];
+  timedOutAtLine: number | null;
+};
