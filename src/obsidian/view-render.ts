@@ -2,6 +2,7 @@ import { setIcon } from "obsidian";
 import type { SessionState } from "../core/session";
 import type { ScopeKind } from "../core/settings";
 import { effectiveFlags } from "../core/regex/compile";
+import { modelChoices, thinkToggleView } from "../core/reasoning-toggle";
 import { clipContext } from "../core/snippet";
 import type { Hit } from "../core/types";
 import { t } from "../vendor/kit/i18n";
@@ -16,6 +17,10 @@ export type PanelModel = {
   target: string;
   /** Name der Notiz, an der die Runde haengt — null, solange keine gemerkt ist. */
   pinnedName: string | null;
+  /** Zuletzt vom Endpunkt geladene Modelle; leer, solange nichts geladen wurde. */
+  models: string[];
+  model: string;
+  suppressReasoning: boolean;
 };
 
 export type PanelHandlers = {
@@ -28,11 +33,52 @@ export type PanelHandlers = {
   onApply(): void;
   onDiscard(): void;
   onSelectVersion(index: number): void;
+  onModel(model: string): void;
+  onRefreshModels(): void;
+  onToggleThinking(): void;
   onToggle(index: number): void;
   onSetAll(value: boolean): void;
 };
 
 type El = HTMLElement;
+
+/**
+ * Modellwahl und Thinking-Schalter direkt im Panel.
+ *
+ * Beides steht auch in den Einstellungen — aber wer beim Ausprobieren merkt, dass ein
+ * anderes Modell besser passt, will nicht durch zwei Dialoge. (Muster aus
+ * image-to-markdown, `refreshModels` / `renderThinkToggle`.)
+ */
+function modelRow(parent: El, model: PanelModel, handlers: PanelHandlers): void {
+  const row = parent.createDiv({ cls: "transmute-model-row" });
+
+  const select = row.createEl("select", { cls: "transmute-model dropdown" });
+  select.setAttribute("aria-label", t("set.model"));
+  select.createEl("option", { text: t("set.modelAuto"), value: "" });
+  for (const id of modelChoices(model.models, model.model)) {
+    select.createEl("option", { text: id, value: id });
+  }
+  select.value = model.model;
+  select.addEventListener("change", () => handlers.onModel(select.value));
+
+  const refresh = row.createEl("button", { cls: "transmute-model-refresh clickable-icon" });
+  refresh.setAttribute("aria-label", t("set.modelReload"));
+  setIcon(refresh, "refresh-cw");
+  refresh.addEventListener("click", () => handlers.onRefreshModels());
+
+  // Zustand traegt Text UND Klasse, nicht nur Farbe (WCAG 1.4.1).
+  const think = thinkToggleView(model.model, model.suppressReasoning);
+  const toggle = row.createEl("button", { cls: "transmute-think" });
+  toggle.addClass(...(think.cls === "" ? [] : [think.cls]));
+  setIcon(toggle.createSpan(), "brain");
+  toggle.createSpan({ text: t(think.labelKey) });
+  if (think.disabled) {
+    // aria-disabled statt disabled: der Grund bleibt so vorlesbar.
+    toggle.setAttribute("aria-disabled", "true");
+  } else {
+    toggle.addEventListener("click", () => handlers.onToggleThinking());
+  }
+}
 
 function scopeSwitch(parent: El, model: PanelModel, handlers: PanelHandlers): void {
   const row = parent.createDiv({ cls: "transmute-scope" });
@@ -174,6 +220,7 @@ export function renderPanel(root: El, model: PanelModel, handlers: PanelHandlers
   root.addClass("transmute-panel");
 
   // Kein eigener Titel: der Reiter traegt ihn bereits (Obsidian-Konvention fuer Panels).
+  modelRow(root, model, handlers);
   scopeSwitch(root, model, handlers);
 
   const input = root.createEl("textarea", {

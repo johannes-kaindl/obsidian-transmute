@@ -15,6 +15,9 @@ const handlers: PanelHandlers = {
   onToggle: vi.fn(),
   onDiscard: vi.fn(),
   onSelectVersion: vi.fn(),
+  onModel: vi.fn(),
+  onRefreshModels: vi.fn(),
+  onToggleThinking: vi.fn(),
   onSetAll: vi.fn(),
 };
 
@@ -25,6 +28,9 @@ const base: Omit<PanelModel, "state"> = {
   showTarget: false,
   target: "",
   pinnedName: null,
+  models: [],
+  model: "",
+  suppressReasoning: true,
 };
 
 const hit = (over: Partial<Hit> = {}): Hit => ({
@@ -257,5 +263,37 @@ describe("renderPanel — Verlauf", () => {
     renderPanel(root, { ...base, state: { phase: "preview", versions, active: 0 } }, handlers);
     expect(root.textContent).toContain("/ALT/g");
     expect(root.textContent).not.toContain("/NEU/g");
+  });
+});
+
+describe("renderPanel — Modellzeile", () => {
+  it("bietet die geladenen Modelle zur Auswahl", () => {
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, models: ["qwen", "gemma"], state: { phase: "idle" } }, handlers);
+    expect(root.textContent).toContain("qwen");
+    expect(root.textContent).toContain("gemma");
+  });
+
+  // Sonst waehlt die Anzeige stillschweigend ein anderes Modell aus.
+  it("behaelt ein eingestelltes, aber nicht geladenes Modell in der Liste", () => {
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, models: ["qwen"], model: "weg", state: { phase: "idle" } }, handlers);
+    expect(root.textContent).toContain("weg");
+  });
+
+  it("zeigt den Thinking-Zustand als Text, nicht nur als Farbe", () => {
+    const off = makeFakeEl();
+    renderPanel(off, { ...base, model: "qwen", state: { phase: "idle" } }, handlers);
+    expect(off.textContent).toContain("Thinking off");
+
+    const on = makeFakeEl();
+    renderPanel(on, { ...base, model: "qwen", suppressReasoning: false, state: { phase: "idle" } }, handlers);
+    expect(on.textContent).toContain("Thinking on");
+  });
+
+  it("sperrt den Schalter bei Modellen, die immer denken", () => {
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, model: "gpt-oss-20b", state: { phase: "idle" } }, handlers);
+    expect(root.textContent).toContain("Always thinks");
   });
 });

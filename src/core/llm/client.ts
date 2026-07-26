@@ -1,5 +1,6 @@
 import { normalizeEndpoint } from "../../vendor/kit/endpoint";
 import { suppressParams } from "../../vendor/kit/reasoning";
+import { effectiveSuppress } from "../reasoning-toggle";
 import type { ChatMessage } from "../types";
 import { extractChatContent } from "./response";
 
@@ -64,7 +65,9 @@ export class RuleClient {
       messages,
       temperature: 0,
       stream: false,
-      ...suppressParams(cfg.suppressReasoning),
+      // effectiveSuppress: ein Modell, das immer denkt, laesst sich nicht bitten — die
+      // Parameter zu schicken erzeugt dort nur Rauschen im Request.
+      ...suppressParams(effectiveSuppress(cfg.model, cfg.suppressReasoning)),
     };
 
     const res = await this.transport.postJson(`${base}/v1/chat/completions`, body, cfg.timeoutMs);

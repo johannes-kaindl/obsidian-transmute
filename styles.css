@@ -273,3 +273,31 @@
   color: var(--text-faint);
   flex-shrink: 0;
 }
+
+.transmute-model-row {
+  display: flex;
+  gap: var(--size-2-2);
+  align-items: center;
+}
+
+.transmute-model {
+  flex: 1;
+  min-width: 0;
+}
+
+.transmute-think {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-2-2);
+  font-size: var(--font-smaller);
+  flex-shrink: 0;
+}
+
+.transmute-think.is-off {
+  color: var(--text-muted);
+}
+
+.transmute-think.is-disabled {
+  color: var(--text-faint);
+  cursor: default;
+}

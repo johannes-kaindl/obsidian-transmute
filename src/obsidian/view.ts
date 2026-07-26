@@ -15,6 +15,11 @@ export type TransmuteViewDeps = {
   session(): TransmuteSession;
   defaultScope(): ScopeKind;
   showTargetField(): boolean;
+  listModels(): Promise<string[]>;
+  getModel(): string;
+  setModel(model: string): void;
+  getSuppressReasoning(): boolean;
+  setSuppressReasoning(value: boolean): void;
 };
 
 export class TransmuteView extends ItemView {
@@ -23,6 +28,7 @@ export class TransmuteView extends ItemView {
   private refinement = "";
   private target = "";
   private pinned: Pinned | null = null;
+  private models: string[] = [];
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -56,6 +62,7 @@ export class TransmuteView extends ItemView {
       this.draw();
     });
     this.draw();
+    void this.refreshModels();
     return Promise.resolve();
   }
 
@@ -88,6 +95,17 @@ export class TransmuteView extends ItemView {
       onApply: () => {
         this.apply();
       },
+      onModel: (model) => {
+        this.deps.setModel(model);
+        this.draw();
+      },
+      onRefreshModels: () => {
+        void this.refreshModels(true);
+      },
+      onToggleThinking: () => {
+        this.deps.setSuppressReasoning(!this.deps.getSuppressReasoning());
+        this.draw();
+      },
       onSelectVersion: (index) => {
         this.deps.session().selectVersion(index);
       },
@@ -104,6 +122,24 @@ export class TransmuteView extends ItemView {
         this.deps.session().setAll(value);
       },
     };
+  }
+
+  /**
+   * Modell-Liste vom Endpunkt holen.
+   *
+   * Ein eingestelltes Modell, das der Endpunkt nicht mehr kennt, wird gemeldet statt
+   * stillschweigend ersetzt — sonst laeuft die naechste Anfrage gegen ein anderes Modell,
+   * als im Panel steht. (Muster aus image-to-markdown, `refreshModels`.)
+   */
+  private async refreshModels(userTriggered = false): Promise<void> {
+    this.models = await this.deps.listModels();
+    const current = this.deps.getModel();
+    if (current.length > 0 && !this.models.includes(current)) {
+      new Notice(t("view.modelGone", current));
+    } else if (userTriggered) {
+      new Notice(t("view.modelsLoaded", String(this.models.length)));
+    }
+    this.draw();
   }
 
   /**
@@ -223,6 +259,9 @@ export class TransmuteView extends ItemView {
         showTarget: this.deps.showTargetField(),
         target: this.target,
         pinnedName: this.pinned?.name ?? null,
+        models: this.models,
+        model: this.deps.getModel(),
+        suppressReasoning: this.deps.getSuppressReasoning(),
       },
       this.handlers(),
     );

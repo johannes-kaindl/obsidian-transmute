@@ -62,6 +62,20 @@ export default class TransmutePlugin extends Plugin {
           session: () => this.sessionInstance,
           defaultScope: () => this.settings.defaultScope,
           showTargetField: () => this.settings.showTargetField,
+          listModels: async () => {
+            await this.reloadModels();
+            return this.knownModels;
+          },
+          getModel: () => this.settings.model,
+          setModel: (model: string) => {
+            this.settings.model = model;
+            void this.saveSettings();
+          },
+          getSuppressReasoning: () => this.settings.suppressReasoning,
+          setSuppressReasoning: (value: boolean) => {
+            this.settings.suppressReasoning = value;
+            void this.saveSettings();
+          },
         }),
     );
 
