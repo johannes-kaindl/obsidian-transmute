@@ -129,6 +129,10 @@ function versionList(
 ): void {
   if (state.versions.length < 2) return;
 
+  // Ohne Ueberschrift liest sich die Liste wie Teil des Ergebnisses statt wie ein Verlauf,
+  // durch den man zurueckgehen kann.
+  parent.createDiv({ text: t("view.history"), cls: "transmute-history-label" });
+
   const list = parent.createDiv({ cls: "transmute-versions" });
   state.versions.forEach((version, index) => {
     const row = list.createEl("button", { cls: "transmute-version" });

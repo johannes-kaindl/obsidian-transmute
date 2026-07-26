@@ -301,3 +301,11 @@
   color: var(--text-faint);
   cursor: default;
 }
+
+.transmute-history-label {
+  color: var(--text-faint);
+  font-size: var(--font-smallest);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--size-2-2);
+}

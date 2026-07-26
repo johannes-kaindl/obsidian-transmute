@@ -297,3 +297,31 @@ describe("renderPanel — Modellzeile", () => {
     expect(root.textContent).toContain("Always thinks");
   });
 });
+
+describe("renderPanel — Verlauf ist als Verlauf erkennbar", () => {
+  const version = (instruction: string) => ({
+    instruction,
+    rule: { regex: "a", flags: "g", replacement: "b", explanation: "" },
+    hits: [hit()],
+    selected: [true],
+    timedOutAtLine: null,
+  });
+
+  // Ohne Ueberschrift liest sich die Liste wie Teil des Ergebnisses statt wie ein Verlauf.
+  it("beschriftet die Liste und sagt, was ein Klick tut", () => {
+    const root = makeFakeEl();
+    renderPanel(
+      root,
+      { ...base, state: { phase: "preview", versions: [version("a"), version("b")], active: 1 } },
+      handlers,
+    );
+    expect(root.textContent).toContain("History");
+    expect(root.textContent).toContain("click a step to go back");
+  });
+
+  it("beschriftet nichts, solange es keinen Verlauf gibt", () => {
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, state: { phase: "preview", versions: [version("a")], active: 0 } }, handlers);
+    expect(root.textContent).not.toContain("History");
+  });
+});

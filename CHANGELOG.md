@@ -11,7 +11,7 @@ All notable changes to this project are documented here. The format follows
 - **A history of refinements, with a way back.** Refining is trial and error, and the
   third attempt can be worse than the first — until now the first was gone. Every round
   is kept; from the second one on the panel lists them with their instruction and match
-  count, and one click goes back to any of them. Refining from an earlier version builds
+  count under a "History" label, and one click goes back to any of them. Refining from an earlier version builds
   on *that* version, and the later ones stay. Data model adopted from `image-to-markdown`.
 - **Model picker and thinking toggle in the panel.** Both also live in the settings, but
   noticing mid-try that another model fits better should not cost two dialogs. A model
