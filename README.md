@@ -16,6 +16,10 @@
 - **No separate undo system needed.** Applying writes through the editor, so the change lands in Obsidian's own undo stack — **Cmd+Z reverts it in one step**, exactly like any other edit.
 - **Iterative refinement.** Not quite right? Type a follow-up such as "but not inside code blocks" and click **"Refine"** — the plugin sends the conversation history *and* the actual matches found so far back to the model, so it can see what it got wrong.
 - **Scope control.** Run on the whole note or on your current selection; the default is configurable in settings.
+- **A history you can go back through.** Refining is trial and error, and the third attempt can be worse than the first. Every round is kept: from the second one on, the panel lists them with their instruction and match count, and one click returns to any earlier version — the later ones stay. Refining from an earlier version continues *that* one.
+- **The rule sticks to its note.** The note is pinned when the preview is generated, and the panel names it. Refining and applying go to that note no matter which tab has focus — and applying re-runs the rule first, so an edit elsewhere in the note (or a linter plugin rewriting your frontmatter on save) doesn't matter, while an edit to a matched span stops the write instead of silently replacing the wrong text.
+- **Model and thinking switchable from the panel.** Both also live in settings, but noticing mid-try that another model fits better shouldn't cost two dialogs. A model the endpoint no longer offers is reported rather than silently swapped, and a model that always thinks (gpt-oss, harmony) shows a locked toggle instead of pretending it can be turned off.
+- **An optional "replace with" field.** Off by default — many instructions have no target pattern at all — but switchable on in settings if you think in classic find/replace terms.
 - **Model-agnostic by design.** No model name is ever hard-coded. The model list is read live from the endpoint's `GET /v1/models`; leaving the setting empty lets the server pick whichever model is loaded.
 - **Ordered endpoint fallback list.** Configure several OpenAI-compatible servers; the plugin tries them in order and uses the first one that answers, with one-click presets for LM Studio and Ollama and a per-row reachability status.
 - **Reasoning models handled correctly.** `<think>` blocks are stripped before the JSON answer is parsed, and — where the server supports it — reasoning is actively suppressed so thinking models answer faster and don't leak their chain of thought into the note.
@@ -25,7 +29,7 @@
 
 ### In detail
 
-Transmute solves a gap Obsidian leaves open: the built-in search is read-only, and the existing regex plugins (Regex Find/Replace, Search and Replace Regex, Apply Patterns) all assume you already know how to write a regular expression. Transmute lets you describe the edit in your own words instead. A ribbon icon (`replace`, label "Transmute") and the command **"Open panel"** open a sidebar panel: pick a scope, describe the change, click **"Generate"**, and the model's pattern is compiled, screened for catastrophic-backtracking risk, and run against your text — never blindly. The resulting hits are shown with highlighting; select or deselect individual matches (or use **"Select all"** / **"Select none"**), refine the instruction as many times as you like, and only write the note once you are satisfied.
+Transmute solves a gap Obsidian leaves open: the built-in search is read-only, and the existing regex plugins (Regex Find/Replace, Search and Replace Regex, Apply Patterns) all assume you already know how to write a regular expression. Transmute lets you describe the edit in your own words instead. A ribbon icon (`replace`, label "Transmute") and the command **"Open panel"** open a sidebar panel: pick a scope, describe the change, click **"Preview"**, and the model's pattern is compiled, screened for catastrophic-backtracking risk, and run against your text — never blindly. The resulting hits are shown with highlighting; select or deselect individual matches (or use **"Select all"** / **"Select none"**), refine the instruction as many times as you like, and only write the note once you are satisfied.
 
 ## Requirements
 
@@ -58,10 +62,11 @@ Then copy `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/p
 1. Point the plugin at your local server (see [Configuration](#configuration) below) and make sure a model is loaded.
 2. Click the ribbon icon **"Transmute"** (or run the command **"Open panel"**) to open the panel in the sidebar.
 3. Pick a scope: **"Whole note"** or **"Selection"**.
-4. Describe the change in the instruction box, e.g. *"turn dates from DD.MM.YYYY into YYYY-MM-DD"*, and click **"Generate"**.
+4. Describe the change in the instruction box, e.g. *"turn dates from DD.MM.YYYY into YYYY-MM-DD"*, and click **"Preview"**.
 5. Review the preview: the generated pattern, its plain-language explanation, and every match with a before/after line and a checkbox. Deselect anything you don't want, or use **"Select all"** / **"Select none"**.
 6. Not quite right? Type a follow-up in the refine box (e.g. *"but not inside code blocks"*) and click **"Refine"** — the model sees the previous rounds and the actual matches it produced.
-7. Click **"Apply"**. Only the checked matches are written, and the change lands in Obsidian's normal undo stack — **Cmd+Z** reverts it in one step.
+7. Refined more than once? The panel now shows a **history** above the pattern — click any earlier step to go back to it. Refining from there continues that version; the later ones stay in the list.
+8. Click **"Apply"**. Only the checked matches are written, in a single editor transaction — so **Cmd+Z** reverts the whole thing in one step, and your cursor and scroll position survive. **"Discard"** throws the result away and leaves your instruction standing.
 
 ### Configuration
 
@@ -75,7 +80,8 @@ Open **Settings → Community plugins → Transmute**. Settings are grouped unde
 | **Default scope** | `file` (Whole note) | Which scope a new rule starts with — "Whole note" or "Selection". Switchable per run in the panel. |
 | **Text sample sent to the model** | `2000` (characters) | How much of the scope text is sent along with the instruction, so the model can see what it is matching against. |
 | **Time budget for running the pattern (ms)** | `2000` | A pattern that runs longer than this on a line-by-line scan is stopped, and the matches found so far are shown with a notice. |
-| **Ask reasoning models to skip thinking** | `true` | Sends reasoning-suppression parameters to the endpoint (and strips `<think>` blocks from the answer either way) so reasoning-capable local models answer faster and more reliably. |
+| **Show a separate "replace with" field** | `false` | Adds a second, optional input for the target pattern. Off by default — many instructions ("strip trailing whitespace", "make headings one level deeper") have no target pattern at all. |
+| **Ask reasoning models to skip thinking** | `true` | Sends reasoning-suppression parameters to the endpoint (and strips `<think>` blocks from the answer either way) so reasoning-capable local models answer faster and more reliably. Measured on this task: ~1.7 s and 5/5 correct with suppression, 26–56 s and 4/5 without. Also switchable from the panel. |
 
 **Endpoint tip:** enter the base URL **without** a trailing `/v1` — the client appends `/v1` itself (a trailing `/v1` is stripped automatically either way, so both forms work).
 
