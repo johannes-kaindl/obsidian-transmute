@@ -147,3 +147,31 @@ describe("Risiko-Quittung", () => {
     expect(s.revalidate("aaab").kind).toBe("ok");
   });
 });
+
+describe("Regression: die Erklaerung gehoert zum Muster, das sie erklaert", () => {
+  // GUI-Befund 2026-07-27: nach einer Handbearbeitung stand weiter der Satz des Modells
+  // da ("replaces every occurrence of 'foo'") — er beschrieb aber ein Muster, das laengst
+  // nicht mehr lief.
+  it("verwirft die Modell-Erklaerung, sobald von Hand editiert wird", async () => {
+    const s = await modelSession();
+    expect(s.activeVersion?.rule.explanation).toBe("e");
+
+    s.editRule({ regex: "voellig anders" }, "foo");
+    expect(s.activeVersion?.rule.explanation).toBe("");
+  });
+
+  it("laesst die Erklaerung des Modellstandes im Verlauf stehen", async () => {
+    const s = await modelSession();
+    s.editRule({ regex: "anders" }, "foo");
+    if (s.state.phase === "preview") {
+      expect(s.state.versions[0].rule.explanation).toBe("e");
+    }
+  });
+
+  it("verwirft sie auch, wenn nur die Ersetzung geaendert wird", async () => {
+    const s = await modelSession();
+    s.editRule({ replacement: "anders" }, "foo");
+    // Die Erklaerung beschreibt in aller Regel auch, WOMIT ersetzt wird.
+    expect(s.activeVersion?.rule.explanation).toBe("");
+  });
+});

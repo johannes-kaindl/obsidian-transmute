@@ -241,14 +241,6 @@ function renderRule(parent: El, version: Version, handlers: PanelHandlers): void
   forced.setAttribute("aria-label", t("view.flagAlways"));
   for (const flag of TOGGLE_FLAGS) flagButton(flagRow, flag, version.rule.flags, handlers);
 
-  // Was WIRKLICH laeuft, in kopierbarer Schreibweise. effectiveFlags, nicht rule.flags:
-  // ein angezeigtes /x/i, das als /x/gi lief, waere fuer jemanden, der daraus lernen
-  // will, schlicht falsch.
-  parent.createEl("code", {
-    text: `/${version.rule.regex}/${effectiveFlags(version.rule.flags)}`,
-    cls: "transmute-effective",
-  });
-
   renderCheatsheet(parent);
 }
 
@@ -290,6 +282,25 @@ function renderReasoning(parent: El, version: Version, model: PanelModel, handle
   details.createEl("summary", { text: t("view.reasoning") });
   details.createEl("pre", { text: version.reasoning });
   details.addEventListener("toggle", () => handlers.onToggleReasoning());
+}
+
+/**
+ * Was WIRKLICH laeuft, in kopierbarer Schreibweise.
+ *
+ * Gehoert in den Ergebnis-Container, nicht zu den Feldern: sie muss sich bei jedem
+ * Tastendruck mitbewegen. Lag sie beim Formular, zeigte sie das Muster der vorigen Runde,
+ * waehrend laengst ein anderes lief (GUI-Befund 2026-07-27) — genau die Fehlerklasse,
+ * gegen die dieses Plugin gebaut ist.
+ *
+ * effectiveFlags, nicht rule.flags: ein angezeigtes /x/i, das als /x/gi lief, waere fuer
+ * jemanden, der daraus lernen will, schlicht falsch.
+ */
+function renderEffective(parent: El, version: Version): void {
+  if (version.rule.regex.length === 0) return;
+  parent.createEl("code", {
+    text: `/${version.rule.regex}/${effectiveFlags(version.rule.flags)}`,
+    cls: "transmute-effective",
+  });
 }
 
 function renderExplanation(parent: El, version: Version): void {
@@ -377,6 +388,7 @@ export function renderOutcome(parts: PanelParts, model: PanelModel, handlers: Pa
   versionList(parts.history, state, handlers);
 
   parts.outcome.empty();
+  renderEffective(parts.outcome, version);
   renderProblem(parts.outcome, version, handlers);
   renderExplanation(parts.outcome, version);
   renderReasoning(parts.outcome, version, model, handlers);

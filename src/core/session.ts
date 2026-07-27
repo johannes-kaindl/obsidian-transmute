@@ -128,7 +128,11 @@ export class TransmuteSession {
     if (state.phase !== "preview") return;
 
     const active = state.versions[state.active];
-    const next = this.evaluateInto({ ...active, rule: { ...active.rule, ...patch } }, text);
+    // Die Erklaerung stammt vom Modell und beschreibt DESSEN Regel. Nach einem Eingriff
+    // von Hand beschreibt sie etwas anderes als das, was laeuft — also faellt sie weg.
+    // Der Modellstand im Verlauf behaelt seine.
+    const rule = { ...active.rule, ...patch, explanation: "" };
+    const next = this.evaluateInto({ ...active, rule }, text);
 
     if (active.source === "manual") {
       this.versions = state.versions.map((version, i) => (i === state.active ? next : version));

@@ -134,3 +134,30 @@ describe("Anwenden-Knopf", () => {
     expect(apply?.getAttribute("disabled")).toBe("true");
   });
 });
+
+describe("Regression: was angezeigt wird, ist was laeuft", () => {
+  // Gefunden im GUI-Durchlauf 2026-07-27: die /muster/flags-Zeile lag im Regel-Container
+  // und wurde beim Tippen nie aktualisiert — sie zeigte das Muster der vorigen Runde,
+  // waehrend laengst ein anderes lief.
+  it("aktualisiert die Muster-Anzeige beim Teil-Draw", () => {
+    const root = makeFakeEl();
+    const parts = renderPanel(root, model(version()), handlers);
+    expect(parts?.outcome.textContent).toContain("/foo/gi");
+
+    renderOutcome(
+      parts,
+      model(version({ rule: { regex: "bar", flags: "", replacement: "x", explanation: "" } })),
+      handlers,
+    );
+
+    expect(parts?.outcome.textContent).toContain("/bar/g");
+    expect(parts?.outcome.textContent).not.toContain("/foo/gi");
+  });
+
+  it("zeigt die Anzeige mit den Flags, die wirklich laufen", () => {
+    const root = makeFakeEl();
+    const parts = renderPanel(root, model(version({ rule: { regex: "x", flags: "i", replacement: "y", explanation: "" } })), handlers);
+    // compileRule erzwingt g — die Anzeige muss dasselbe tun.
+    expect(parts?.outcome.textContent).toContain("/x/gi");
+  });
+});
