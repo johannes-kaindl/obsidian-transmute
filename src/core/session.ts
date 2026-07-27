@@ -14,6 +14,15 @@ export type SessionState =
 
 export type Revalidation = { kind: "ok"; hits: Hit[] } | { kind: "changed" };
 
+/**
+ * Warum sich der Zustand geaendert hat.
+ *
+ * Die View waehlt danach zwischen Voll- und Teil-Draw: ein Voll-Draw leert den Container
+ * und zieht damit das Eingabefeld unter dem Cursor weg — samt Fokus, Cursorposition und
+ * dem Undo-Stack des Feldes.
+ */
+export type ChangeReason = "edit" | "full";
+
 /** Ein Problem in die Meldung uebersetzen, die der Fehlerzustand anzeigt. */
 function problemToError(problem: RuleProblem): { messageKey: string; args: string[] } {
   switch (problem.kind) {
@@ -45,7 +54,7 @@ type Attempt =
  */
 export class TransmuteSession {
   private current: SessionState = { phase: "idle" };
-  private readonly listeners: ((state: SessionState) => void)[] = [];
+  private readonly listeners: ((state: SessionState, reason: ChangeReason) => void)[] = [];
   private versions: Version[] = [];
 
   constructor(
@@ -57,7 +66,7 @@ export class TransmuteSession {
     return this.current;
   }
 
-  onChange(cb: (state: SessionState) => void): void {
+  onChange(cb: (state: SessionState, reason: ChangeReason) => void): void {
     this.listeners.push(cb);
   }
 
@@ -238,8 +247,8 @@ export class TransmuteSession {
     return { ok: true, draft: parsed.draft };
   }
 
-  private set(state: SessionState): void {
+  private set(state: SessionState, reason: ChangeReason = "full"): void {
     this.current = state;
-    for (const cb of this.listeners) cb(state);
+    for (const cb of this.listeners) cb(state, reason);
   }
 }

@@ -238,3 +238,14 @@ describe("Staende tragen ihre Herkunft", () => {
     }
   });
 });
+
+describe("Aenderungsgrund", () => {
+  it("meldet Zustandswechsel als full", async () => {
+    const complete = vi.fn().mockResolvedValue({ ok: true, content: answer("foo") });
+    const session = new TransmuteSession({ complete, now: () => 0 }, options);
+    const reasons: string[] = [];
+    session.onChange((_state, reason) => reasons.push(reason));
+    await session.generate("alle foo", "foo");
+    expect(reasons).toEqual(["full", "full"]);
+  });
+});
