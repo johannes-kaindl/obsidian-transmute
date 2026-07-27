@@ -4,9 +4,19 @@ import type { ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
 import { locateRegion } from "../core/anchor";
 import { activeMarkdownView, applyHitsToEditor, readScope, viewForPath } from "./editor-io";
-import { renderPanel, type PanelHandlers } from "./view-render";
+import { renderOutcome, renderPanel, type PanelHandlers, type PanelModel, type PanelParts } from "./view-render";
+import { effectiveFlags } from "../core/regex/compile";
+import type { RuleDraft } from "../core/types";
 
 export const VIEW_TYPE_TRANSMUTE = "transmute-panel";
+
+/**
+ * Tippause, nach der die Regel neu gerechnet wird.
+ *
+ * Ohne die Pause liefe die Regel bei jedem Tastendruck — auch ueber jeden halbfertigen
+ * Zwischenstand, von denen manche teuer sind.
+ */
+const EDIT_DELAY_MS = 300;
 
 /** Die Notiz, an der die laufende Runde haengt — samt des Textstands von der Vorschau. */
 type Pinned = { path: string; name: string; scope: ScopeKind; text: string; baseOffset: number };
@@ -29,6 +39,10 @@ export class TransmuteView extends ItemView {
   private target = "";
   private pinned: Pinned | null = null;
   private models: string[] = [];
+  /** Container fuer den Teil-Draw, aus dem letzten Voll-Draw. */
+  private parts: PanelParts = null;
+  private editTimer: number | null = null;
+  private reasoningOpen = false;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -58,16 +72,21 @@ export class TransmuteView extends ItemView {
     this.scope.register(["Mod"], "z", () => false);
     this.scope.register(["Mod", "Shift"], "z", () => false);
 
-    this.deps.session().onChange(() => {
-      this.draw();
+    this.deps.session().onChange((_state, reason) => {
+      // Ein Voll-Draw leert den Container und zoege damit das Eingabefeld unter dem
+      // Cursor weg — samt Fokus, Cursorposition und Undo-Stack des Feldes.
+      if (reason === "edit") this.drawOutcome();
+      else this.draw();
     });
     this.draw();
     void this.refreshModels();
     return Promise.resolve();
   }
 
-  /** Kein Leaf-Detach hier (PROF-OBS-13) — Obsidian raeumt die View selbst ab. */
+  /** Kein Leaf-Detach hier (PROF-OBS-13) — Obsidian raeumt die View selbst ab.
+   *  Der Timer dagegen muss weg, sonst feuert er in ein geleertes Panel. */
   protected onClose(): Promise<void> {
+    this.clearEditTimer();
     return Promise.resolve();
   }
 
@@ -111,9 +130,32 @@ export class TransmuteView extends ItemView {
       },
       onDiscard: () => {
         // Die Anweisung bleibt stehen: verworfen wird das Ergebnis, nicht der Gedanke.
+        this.clearEditTimer();
         this.refinement = "";
         this.pinned = null;
         this.deps.session().reset();
+      },
+      onStartManual: () => {
+        // Derselbe Weg wie beim Erzeugen — inklusive der Meldungen fuer Lesemodus,
+        // fehlende Auswahl und fehlende Notiz. Ein zweiter Pfad wuerde driften.
+        const pinned = this.pinScope();
+        if (pinned === null) return;
+        this.pinned = pinned;
+        this.deps.session().startManual();
+      },
+      onEditRule: (patch) => {
+        this.scheduleEdit(patch);
+      },
+      onAcceptRisk: () => {
+        if (this.pinned === null) return;
+        this.deps.session().acceptRisk(this.pinned.text);
+      },
+      onCopyRule: () => {
+        void this.copyRule();
+      },
+      onToggleReasoning: () => {
+        // Nur merken, nicht zeichnen: das <details> hat sich selbst schon umgeschaltet.
+        this.reasoningOpen = !this.reasoningOpen;
       },
       onToggle: (index) => {
         this.deps.session().toggle(index);
@@ -248,22 +290,63 @@ export class TransmuteView extends ItemView {
     this.deps.session().reset();
   }
 
+  /**
+   * Die Regel erst nach einer Tippause neu rechnen.
+   *
+   * window, nicht activeWindow: die prefer-window-timers-Regel des Stores zielt auf
+   * DOM-Timer, dieser hat keinen DOM-Bezug.
+   */
+  private scheduleEdit(patch: Partial<RuleDraft>): void {
+    this.clearEditTimer();
+    this.editTimer = window.setTimeout(() => {
+      this.editTimer = null;
+      if (this.pinned === null) return;
+      this.deps.session().editRule(patch, this.pinned.text);
+    }, EDIT_DELAY_MS);
+  }
+
+  private clearEditTimer(): void {
+    if (this.editTimer !== null) {
+      window.clearTimeout(this.editTimer);
+      this.editTimer = null;
+    }
+  }
+
+  private async copyRule(): Promise<void> {
+    const active = this.deps.session().activeVersion;
+    if (active === null) return;
+    // effectiveFlags, nicht rule.flags: kopiert wird, was wirklich laeuft.
+    const text = `/${active.rule.regex}/${effectiveFlags(active.rule.flags)}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      new Notice(t("view.copied"));
+    } catch (err) {
+      new Notice(t("view.copyFailed", err instanceof Error ? err.message : String(err)));
+    }
+  }
+
+  private panelModel(): PanelModel {
+    return {
+      state: this.deps.session().state,
+      scope: this.scopeKind,
+      instruction: this.instruction,
+      refinement: this.refinement,
+      showTarget: this.deps.showTargetField(),
+      target: this.target,
+      pinnedName: this.pinned?.name ?? null,
+      models: this.models,
+      model: this.deps.getModel(),
+      suppressReasoning: this.deps.getSuppressReasoning(),
+      reasoningOpen: this.reasoningOpen,
+    };
+  }
+
   private draw(): void {
-    renderPanel(
-      this.contentEl,
-      {
-        state: this.deps.session().state,
-        scope: this.scopeKind,
-        instruction: this.instruction,
-        refinement: this.refinement,
-        showTarget: this.deps.showTargetField(),
-        target: this.target,
-        pinnedName: this.pinned?.name ?? null,
-        models: this.models,
-        model: this.deps.getModel(),
-        suppressReasoning: this.deps.getSuppressReasoning(),
-      },
-      this.handlers(),
-    );
+    this.parts = renderPanel(this.contentEl, this.panelModel(), this.handlers());
+  }
+
+  /** Teil-Draw: Verlauf und Ergebnis neu, die Regel-Felder bleiben stehen. */
+  private drawOutcome(): void {
+    renderOutcome(this.parts, this.panelModel(), this.handlers());
   }
 }

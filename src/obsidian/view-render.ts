@@ -2,9 +2,10 @@ import { setIcon } from "obsidian";
 import type { SessionState } from "../core/session";
 import type { ScopeKind } from "../core/settings";
 import { effectiveFlags } from "../core/regex/compile";
+import { CHEATSHEET } from "../core/cheatsheet";
 import { modelChoices, thinkToggleView } from "../core/reasoning-toggle";
 import { clipContext } from "../core/snippet";
-import type { Hit } from "../core/types";
+import type { Hit, RuleDraft, RuleProblem, Version } from "../core/types";
 import { t } from "../vendor/kit/i18n";
 
 export type PanelModel = {
@@ -21,6 +22,9 @@ export type PanelModel = {
   models: string[];
   model: string;
   suppressReasoning: boolean;
+  /** Gehoert ins Modell, nicht ins DOM: der Ergebnis-Container wird bei jedem
+   *  Live-Update neu gezeichnet und wuerde ein offenes <details> sonst zuklappen. */
+  reasoningOpen: boolean;
 };
 
 export type PanelHandlers = {
@@ -38,9 +42,17 @@ export type PanelHandlers = {
   onToggleThinking(): void;
   onToggle(index: number): void;
   onSetAll(value: boolean): void;
+  onStartManual(): void;
+  onEditRule(patch: Partial<RuleDraft>): void;
+  onAcceptRisk(): void;
+  onCopyRule(): void;
+  onToggleReasoning(): void;
 };
 
 type El = HTMLElement;
+
+/** Die Container, die ein Teil-Draw neu zeichnen darf. Null ausserhalb der Vorschau. */
+export type PanelParts = { history: El; outcome: El } | null;
 
 /**
  * Modellwahl und Thinking-Schalter direkt im Panel.
@@ -138,70 +150,200 @@ function versionList(
     const row = list.createEl("button", { cls: "transmute-version" });
     row.toggleClass("is-active", index === state.active);
     row.createSpan({ text: `${index + 1}.`, cls: "transmute-version-no" });
-    row.createSpan({ text: version.instruction, cls: "transmute-version-label" });
+    // Ein Handstand hat keine Anweisung — seine Beschriftung kommt aus der Herkunft.
+    row.createSpan({
+      text: version.source === "manual" ? t("view.edited") : version.instruction,
+      cls: "transmute-version-label",
+    });
     row.createSpan({ text: t("view.matches", version.hits.length), cls: "transmute-version-count" });
     row.addEventListener("click", () => handlers.onSelectVersion(index));
   });
 }
 
-function renderPreview(
-  parent: El,
-  state: Extract<SessionState, { phase: "preview" }>,
-  model: PanelModel,
-  handlers: PanelHandlers,
-): void {
-  // Sichtbar machen, woran die Runde haengt: gemerkt ohne Anzeige waere nur eine andere
-  // Art von Ueberraschung.
-  if (model.pinnedName !== null) {
-    parent.createDiv({ text: t("view.pinned", model.pinnedName), cls: "transmute-pinned" });
+/** Das Flag, das compileRule erzwingt — es wird gezeigt, aber nicht angeboten. */
+const FORCED_FLAG = "g";
+
+/** Flags, die als Schalter angeboten werden. `g` fehlt bewusst: ein Schalter, der nichts
+ *  schaltet, waere eine Luege. */
+const TOGGLE_FLAGS = ["i", "m", "s", "u"];
+
+function flagButton(row: El, flag: string, flags: string, handlers: PanelHandlers): void {
+  const active = flags.includes(flag);
+  // Der Buchstabe ist Regex-Syntax, kein UI-Text — deshalb als <code> statt als
+  // Button-Beschriftung (und damit ausserhalb der sentence-case-Regel des Stores).
+  const button = row.createEl("button", { cls: `transmute-flag transmute-flag-${flag}` });
+  button.createEl("code", { text: flag });
+  button.setAttribute("aria-pressed", active ? "true" : "false");
+  button.toggleClass("is-active", active);
+  button.addEventListener("click", () => {
+    handlers.onEditRule({ flags: active ? flags.replace(flag, "") : `${flags}${flag}` });
+  });
+}
+
+function renderCheatsheet(parent: El): void {
+  // Bewusst im Regel-Container: der wird beim Teil-Draw nicht neu gezeichnet, also bleibt
+  // der Spickzettel offen, waehrend man tippt — genau dann braucht man ihn.
+  const sheet = parent.createEl("details", { cls: "transmute-cheatsheet" });
+  sheet.createEl("summary", { text: t("cheat.title") });
+  for (const group of CHEATSHEET) {
+    sheet.createDiv({ text: t(group.titleKey), cls: "transmute-cheat-group" });
+    for (const row of group.rows) {
+      const line = sheet.createDiv({ cls: "transmute-cheat-row" });
+      line.createEl("code", { text: row.syntax });
+      line.createSpan({ text: t(row.descKey) });
+    }
   }
+}
 
-  const version = state.versions[state.active];
-  versionList(parent, state, handlers);
+/**
+ * Muster, Ersetzung und Flags als Formular.
+ *
+ * Wird nur beim Voll-Draw gezeichnet — siehe renderOutcome.
+ */
+function renderRule(parent: El, version: Version, handlers: PanelHandlers): void {
+  const regexRow = parent.createDiv({ cls: "transmute-regex-row" });
+  const regex = regexRow.createEl("input", {
+    attr: {
+      type: "text",
+      spellcheck: "false",
+      placeholder: t("view.regexPlaceholder"),
+      "aria-label": t("view.pattern"),
+    },
+    cls: "transmute-regex",
+  });
+  regex.value = version.rule.regex;
+  regex.addEventListener("input", () => handlers.onEditRule({ regex: regex.value }));
 
-  const pattern = parent.createDiv({ cls: "transmute-pattern" });
-  // effectiveFlags, nicht rule.flags: angezeigt werden muss, was lief.
-  pattern.createEl("code", { text: `/${version.rule.regex}/${effectiveFlags(version.rule.flags)}` });
-  const replacement = pattern.createDiv({ cls: "transmute-replacement" });
-  replacement.createSpan({ text: t("view.replacement"), cls: "transmute-replacement-label" });
-  replacement.createEl("code", { text: version.rule.replacement });
+  const copy = regexRow.createEl("button", { cls: "transmute-copy clickable-icon" });
+  copy.setAttribute("aria-label", t("view.copyRule"));
+  setIcon(copy, "copy");
+  copy.addEventListener("click", () => handlers.onCopyRule());
+
+  const replacement = parent.createEl("input", {
+    attr: {
+      type: "text",
+      spellcheck: "false",
+      placeholder: t("view.replacementPlaceholder"),
+      "aria-label": t("view.replacement"),
+    },
+    cls: "transmute-replacement-input",
+  });
+  replacement.value = version.rule.replacement;
+  replacement.addEventListener("input", () => handlers.onEditRule({ replacement: replacement.value }));
+
+  const flagRow = parent.createDiv({ cls: "transmute-flags" });
+  const forced = flagRow.createEl("button", { cls: "transmute-flag transmute-flag-g is-active" });
+  forced.createEl("code", { text: FORCED_FLAG });
+  // aria-disabled statt disabled: der Grund bleibt so vorlesbar (Muster aus dem
+  // Thinking-Schalter).
+  forced.setAttribute("aria-disabled", "true");
+  forced.setAttribute("aria-pressed", "true");
+  forced.setAttribute("aria-label", t("view.flagAlways"));
+  for (const flag of TOGGLE_FLAGS) flagButton(flagRow, flag, version.rule.flags, handlers);
+
+  // Was WIRKLICH laeuft, in kopierbarer Schreibweise. effectiveFlags, nicht rule.flags:
+  // ein angezeigtes /x/i, das als /x/gi lief, waere fuer jemanden, der daraus lernen
+  // will, schlicht falsch.
+  parent.createEl("code", {
+    text: `/${version.rule.regex}/${effectiveFlags(version.rule.flags)}`,
+    cls: "transmute-effective",
+  });
+
+  renderCheatsheet(parent);
+}
+
+/** Die Meldung zu einem Problem — dieselbe Zuordnung wie im Fehlerzustand der Session. */
+function problemText(problem: RuleProblem): string {
+  switch (problem.kind) {
+    case "syntax":
+      return t("error.syntax", problem.message);
+    case "flags":
+      return t("error.flags", problem.message);
+    case "risky":
+      return t(`risk.${problem.rule}`);
+    case "too-many":
+      return t("error.tooMany", String(problem.limit));
+  }
+}
+
+function renderProblem(parent: El, version: Version, handlers: PanelHandlers): void {
+  if (version.problem === null) return;
+
+  const box = parent.createDiv({ cls: "transmute-problem" });
+  box.createDiv({ text: problemText(version.problem) });
+
+  // Nur das Risiko ist ein Abwaegen. Syntax, Flags und zu viele Treffer sind es nicht:
+  // dort gaebe es nichts freizugeben, sondern nur etwas zu reparieren.
+  if (version.problem.kind !== "risky") return;
+
+  const accept = box.createEl("button", { text: t("view.runAnyway"), cls: "transmute-accept-risk" });
+  accept.addEventListener("click", () => handlers.onAcceptRisk());
+}
+
+function renderReasoning(parent: El, version: Version, model: PanelModel, handlers: PanelHandlers): void {
+  if (version.reasoning === null) return;
+
+  const details = parent.createEl("details", { cls: "transmute-reasoning" });
+  // Der offene Zustand kommt aus dem Modell: dieser Container wird bei jedem Tastendruck
+  // neu gezeichnet und wuerde ein offenes <details> sonst zuklappen.
+  details.open = model.reasoningOpen;
+  details.createEl("summary", { text: t("view.reasoning") });
+  details.createEl("pre", { text: version.reasoning });
+  details.addEventListener("toggle", () => handlers.onToggleReasoning());
+}
+
+function renderExplanation(parent: El, version: Version): void {
   if (version.rule.explanation.length > 0) {
-    pattern.createDiv({ text: version.rule.explanation, cls: "transmute-explanation" });
+    parent.createDiv({ text: version.rule.explanation, cls: "transmute-explanation" });
   }
-
   if (version.timedOutAtLine !== null) {
     parent.createDiv({ text: t("view.timedOut", version.timedOutAtLine + 1), cls: "transmute-warning" });
   }
+}
+
+function renderHits(parent: El, version: Version, handlers: PanelHandlers): void {
+  // Bei einem Problem steht der Grund schon oben — eine Trefferliste daneben waere die
+  // zweite, widersprechende Aussage.
+  if (version.problem !== null) return;
 
   if (version.hits.length === 0) {
-    parent.createDiv({ text: t("view.noMatches"), cls: "transmute-empty" });
-  } else {
-    const head = parent.createDiv({ cls: "transmute-hits-head" });
-    head.createSpan({ text: t("view.matches", version.hits.length) });
-    const none = head.createEl("button", { text: t("view.selectNone"), cls: "transmute-link" });
-    none.addEventListener("click", () => handlers.onSetAll(false));
-    const all = head.createEl("button", { text: t("view.selectAll"), cls: "transmute-link" });
-    all.addEventListener("click", () => handlers.onSetAll(true));
-
-    const list = parent.createDiv({ cls: "transmute-hits" });
-    version.hits.forEach((hit, index) => {
-      const row = list.createDiv({ cls: "transmute-hit" });
-      const box = row.createEl("input", { attr: { type: "checkbox" } });
-      if (version.selected[index]) box.setAttribute("checked", "checked");
-      box.addEventListener("change", () => handlers.onToggle(index));
-      const body = row.createDiv({ cls: "transmute-hit-body" });
-      body.createDiv({ text: t("view.line", hit.line + 1), cls: "transmute-lineno" });
-      hitLine(body, hit);
-    });
+    // Ein leeres Muster hat noch nichts gesucht; "findet nichts" waere eine Aussage
+    // ueber eine Suche, die gar nicht stattgefunden hat.
+    if (version.rule.regex.length > 0) {
+      parent.createDiv({ text: t("view.noMatches"), cls: "transmute-empty" });
+    }
+    return;
   }
 
+  const head = parent.createDiv({ cls: "transmute-hits-head" });
+  head.createSpan({ text: t("view.matches", version.hits.length) });
+  const none = head.createEl("button", { text: t("view.selectNone"), cls: "transmute-link" });
+  none.addEventListener("click", () => handlers.onSetAll(false));
+  const all = head.createEl("button", { text: t("view.selectAll"), cls: "transmute-link" });
+  all.addEventListener("click", () => handlers.onSetAll(true));
+
+  const list = parent.createDiv({ cls: "transmute-hits" });
+  version.hits.forEach((hit, index) => {
+    const row = list.createDiv({ cls: "transmute-hit" });
+    const box = row.createEl("input", { attr: { type: "checkbox" } });
+    if (version.selected[index]) box.setAttribute("checked", "checked");
+    box.addEventListener("change", () => handlers.onToggle(index));
+    const body = row.createDiv({ cls: "transmute-hit-body" });
+    body.createDiv({ text: t("view.line", hit.line + 1), cls: "transmute-lineno" });
+    hitLine(body, hit);
+  });
+}
+
+function renderRefineRow(parent: El, model: PanelModel, handlers: PanelHandlers): void {
   const refineRow = parent.createDiv({ cls: "transmute-refine" });
   const refineInput = refineRow.createEl("textarea", {
     attr: { rows: "2", placeholder: t("view.refinePlaceholder") },
   });
   refineInput.value = model.refinement;
   refineInput.addEventListener("input", () => handlers.onRefinement(refineInput.value));
+}
 
+function renderActions(parent: El, version: Version, handlers: PanelHandlers): void {
   const actions = parent.createDiv({ cls: "transmute-actions" });
   const refine = actions.createEl("button", { text: t("view.refine") });
   refine.addEventListener("click", () => handlers.onRefine());
@@ -210,16 +352,66 @@ function renderPreview(
   discard.addEventListener("click", () => handlers.onDiscard());
 
   const apply = actions.createEl("button", { text: t("view.apply"), cls: "mod-cta" });
-  const applicable = version.hits.some((_, i) => version.selected[i]);
+  // Ein Problem sperrt das Anwenden ausdruecklich — auch wenn ohnehin nichts ausgewaehlt
+  // waere. Der Knopf soll den Grund zeigen, nicht ihn verschweigen.
+  const applicable = version.problem === null && version.hits.some((_, i) => version.selected[i]);
   if (!applicable) apply.setAttribute("disabled", "true");
   apply.addEventListener("click", () => {
     if (applicable) handlers.onApply();
   });
 }
 
+/**
+ * Verlauf und Ergebnis neu zeichnen, ohne die Regel-Felder anzufassen.
+ *
+ * Das ist der Weg fuer die Live-Vorschau: alles ueber und unter dem Formular darf sich
+ * bei jedem Tastendruck aendern, das Formular selbst nicht — sonst verliert das Feld
+ * unter dem Cursor Fokus, Cursorposition und seinen Undo-Stack.
+ */
+export function renderOutcome(parts: PanelParts, model: PanelModel, handlers: PanelHandlers): void {
+  if (parts === null || model.state.phase !== "preview") return;
+  const state = model.state;
+  const version = state.versions[state.active];
+
+  parts.history.empty();
+  versionList(parts.history, state, handlers);
+
+  parts.outcome.empty();
+  renderProblem(parts.outcome, version, handlers);
+  renderExplanation(parts.outcome, version);
+  renderReasoning(parts.outcome, version, model, handlers);
+  renderHits(parts.outcome, version, handlers);
+  renderRefineRow(parts.outcome, model, handlers);
+  renderActions(parts.outcome, version, handlers);
+}
+
+function renderPreview(
+  parent: El,
+  state: Extract<SessionState, { phase: "preview" }>,
+  model: PanelModel,
+  handlers: PanelHandlers,
+): PanelParts {
+  // Sichtbar machen, woran die Runde haengt: gemerkt ohne Anzeige waere nur eine andere
+  // Art von Ueberraschung.
+  if (model.pinnedName !== null) {
+    parent.createDiv({ text: t("view.pinned", model.pinnedName), cls: "transmute-pinned" });
+  }
+
+  const history = parent.createDiv({ cls: "transmute-history" });
+  const rule = parent.createDiv({ cls: "transmute-rule" });
+  const outcome = parent.createDiv({ cls: "transmute-outcome" });
+
+  // Die Regel-Felder entstehen genau einmal je Voll-Draw.
+  renderRule(rule, state.versions[state.active], handlers);
+
+  const parts: PanelParts = { history, outcome };
+  renderOutcome(parts, model, handlers);
+  return parts;
+}
+
 /** Zeichnet das gesamte Panel neu. Pure DOM-Funktion, getrennt vom ItemView-Mount
  *  (Muster: epub-exporter) — dadurch headless mit einem Fake-Element testbar. */
-export function renderPanel(root: El, model: PanelModel, handlers: PanelHandlers): void {
+export function renderPanel(root: El, model: PanelModel, handlers: PanelHandlers): PanelParts {
   root.empty();
   root.addClass("transmute-panel");
 
@@ -248,22 +440,25 @@ export function renderPanel(root: El, model: PanelModel, handlers: PanelHandlers
   const generate = root.createEl("button", { text: t("view.generate"), cls: "mod-cta" });
   generate.addEventListener("click", () => handlers.onGenerate());
 
+  // Kein Tab und kein Modus: der Link oeffnet dieselbe Vorschau, nur mit leerem Muster.
+  const manual = root.createEl("button", { text: t("view.startManual"), cls: "transmute-manual-link transmute-link" });
+  manual.addEventListener("click", () => handlers.onStartManual());
+
   const body = root.createDiv({ cls: "transmute-body" });
 
   switch (model.state.phase) {
     case "idle":
-      break;
+      return null;
     case "generating": {
       const busy = body.createDiv({ cls: "transmute-busy" });
       setIcon(busy.createSpan(), "loader");
       // Nur der Satz, der etwas erklaert. Ein zusaetzliches "Frage das Modell…" neben
       // dem Kreisel sagt dasselbe wie der Kreisel und steht dem Satz im Weg.
       busy.createSpan({ text: t("view.working") });
-      break;
+      return null;
     }
     case "preview":
-      renderPreview(body, model.state, model, handlers);
-      break;
+      return renderPreview(body, model.state, model, handlers);
     case "error": {
       const error = body.createDiv({ cls: "transmute-error" });
       error.createDiv({ text: t(model.state.messageKey, ...model.state.args) });
@@ -272,7 +467,7 @@ export function renderPanel(root: El, model: PanelModel, handlers: PanelHandlers
         details.createEl("summary", { text: t("view.rawAnswer") });
         details.createEl("pre", { text: model.state.raw });
       }
-      break;
+      return null;
     }
   }
 }

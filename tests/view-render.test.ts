@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { makeFakeEl } from "./__mocks__/obsidian";
+import { findByClass } from "./helpers/dom";
 import { renderPanel, type PanelHandlers, type PanelModel } from "../src/obsidian/view-render";
 import type { Hit } from "../src/core/types";
 import "../src/core/i18n/strings";
@@ -19,6 +20,11 @@ const handlers: PanelHandlers = {
   onRefreshModels: vi.fn(),
   onToggleThinking: vi.fn(),
   onSetAll: vi.fn(),
+  onStartManual: vi.fn(),
+  onEditRule: vi.fn(),
+  onAcceptRisk: vi.fn(),
+  onCopyRule: vi.fn(),
+  onToggleReasoning: vi.fn(),
 };
 
 const base: Omit<PanelModel, "state"> = {
@@ -31,6 +37,7 @@ const base: Omit<PanelModel, "state"> = {
   models: [],
   model: "",
   suppressReasoning: true,
+  reasoningOpen: false,
 };
 
 const hit = (over: Partial<Hit> = {}): Hit => ({
@@ -129,7 +136,10 @@ describe("renderPanel", () => {
       },
       handlers,
     );
-    expect(root.textContent).toContain("Nr. $1");
+    // Seit 0.3.0 steht das Ersetzungsmuster in einem Eingabefeld, nicht mehr im Text —
+    // die Zusage "es ist sichtbar und veraenderbar" gilt unveraendert.
+    const field = findByClass<{ value: string }>(root, "transmute-replacement-input");
+    expect(field?.value).toBe("Nr. $1");
   });
 
   it("nennt die Notiz, an der die Runde haengt", () => {
