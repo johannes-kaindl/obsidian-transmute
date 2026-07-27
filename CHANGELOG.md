@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-07-27
+
 ### Added
 
 - **The pattern is now a form, not a display.** Regex, replacement and flags are editable
