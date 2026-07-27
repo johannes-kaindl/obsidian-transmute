@@ -38,6 +38,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **A released risky pattern can no longer freeze Obsidian.** "Run it anyway" now first
+  runs the pattern against a 20-character sample and measures it. Backtracking blowup
+  grows exponentially with input length, so a pattern that is already slow on 20
+  characters would effectively never finish on a long line — and Obsidian cannot cancel a
+  running pattern (no web workers). The message names the measurement and the longest line
+  so the reasoning is checkable. This is a brake, not a guarantee.
+- **The `/pattern/flags` line no longer goes stale while you type.** It sat in the rule
+  container, which is deliberately not redrawn during editing, so it kept showing the
+  previous round's pattern — the exact class of bug this plugin exists to prevent.
+- **The model's explanation is dropped once you edit the rule by hand.** It described the
+  model's pattern, not the one that now runs. The model's own version keeps its
+  explanation in the history.
+- The cheat sheet is easier to find: icon and accent colour instead of a bare disclosure
+  triangle.
 - `npm run lint` now fails on warnings (`--max-warnings 0`). ESLint exits 0 on warnings
   while the community store scanner reports them, so a finding could sit in a green gate.
 

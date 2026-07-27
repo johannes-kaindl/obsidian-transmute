@@ -235,6 +235,16 @@ npm run gate                      # alles zusammen
   Position, jeden mit der vollen Zeile in `before`/`after`. `collect()` schiebt `lastIndex`
   korrekt vor, es hängt also nicht — aber ohne `maxHits` (500) wären das Tausende
   DOM-Zeilen bei jedem Tastendruck.
+- **Das Zeitbudget in `runRule` greift nur ZWISCHEN Zeilen.** Ein einzelner entgleister
+  Match auf *einer* Zeile kommt nie zurück, und Obsidian kann ihn nicht abbrechen (keine
+  Web-Worker). Deshalb läuft vor einer Risiko-Freigabe `probeRisky()` — dasselbe Muster auf
+  20 Zeichen, mit Zeitmessung. **Ohne diesen Kanarienvogel ist jede Freigabe ein Knopf, der
+  das Fenster einfriert** (real eingetreten, GUI-Durchlauf 2026-07-27).
+- **Was in den `.transmute-rule`-Container gerendert wird, altert.** Der Container ist vom
+  Teil-Draw ausgenommen — dort gehört nur hinein, was sich beim Tippen *nicht* ändern
+  darf (die Felder selbst, der Spickzettel). Jede abgeleitete Anzeige (`/muster/flags`,
+  Erklärung, Treffer) gehört in `.transmute-outcome`. Beides ist schon einmal
+  falsch herum gewesen.
 - **`makeFakeEl()` aus dem Obsidian-Mock kennt kein `querySelector`.** Der Mock ist ein aus
   fünf Plugins gepflegtes Superset und wird nicht lokal erweitert — die Suche liegt in
   `tests/helpers/dom.ts` (`findByClass`/`findAllByTag`).

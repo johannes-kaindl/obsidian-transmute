@@ -184,7 +184,11 @@ function renderCheatsheet(parent: El): void {
   // Bewusst im Regel-Container: der wird beim Teil-Draw nicht neu gezeichnet, also bleibt
   // der Spickzettel offen, waehrend man tippt — genau dann braucht man ihn.
   const sheet = parent.createEl("details", { cls: "transmute-cheatsheet" });
-  sheet.createEl("summary", { text: t("cheat.title") });
+  // Nur ein Dreieck davor war zu leise, um als Angebot gelesen zu werden
+  // (GUI-Befund 2026-07-27). Icon + Akzentfarbe machen daraus eine sichtbare Tuer.
+  const summary = sheet.createEl("summary");
+  setIcon(summary.createSpan({ cls: "transmute-cheat-icon" }), "book-open");
+  summary.createSpan({ text: t("cheat.title") });
   for (const group of CHEATSHEET) {
     sheet.createDiv({ text: t(group.titleKey), cls: "transmute-cheat-group" });
     for (const row of group.rows) {
@@ -255,6 +259,8 @@ function problemText(problem: RuleProblem): string {
       return t(`risk.${problem.rule}`);
     case "too-many":
       return t("error.tooMany", String(problem.limit));
+    case "too-slow":
+      return t("error.tooSlow", String(problem.sampleChars), String(problem.ms), String(problem.longestLine));
   }
 }
 

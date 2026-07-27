@@ -11,7 +11,8 @@ export type RuleProblem =
   | { kind: "syntax"; message: string }
   | { kind: "flags"; message: string }
   | { kind: "risky"; rule: RiskRule }
-  | { kind: "too-many"; limit: number };
+  | { kind: "too-many"; limit: number }
+  | { kind: "too-slow"; ms: number; sampleChars: number; longestLine: number };
 
 /** Die vom Modell gelieferte Regel, nach dem JSON-Vertrag. */
 export type RuleDraft = {

@@ -52,6 +52,8 @@ export const STRINGS = {
     "error.syntax": "The generated pattern is not valid: {0}",
     "error.flags": "The model used an unknown flag: {0}",
     "error.tooMany": "More than {0} matches. The pattern is too broad — narrow it down.",
+    "error.tooSlow":
+      "Stopped before running. On just {0} characters this pattern already took {1} ms — on the longest line here ({2} characters) it would effectively never finish, and Obsidian cannot cancel a running pattern. Shorten the line or un-nest the quantifiers.",
     "cheat.title": "Regex cheat sheet",
     "cheat.chars": "Characters",
     "cheat.any": "any character except a line break",
@@ -170,6 +172,8 @@ export const STRINGS = {
     "error.syntax": "Das erzeugte Muster ist ungültig: {0}",
     "error.flags": "Das Modell hat ein unbekanntes Flag verwendet: {0}",
     "error.tooMany": "Mehr als {0} Treffer. Das Muster ist zu allgemein — schränke es ein.",
+    "error.tooSlow":
+      "Vor dem Ausführen gestoppt. Schon auf {0} Zeichen brauchte dieses Muster {1} ms — auf der längsten Zeile hier ({2} Zeichen) käme es praktisch nie zurück, und Obsidian kann ein laufendes Muster nicht abbrechen. Kürze die Zeile oder entschachtele die Quantoren.",
     "cheat.title": "Regex-Spickzettel",
     "cheat.chars": "Zeichen",
     "cheat.any": "ein beliebiges Zeichen außer Zeilenumbruch",

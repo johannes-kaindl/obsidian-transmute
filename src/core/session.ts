@@ -4,6 +4,7 @@ import { parseRuleResponse } from "./llm/response";
 import type { CompleteResult } from "./llm/client";
 import { compileRule } from "./regex/compile";
 import { evaluate, type EvalOptions } from "./regex/evaluate";
+import { probeRisky } from "./regex/probe";
 import type { ChatMessage, Hit, Round, RuleDraft, RuleProblem, Version } from "./types";
 
 export type SessionState =
@@ -23,6 +24,10 @@ export type Revalidation = { kind: "ok"; hits: Hit[] } | { kind: "changed" };
  */
 export type ChangeReason = "edit" | "full";
 
+/** Zeit, die der Kanarienvogel auf 20 Zeichen hoechstens brauchen darf. Ein harmloses
+ *  Muster liegt dort weit darunter; ein entgleisendes ueberschreitet es sofort. */
+const PROBE_BUDGET_MS = 4;
+
 /** Ein Problem in die Meldung uebersetzen, die der Fehlerzustand anzeigt. */
 function problemToError(problem: RuleProblem): { messageKey: string; args: string[] } {
   switch (problem.kind) {
@@ -34,6 +39,11 @@ function problemToError(problem: RuleProblem): { messageKey: string; args: strin
       return { messageKey: `risk.${problem.rule}`, args: [] };
     case "too-many":
       return { messageKey: "error.tooMany", args: [String(problem.limit)] };
+    case "too-slow":
+      return {
+        messageKey: "error.tooSlow",
+        args: [String(problem.sampleChars), String(problem.ms), String(problem.longestLine)],
+      };
   }
 }
 
@@ -146,12 +156,38 @@ export class TransmuteSession {
     this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 }, "edit");
   }
 
-  /** Die Risiko-Warnung fuer genau das Muster des aktiven Standes quittieren. */
+  /**
+   * Die Risiko-Warnung fuer genau das Muster des aktiven Standes quittieren.
+   *
+   * Vor der echten Ausfuehrung laeuft ein Kanarienvogel: dasselbe Muster auf einem kurzen
+   * Ausschnitt, mit Zeitmessung. Obsidian erlaubt keine Web-Worker, ein laufender Match
+   * ist also nicht abbrechbar — die Freigabe waere sonst ein Knopf, der das Fenster
+   * einfrieren kann (real eingetreten, GUI-Durchlauf 2026-07-27).
+   */
   acceptRisk(text: string): void {
     const state = this.current;
     if (state.phase !== "preview") return;
 
     const active = state.versions[state.active];
+
+    const probe = probeRisky(active.rule, text, { now: () => this.deps.now(), budgetMs: PROBE_BUDGET_MS });
+    if (!probe.ok) {
+      // Die Quittung wird NICHT gesetzt: sonst liefe das Muster beim naechsten
+      // Tastendruck ungebremst.
+      const problem: RuleProblem = {
+        kind: "too-slow",
+        ms: probe.ms,
+        sampleChars: probe.sampleChars,
+        longestLine: probe.longestLine,
+      };
+      const stopped = state.versions.map((version, i) =>
+        i === state.active ? { ...version, riskAccepted: null, hits: [], selected: [], problem } : version,
+      );
+      this.versions = stopped;
+      this.set({ ...state, versions: stopped }, "edit");
+      return;
+    }
+
     const next = this.evaluateInto({ ...active, riskAccepted: active.rule.regex }, text);
     this.versions = state.versions.map((version, i) => (i === state.active ? next : version));
     this.set({ ...state, versions: this.versions }, "edit");

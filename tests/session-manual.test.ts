@@ -175,3 +175,31 @@ describe("Regression: die Erklaerung gehoert zum Muster, das sie erklaert", () =
     expect(s.activeVersion?.rule.explanation).toBe("");
   });
 });
+
+describe("Kanarienvogel vor der Freigabe", () => {
+  // GUI-Befund 2026-07-27: die Freigabe hat Obsidian eingefroren. Das Zeitbudget greift
+  // nur zwischen Zeilen; ein entgleister Match auf EINER Zeile kommt nie zurueck.
+  it("fuehrt nicht aus, wenn die Probe schon zu lange braucht", () => {
+    let t = 0;
+    const s = new TransmuteSession(
+      { complete: vi.fn(), now: () => (t += 10) },
+      () => ({ sampleChars: 500, budgetMs: 1000, maxHits: 500 }),
+    );
+    s.startManual();
+    s.editRule({ regex: "(a+)+b", replacement: "x" }, "aaab");
+    s.acceptRisk("aaab");
+
+    expect(s.activeVersion?.problem?.kind).toBe("too-slow");
+    expect(s.activeVersion?.riskAccepted).toBeNull();
+  });
+
+  it("fuehrt aus, wenn die Probe schnell zurueckkommt", () => {
+    const s = session();
+    s.startManual();
+    s.editRule({ regex: "(a+)+b", replacement: "x" }, "aaab");
+    s.acceptRisk("aaab");
+
+    expect(s.activeVersion?.problem).toBeNull();
+    expect(s.activeVersion?.hits).toHaveLength(1);
+  });
+});
