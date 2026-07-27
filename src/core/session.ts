@@ -92,6 +92,94 @@ export class TransmuteSession {
     this.set({ ...this.current, active: index });
   }
 
+  /**
+   * Die Vorschau ohne Modell oeffnen.
+   *
+   * Kein eigener Zustand und kein Modus: es entsteht schlicht ein leerer Stand, in den
+   * getippt werden kann. Ausgefuehrt wird nichts — ein leeres Muster ist gueltig und
+   * traefe den Leerstring an jeder Position.
+   */
+  startManual(): void {
+    this.versions = [
+      {
+        instruction: "",
+        rule: { regex: "", flags: "", replacement: "", explanation: "" },
+        hits: [],
+        selected: [],
+        timedOutAtLine: null,
+        source: "manual",
+        riskAccepted: null,
+        problem: null,
+        reasoning: null,
+      },
+    ];
+    this.set({ phase: "preview", versions: this.versions, active: 0 });
+  }
+
+  /**
+   * Die Regel des aktiven Standes von Hand aendern.
+   *
+   * Ein Handstand wird an Ort und Stelle geaendert; eine Modellregel bekommt EINEN neuen
+   * Stand angehaengt. So bleibt der Modellstand zurueckwaehlbar — dafuer gibt es den
+   * Verlauf — ohne dass die Liste beim Tippen zuwaechst.
+   */
+  editRule(patch: Partial<RuleDraft>, text: string): void {
+    const state = this.current;
+    if (state.phase !== "preview") return;
+
+    const active = state.versions[state.active];
+    const next = this.evaluateInto({ ...active, rule: { ...active.rule, ...patch } }, text);
+
+    if (active.source === "manual") {
+      this.versions = state.versions.map((version, i) => (i === state.active ? next : version));
+      this.set({ ...state, versions: this.versions }, "edit");
+      return;
+    }
+
+    // Die Beschriftung im Verlauf kommt aus source, nicht aus instruction — deshalb
+    // bleibt die Anweisung leer, statt einen erfundenen Text zu tragen.
+    this.versions = [...state.versions, { ...next, instruction: "", source: "manual", reasoning: null }];
+    this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 }, "edit");
+  }
+
+  /** Die Risiko-Warnung fuer genau das Muster des aktiven Standes quittieren. */
+  acceptRisk(text: string): void {
+    const state = this.current;
+    if (state.phase !== "preview") return;
+
+    const active = state.versions[state.active];
+    const next = this.evaluateInto({ ...active, riskAccepted: active.rule.regex }, text);
+    this.versions = state.versions.map((version, i) => (i === state.active ? next : version));
+    this.set({ ...state, versions: this.versions }, "edit");
+  }
+
+  /**
+   * Einen Stand gegen den Text neu rechnen.
+   *
+   * Die Risiko-Quittung ueberlebt nur, solange das Muster dasselbe bleibt: eine Freigabe
+   * fuer (a+)+b sagt nichts ueber (a+)+bc.
+   */
+  private evaluateInto(version: Version, text: string): Version {
+    const riskAccepted = version.riskAccepted === version.rule.regex ? version.riskAccepted : null;
+
+    if (version.rule.regex.length === 0) {
+      return { ...version, riskAccepted, hits: [], selected: [], timedOutAtLine: null, problem: null };
+    }
+
+    const res = evaluate(version.rule, text, riskAccepted !== null, this.evalOptions());
+    if (res.kind !== "ok") {
+      return { ...version, riskAccepted, hits: [], selected: [], timedOutAtLine: null, problem: res };
+    }
+    return {
+      ...version,
+      riskAccepted,
+      hits: res.hits,
+      selected: res.hits.map(() => true),
+      timedOutAtLine: res.timedOutAtLine,
+      problem: null,
+    };
+  }
+
   toggle(index: number): void {
     this.withSelection((selected) => selected.map((on, i) => (i === index ? !on : on)));
   }
