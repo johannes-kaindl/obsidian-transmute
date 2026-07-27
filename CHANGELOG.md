@@ -6,6 +6,41 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The pattern is now a form, not a display.** Regex, replacement and flags are editable
+  right in the panel; the preview recomputes after a short typing pause. `g` is shown but
+  not offered — `compileRule` enforces it, and a switch that switches nothing would be a
+  lie. Below the fields, the pattern still appears in `/pattern/flags` notation with the
+  flags that actually ran.
+- **A way in without the model.** "or write the pattern yourself" under the preview button
+  opens the same preview with an empty pattern. No tab, no mode, no second state — and the
+  way back is the same Discard button as always.
+- **Copy the pattern** to the clipboard as `/pattern/flags`.
+- **A static regex cheat sheet**, collapsible, right under the fields. No model, no
+  network. It sits in the rule container, so it stays open while you type.
+- **The model's reasoning**, collapsed, below the explanation — when thinking is on and the
+  model actually thought.
+
+### Changed
+
+- **A rule edited by hand becomes its own history entry, "Edited by hand".** The model's
+  version stays and remains selectable; typing further changes that one entry instead of
+  growing the list. Refining from an edited version continues from *that* rule.
+- **A risky pattern written by hand is now a warning, not a refusal.** The preview pauses,
+  the reason is named, and "Run it anyway" releases it — for exactly that pattern. Change
+  one character and the warning returns: a release for `(a+)+b` says nothing about
+  `(a+)+bc`.
+- **Rules with too many matches are stopped rather than shown** (limit: 500). A pattern
+  like `a*` matches the empty string at every position; showing a truncated list and
+  applying it anyway would break the one promise this plugin makes — that what happens is
+  what you saw.
+
+### Fixed
+
+- `npm run lint` now fails on warnings (`--max-warnings 0`). ESLint exits 0 on warnings
+  while the community store scanner reports them, so a finding could sit in a green gate.
+
 ## [0.2.0] — 2026-07-26
 
 ### Added

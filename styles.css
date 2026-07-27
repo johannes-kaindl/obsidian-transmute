@@ -309,3 +309,99 @@
   letter-spacing: 0.05em;
   margin-bottom: var(--size-2-2);
 }
+
+/* --- 0.3.0: Regel-Formular --------------------------------------------- */
+
+.transmute-regex-row {
+  display: flex;
+  gap: var(--size-4-1);
+  align-items: center;
+}
+
+.transmute-regex,
+.transmute-replacement-input {
+  width: 100%;
+  font-family: var(--font-monospace);
+}
+
+.transmute-replacement-input {
+  margin-top: var(--size-2-2);
+}
+
+.transmute-flags {
+  display: flex;
+  gap: var(--size-4-1);
+  margin-top: var(--size-2-2);
+}
+
+.transmute-flag {
+  padding: 0 var(--size-4-2);
+}
+
+.transmute-flag.is-active {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.transmute-flag[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Was wirklich laeuft — zum Ablesen und Kopieren. */
+.transmute-effective {
+  display: block;
+  margin-top: var(--size-2-2);
+  color: var(--text-muted);
+  font-size: var(--font-smaller);
+}
+
+.transmute-manual-link {
+  display: block;
+  margin-top: var(--size-2-2);
+}
+
+/* --- 0.3.0: Problem, Spickzettel, Gedankengang -------------------------- */
+
+.transmute-problem {
+  border-left: 3px solid var(--text-warning);
+  padding: var(--size-4-2);
+  margin: var(--size-4-2) 0;
+  background-color: var(--background-secondary);
+}
+
+.transmute-accept-risk {
+  margin-top: var(--size-4-2);
+}
+
+.transmute-cheatsheet {
+  margin-top: var(--size-4-2);
+  font-size: var(--font-ui-smaller);
+}
+
+.transmute-cheat-group {
+  margin-top: var(--size-4-2);
+  color: var(--text-muted);
+  font-weight: var(--font-semibold);
+}
+
+.transmute-cheat-row {
+  display: flex;
+  gap: var(--size-4-2);
+  align-items: baseline;
+}
+
+.transmute-cheat-row code {
+  min-width: 5em;
+  flex-shrink: 0;
+}
+
+.transmute-reasoning {
+  margin: var(--size-4-2) 0;
+}
+
+.transmute-reasoning pre {
+  white-space: pre-wrap;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
