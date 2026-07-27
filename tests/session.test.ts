@@ -6,7 +6,7 @@ const answer = (regex: string) => JSON.stringify({ regex, flags: "", replacement
 
 describe("TransmuteSession", () => {
   it("geht von idle ueber generating nach preview", async () => {
-    const complete = vi.fn().mockResolvedValue({ ok: true, content: answer("foo") });
+    const complete = vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: answer("foo") });
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     const seen: string[] = [];
     session.onChange((s) => seen.push(s.phase));
@@ -22,8 +22,8 @@ describe("TransmuteSession", () => {
   it("nutzt genau einen Retry bei kaputtem JSON", async () => {
     const complete = vi
       .fn()
-      .mockResolvedValueOnce({ ok: true, content: "nope" })
-      .mockResolvedValueOnce({ ok: true, content: answer("foo") });
+      .mockResolvedValueOnce({ ok: true, reasoning: null, content: "nope" })
+      .mockResolvedValueOnce({ ok: true, reasoning: null, content: answer("foo") });
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     await session.generate("x", "foo");
     expect(complete).toHaveBeenCalledTimes(2);
@@ -31,7 +31,7 @@ describe("TransmuteSession", () => {
   });
 
   it("gibt nach dem zweiten Fehlschlag auf und haelt die Rohantwort", async () => {
-    const complete = vi.fn().mockResolvedValue({ ok: true, content: "nope" });
+    const complete = vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: "nope" });
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     await session.generate("x", "foo");
     expect(complete).toHaveBeenCalledTimes(2);
@@ -45,8 +45,8 @@ describe("TransmuteSession", () => {
   it("gibt ein riskantes Muster mit Begruendung zurueck ans Modell", async () => {
     const complete = vi
       .fn()
-      .mockResolvedValueOnce({ ok: true, content: answer("(a+)+") })
-      .mockResolvedValueOnce({ ok: true, content: answer("a+") });
+      .mockResolvedValueOnce({ ok: true, reasoning: null, content: answer("(a+)+") })
+      .mockResolvedValueOnce({ ok: true, reasoning: null, content: answer("a+") });
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     await session.generate("x", "aaa");
     expect(complete).toHaveBeenCalledTimes(2);
@@ -54,7 +54,7 @@ describe("TransmuteSession", () => {
   });
 
   it("meldet ein durchgehend riskantes Muster mit dem Risiko-Key", async () => {
-    const complete = vi.fn().mockResolvedValue({ ok: true, content: answer("(a+)+") });
+    const complete = vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: answer("(a+)+") });
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     await session.generate("x", "aaa");
     expect(session.state.phase).toBe("error");
@@ -62,7 +62,7 @@ describe("TransmuteSession", () => {
   });
 
   it("behandelt null Treffer als preview, nicht als Fehler", async () => {
-    const complete = vi.fn().mockResolvedValue({ ok: true, content: answer("zzz") });
+    const complete = vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: answer("zzz") });
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     await session.generate("x", "foo");
     expect(session.state.phase).toBe("preview");
@@ -81,7 +81,7 @@ describe("TransmuteSession", () => {
   });
 
   it("schickt beim Nachschaerfen echte Treffer mit", async () => {
-    const complete = vi.fn().mockResolvedValue({ ok: true, content: answer("foo") });
+    const complete = vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: answer("foo") });
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     await session.generate("erste", "foo bar");
     await session.refine("aber anders", "foo bar");
@@ -91,7 +91,7 @@ describe("TransmuteSession", () => {
   });
 
   it("toggelt die Auswahl eines Treffers", async () => {
-    const complete = vi.fn().mockResolvedValue({ ok: true, content: answer("o") });
+    const complete = vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: answer("o") });
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     await session.generate("x", "foo");
     session.toggle(0);
@@ -99,7 +99,7 @@ describe("TransmuteSession", () => {
   });
 
   it("setzt alle Treffer gemeinsam", async () => {
-    const complete = vi.fn().mockResolvedValue({ ok: true, content: answer("o") });
+    const complete = vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: answer("o") });
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     await session.generate("x", "foo");
     session.setAll(false);
@@ -109,7 +109,7 @@ describe("TransmuteSession", () => {
 
 describe("TransmuteSession.revalidate", () => {
   async function previewed() {
-    const complete = vi.fn().mockResolvedValue({ ok: true, content: answer("#alt") });
+    const complete = vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: answer("#alt") });
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     await session.generate("tag umbenennen", "Ein #alt Tag.");
     return session;
@@ -143,7 +143,7 @@ describe("TransmuteSession.revalidate", () => {
 });
 
 describe("TransmuteSession — Verlauf", () => {
-  const rule = (regex: string) => ({ ok: true, content: answer(regex) });
+  const rule = (regex: string) => ({ ok: true, reasoning: null, content: answer(regex) });
 
   async function twoRounds() {
     const complete = vi
@@ -215,7 +215,7 @@ describe("TransmuteSession — Verlauf", () => {
 
 describe("Staende tragen ihre Herkunft", () => {
   it("markiert erzeugte Staende als model", async () => {
-    const complete = vi.fn().mockResolvedValue({ ok: true, content: answer("foo") });
+    const complete = vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: answer("foo") });
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     await session.generate("alle foo", "foo");
     const version = session.activeVersion;
@@ -225,7 +225,7 @@ describe("Staende tragen ihre Herkunft", () => {
   });
 
   it("meldet zu viele Treffer als Fehlerzustand, nicht als leeren Stand", async () => {
-    const complete = vi.fn().mockResolvedValue({ ok: true, content: answer("a") });
+    const complete = vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: answer("a") });
     const session = new TransmuteSession(
       { complete, now: () => 0 },
       () => ({ sampleChars: 500, budgetMs: 1000, maxHits: 3 }),
@@ -241,7 +241,7 @@ describe("Staende tragen ihre Herkunft", () => {
 
 describe("Aenderungsgrund", () => {
   it("meldet Zustandswechsel als full", async () => {
-    const complete = vi.fn().mockResolvedValue({ ok: true, content: answer("foo") });
+    const complete = vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: answer("foo") });
     const session = new TransmuteSession({ complete, now: () => 0 }, options);
     const reasons: string[] = [];
     session.onChange((_state, reason) => reasons.push(reason));

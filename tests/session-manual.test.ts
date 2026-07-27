@@ -10,7 +10,7 @@ function session(complete = vi.fn()): TransmuteSession {
 
 /** Eine Sitzung, die bereits einen Modell-Stand in der Vorschau hat. */
 async function modelSession(): Promise<TransmuteSession> {
-  const s = session(vi.fn().mockResolvedValue({ ok: true, content: answer }));
+  const s = session(vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: answer }));
   await s.generate("alle foo", "foo");
   return s;
 }

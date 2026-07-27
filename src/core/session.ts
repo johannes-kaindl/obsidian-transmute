@@ -45,7 +45,7 @@ export type SessionDeps = {
 export type SessionOptions = { sampleChars: number; budgetMs: number; maxHits: number };
 
 type Attempt =
-  | { ok: true; draft: RuleDraft }
+  | { ok: true; draft: RuleDraft; reasoning: string | null }
   | { ok: false; messageKey: string; args: string[]; raw: string | null; problem: string };
 
 /**
@@ -285,7 +285,7 @@ export class TransmuteSession {
         source: "model",
         riskAccepted: null,
         problem: null,
-        reasoning: null,
+        reasoning: attempt.reasoning,
       },
     ];
     this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 });
@@ -332,7 +332,7 @@ export class TransmuteSession {
       };
     }
 
-    return { ok: true, draft: parsed.draft };
+    return { ok: true, draft: parsed.draft, reasoning: res.reasoning };
   }
 
   private set(state: SessionState, reason: ChangeReason = "full"): void {
