@@ -15,6 +15,16 @@ export type TransmuteSettings = {
   showTargetField: boolean;
 };
 
+/**
+ * Obergrenze fuer die Treffer eines Laufs.
+ *
+ * Bewusst eine Konstante und keine Einstellung: die Grenze schuetzt die Anzeige vor
+ * Mustern wie a*, die an jeder Position den Leerstring treffen — das ist kein Geschmack,
+ * sondern eine Belastungsgrenze. Wer sie erreicht, hat ein zu allgemeines Muster, nicht
+ * eine zu kleine Zahl.
+ */
+export const MAX_HITS = 500;
+
 export const DEFAULT_SETTINGS: TransmuteSettings = {
   endpoints: ["http://127.0.0.1:1234"],
   model: "",            // modellagnostisch: kommt aus GET /v1/models

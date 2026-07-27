@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { TransmuteSession } from "../src/core/session";
 
-const options = () => ({ sampleChars: 500, budgetMs: 1000 });
+const options = () => ({ sampleChars: 500, budgetMs: 1000, maxHits: 500 });
 const answer = (regex: string) => JSON.stringify({ regex, flags: "", replacement: "X", explanation: "e" });
 
 describe("TransmuteSession", () => {

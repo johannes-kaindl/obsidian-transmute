@@ -19,7 +19,7 @@ export type SessionDeps = {
   now(): number;
 };
 
-export type SessionOptions = { sampleChars: number; budgetMs: number };
+export type SessionOptions = { sampleChars: number; budgetMs: number; maxHits: number };
 
 type Attempt =
   | { ok: true; draft: RuleDraft }
@@ -109,7 +109,7 @@ export class TransmuteSession {
       compiled.re,
       version.rule.replacement,
       isMultilinePattern(version.rule),
-      { budgetMs: this.options().budgetMs, now: () => this.deps.now() },
+      { budgetMs: this.options().budgetMs, maxHits: this.options().maxHits, now: () => this.deps.now() },
     );
     if (!sameMatches(version.hits, result.hits)) return { kind: "changed" };
     return { kind: "ok", hits: result.hits };
@@ -158,6 +158,7 @@ export class TransmuteSession {
 
     const result = runRule(text, compiled.re, attempt.draft.replacement, isMultilinePattern(attempt.draft), {
       budgetMs: this.options().budgetMs,
+      maxHits: this.options().maxHits,
       now: () => this.deps.now(),
     });
 

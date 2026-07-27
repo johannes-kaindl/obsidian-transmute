@@ -1,7 +1,7 @@
 import { Plugin, getLanguage, type WorkspaceLeaf } from "obsidian";
 import { RuleClient } from "./core/llm/client";
 import { TransmuteSession } from "./core/session";
-import { DEFAULT_SETTINGS, loadSettings, type TransmuteSettings } from "./core/settings";
+import { DEFAULT_SETTINGS, loadSettings, MAX_HITS, type TransmuteSettings } from "./core/settings";
 import "./core/i18n/strings";
 import { pickLang, setLang } from "./vendor/kit/i18n";
 import { EndpointResolver } from "./obsidian/endpoint";
@@ -52,7 +52,7 @@ export default class TransmutePlugin extends Plugin {
         },
         now: () => performance.now(),
       },
-      () => ({ sampleChars: this.settings.sampleChars, budgetMs: this.settings.budgetMs }),
+      () => ({ sampleChars: this.settings.sampleChars, budgetMs: this.settings.budgetMs, maxHits: MAX_HITS }),
     );
 
     this.registerView(
