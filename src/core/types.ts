@@ -1,3 +1,18 @@
+import type { RiskRule } from "./regex/guard-types";
+
+/**
+ * Warum eine Regel nicht ausgefuehrt werden konnte.
+ *
+ * Im Modell-Pfad wird daraus ein Fehlerzustand — dort gibt es nichts zu tippen, an dem
+ * man es reparieren koennte. Im Handpfad lebt es dagegen IM Stand, weil das Panel beim
+ * Tippen nicht aus der Vorschau fliegen darf.
+ */
+export type RuleProblem =
+  | { kind: "syntax"; message: string }
+  | { kind: "flags"; message: string }
+  | { kind: "risky"; rule: RiskRule }
+  | { kind: "too-many"; limit: number };
+
 /** Die vom Modell gelieferte Regel, nach dem JSON-Vertrag. */
 export type RuleDraft = {
   regex: string;
