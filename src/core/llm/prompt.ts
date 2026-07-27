@@ -62,6 +62,12 @@ export function buildRefinePrompt(
 ): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: "system", content: SYSTEM }];
   for (const round of rounds) {
+    if (round.source === "manual") {
+      // Eine Handrunde hat keine Anweisung — sie IST das Ergebnis. Ein leerer
+      // "Instruction:"-Zug wuerde das Modell zum Erfinden einladen.
+      messages.push({ role: "user", content: `I edited the rule by hand to: ${JSON.stringify(round.draft)}` });
+      continue;
+    }
     messages.push({ role: "user", content: `Instruction: ${round.instruction}` });
     if (round.draft !== null) {
       messages.push({ role: "assistant", content: JSON.stringify(round.draft) });

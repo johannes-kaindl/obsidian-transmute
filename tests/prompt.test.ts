@@ -89,3 +89,30 @@ describe("optionales Ziel-Muster", () => {
     expect(msgs.map((m) => m.content).join("\n")).toContain("JJJJ-MM-TT");
   });
 });
+
+describe("buildRefinePrompt mit Handrunden", () => {
+  const draft = { regex: "foo", flags: "i", replacement: "bar", explanation: "e" };
+
+  it("beschreibt eine Handrunde als Nutzer-Bearbeitung", () => {
+    const msgs = buildRefinePrompt(
+      [{ instruction: "", draft, source: "manual" as const }],
+      "jetzt auch Grossschreibung",
+      [],
+      "text",
+    );
+    const user = msgs.filter((m) => m.role === "user");
+    expect(user[0].content).toContain("edited the rule by hand");
+    expect(user[0].content).toContain('"regex":"foo"');
+  });
+
+  it("erzeugt fuer eine Handrunde keinen Assistenten-Zug", () => {
+    const msgs = buildRefinePrompt([{ instruction: "", draft, source: "manual" as const }], "weiter", [], "text");
+    expect(msgs.filter((m) => m.role === "assistant")).toHaveLength(0);
+  });
+
+  it("laesst Modellrunden unveraendert", () => {
+    const msgs = buildRefinePrompt([{ instruction: "alle foo", draft, source: "model" as const }], "weiter", [], "text");
+    expect(msgs.filter((m) => m.role === "assistant")).toHaveLength(1);
+    expect(msgs[1].content).toContain("Instruction: alle foo");
+  });
+});
