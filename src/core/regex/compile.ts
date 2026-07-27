@@ -31,12 +31,21 @@ export function effectiveFlags(flags: string): string {
   return FLAG_ORDER.filter((flag) => withGlobal.includes(flag)).join("");
 }
 
-export function compileRule(draft: RuleDraft): CompileResult {
+export type CompileOptions = {
+  /** Das Risiko-Veto uebergehen, weil die Nutzer:in es quittiert hat. */
+  allowRisky?: boolean;
+};
+
+export function compileRule(draft: RuleDraft, opts: CompileOptions = {}): CompileResult {
   for (const flag of draft.flags) {
     if (!ALLOWED_FLAGS.has(flag)) return { ok: false, kind: "flags", message: flag };
   }
-  const risk = assessPattern(draft.regex);
-  if (!risk.ok) return { ok: false, kind: "risky", rule: risk.rule };
+  // Die Freigabe gilt bewusst NUR fuer das Risiko-Veto. Syntax und Flags sind kein
+  // Abwaegen, sondern schlicht nicht ausfuehrbar — da gaebe es nichts freizugeben.
+  if (opts.allowRisky !== true) {
+    const risk = assessPattern(draft.regex);
+    if (!risk.ok) return { ok: false, kind: "risky", rule: risk.rule };
+  }
 
   const flags = effectiveFlags(draft.flags);
   try {

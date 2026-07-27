@@ -49,7 +49,7 @@ describe("buildInitialPrompt", () => {
 
 describe("buildRefinePrompt", () => {
   it("traegt Verlauf, Nachschaerfung und echte Treffer", () => {
-    const rounds = [{ instruction: "erste Anweisung", draft: { regex: "a", flags: "g", replacement: "b", explanation: "" } }];
+    const rounds = [{ instruction: "erste Anweisung", draft: { regex: "a", flags: "g", replacement: "b", explanation: "" }, source: "model" as const }];
     const msgs = buildRefinePrompt(rounds, "aber nicht in Codebloecken", [hit("vorher", "nachher")], "probe");
     const joined = msgs.map((m) => m.content).join("\n");
     expect(joined).toContain("erste Anweisung");
@@ -87,5 +87,32 @@ describe("optionales Ziel-Muster", () => {
   it("traegt das Ziel-Muster auch beim Nachschaerfen", () => {
     const msgs = buildRefinePrompt([], "enger", [], "probe", "JJJJ-MM-TT");
     expect(msgs.map((m) => m.content).join("\n")).toContain("JJJJ-MM-TT");
+  });
+});
+
+describe("buildRefinePrompt mit Handrunden", () => {
+  const draft = { regex: "foo", flags: "i", replacement: "bar", explanation: "e" };
+
+  it("beschreibt eine Handrunde als Nutzer-Bearbeitung", () => {
+    const msgs = buildRefinePrompt(
+      [{ instruction: "", draft, source: "manual" as const }],
+      "jetzt auch Grossschreibung",
+      [],
+      "text",
+    );
+    const user = msgs.filter((m) => m.role === "user");
+    expect(user[0].content).toContain("edited the rule by hand");
+    expect(user[0].content).toContain('"regex":"foo"');
+  });
+
+  it("erzeugt fuer eine Handrunde keinen Assistenten-Zug", () => {
+    const msgs = buildRefinePrompt([{ instruction: "", draft, source: "manual" as const }], "weiter", [], "text");
+    expect(msgs.filter((m) => m.role === "assistant")).toHaveLength(0);
+  });
+
+  it("laesst Modellrunden unveraendert", () => {
+    const msgs = buildRefinePrompt([{ instruction: "alle foo", draft, source: "model" as const }], "weiter", [], "text");
+    expect(msgs.filter((m) => m.role === "assistant")).toHaveLength(1);
+    expect(msgs[1].content).toContain("Instruction: alle foo");
   });
 });

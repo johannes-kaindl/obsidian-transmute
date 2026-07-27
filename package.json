@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
-    "lint": "node scripts/check-no-inline-disables.mjs && eslint src",
+    "lint": "node scripts/check-no-inline-disables.mjs && eslint src --max-warnings 0",
     "lint:portal": "eslint -c eslint.portal.config.mjs src",
     "check:pure": "node scripts/check-pure.mjs",
     "gate": "npm run lint && npm run typecheck && npm run typecheck:test && npm test && npm run check:pure && npm run build",

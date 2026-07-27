@@ -13,7 +13,11 @@ function transportWith(text: string, status = 200): JsonTransport {
 describe("RuleClient.complete", () => {
   it("gibt den Content der Antwort zurueck", async () => {
     const client = new RuleClient(transportWith('{"choices":[{"message":{"content":"hi"}}]}'), config);
-    await expect(client.complete([{ role: "user", content: "x" }])).resolves.toEqual({ ok: true, content: "hi" });
+    await expect(client.complete([{ role: "user", content: "x" }])).resolves.toEqual({
+      ok: true,
+      content: "hi",
+      reasoning: null,
+    });
   });
 
   it("ruft /v1/chat/completions am normalisierten Endpoint auf", async () => {

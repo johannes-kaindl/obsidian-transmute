@@ -2,7 +2,7 @@ import { normalizeEndpoint } from "../../vendor/kit/endpoint";
 import { suppressParams } from "../../vendor/kit/reasoning";
 import { effectiveSuppress } from "../reasoning-toggle";
 import type { ChatMessage } from "../types";
-import { extractChatContent } from "./response";
+import { extractChatContent, extractReasoning } from "./response";
 
 /** Netz-Port. Die Implementierung lebt in der obsidian-Schicht (requestUrl) —
  *  hier bleibt der Kern obsidian-frei und in Node testbar (PROF-OBS-12). */
@@ -11,7 +11,9 @@ export interface JsonTransport {
   getJson(url: string, timeoutMs: number): Promise<{ status: number; text: string }>;
 }
 
-export type CompleteResult = { ok: true; content: string } | { ok: false; error: string };
+export type CompleteResult =
+  | { ok: true; content: string; reasoning: string | null }
+  | { ok: false; error: string };
 
 export type ClientConfig = {
   endpoint: string;
@@ -84,7 +86,7 @@ export class RuleClient {
     if (content === null || content.trim().length === 0) {
       return { ok: false, error: errorMessage(res.text) };
     }
-    return { ok: true, content };
+    return { ok: true, content, reasoning: extractReasoning(parsed, content) };
   }
 
   async listModels(endpoint: string): Promise<string[]> {

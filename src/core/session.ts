@@ -2,9 +2,10 @@ import { sameMatches } from "./anchor";
 import { buildInitialPrompt, buildRefinePrompt, buildRetryPrompt, sampleForPrompt } from "./llm/prompt";
 import { parseRuleResponse } from "./llm/response";
 import type { CompleteResult } from "./llm/client";
-import { compileRule, isMultilinePattern } from "./regex/compile";
-import { runRule } from "./regex/execute";
-import type { ChatMessage, Hit, Round, RuleDraft, Version } from "./types";
+import { compileRule } from "./regex/compile";
+import { evaluate, type EvalOptions } from "./regex/evaluate";
+import { probeRisky } from "./regex/probe";
+import type { ChatMessage, Hit, Round, RuleDraft, RuleProblem, Version } from "./types";
 
 export type SessionState =
   | { phase: "idle" }
@@ -14,15 +15,47 @@ export type SessionState =
 
 export type Revalidation = { kind: "ok"; hits: Hit[] } | { kind: "changed" };
 
+/**
+ * Warum sich der Zustand geaendert hat.
+ *
+ * Die View waehlt danach zwischen Voll- und Teil-Draw: ein Voll-Draw leert den Container
+ * und zieht damit das Eingabefeld unter dem Cursor weg — samt Fokus, Cursorposition und
+ * dem Undo-Stack des Feldes.
+ */
+export type ChangeReason = "edit" | "full";
+
+/** Zeit, die der Kanarienvogel auf 20 Zeichen hoechstens brauchen darf. Ein harmloses
+ *  Muster liegt dort weit darunter; ein entgleisendes ueberschreitet es sofort. */
+const PROBE_BUDGET_MS = 4;
+
+/** Ein Problem in die Meldung uebersetzen, die der Fehlerzustand anzeigt. */
+function problemToError(problem: RuleProblem): { messageKey: string; args: string[] } {
+  switch (problem.kind) {
+    case "syntax":
+      return { messageKey: "error.syntax", args: [problem.message] };
+    case "flags":
+      return { messageKey: "error.flags", args: [problem.message] };
+    case "risky":
+      return { messageKey: `risk.${problem.rule}`, args: [] };
+    case "too-many":
+      return { messageKey: "error.tooMany", args: [String(problem.limit)] };
+    case "too-slow":
+      return {
+        messageKey: "error.tooSlow",
+        args: [String(problem.sampleChars), String(problem.ms), String(problem.longestLine)],
+      };
+  }
+}
+
 export type SessionDeps = {
   complete(messages: ChatMessage[]): Promise<CompleteResult>;
   now(): number;
 };
 
-export type SessionOptions = { sampleChars: number; budgetMs: number };
+export type SessionOptions = { sampleChars: number; budgetMs: number; maxHits: number };
 
 type Attempt =
-  | { ok: true; draft: RuleDraft }
+  | { ok: true; draft: RuleDraft; reasoning: string | null }
   | { ok: false; messageKey: string; args: string[]; raw: string | null; problem: string };
 
 /**
@@ -31,7 +64,7 @@ type Attempt =
  */
 export class TransmuteSession {
   private current: SessionState = { phase: "idle" };
-  private readonly listeners: ((state: SessionState) => void)[] = [];
+  private readonly listeners: ((state: SessionState, reason: ChangeReason) => void)[] = [];
   private versions: Version[] = [];
 
   constructor(
@@ -43,7 +76,7 @@ export class TransmuteSession {
     return this.current;
   }
 
-  onChange(cb: (state: SessionState) => void): void {
+  onChange(cb: (state: SessionState, reason: ChangeReason) => void): void {
     this.listeners.push(cb);
   }
 
@@ -67,6 +100,124 @@ export class TransmuteSession {
     if (this.current.phase !== "preview") return;
     if (index < 0 || index >= this.current.versions.length || index === this.current.active) return;
     this.set({ ...this.current, active: index });
+  }
+
+  /**
+   * Die Vorschau ohne Modell oeffnen.
+   *
+   * Kein eigener Zustand und kein Modus: es entsteht schlicht ein leerer Stand, in den
+   * getippt werden kann. Ausgefuehrt wird nichts — ein leeres Muster ist gueltig und
+   * traefe den Leerstring an jeder Position.
+   */
+  startManual(): void {
+    this.versions = [
+      {
+        instruction: "",
+        rule: { regex: "", flags: "", replacement: "", explanation: "" },
+        hits: [],
+        selected: [],
+        timedOutAtLine: null,
+        source: "manual",
+        riskAccepted: null,
+        problem: null,
+        reasoning: null,
+      },
+    ];
+    this.set({ phase: "preview", versions: this.versions, active: 0 });
+  }
+
+  /**
+   * Die Regel des aktiven Standes von Hand aendern.
+   *
+   * Ein Handstand wird an Ort und Stelle geaendert; eine Modellregel bekommt EINEN neuen
+   * Stand angehaengt. So bleibt der Modellstand zurueckwaehlbar — dafuer gibt es den
+   * Verlauf — ohne dass die Liste beim Tippen zuwaechst.
+   */
+  editRule(patch: Partial<RuleDraft>, text: string): void {
+    const state = this.current;
+    if (state.phase !== "preview") return;
+
+    const active = state.versions[state.active];
+    // Die Erklaerung stammt vom Modell und beschreibt DESSEN Regel. Nach einem Eingriff
+    // von Hand beschreibt sie etwas anderes als das, was laeuft — also faellt sie weg.
+    // Der Modellstand im Verlauf behaelt seine.
+    const rule = { ...active.rule, ...patch, explanation: "" };
+    const next = this.evaluateInto({ ...active, rule }, text);
+
+    if (active.source === "manual") {
+      this.versions = state.versions.map((version, i) => (i === state.active ? next : version));
+      this.set({ ...state, versions: this.versions }, "edit");
+      return;
+    }
+
+    // Die Beschriftung im Verlauf kommt aus source, nicht aus instruction — deshalb
+    // bleibt die Anweisung leer, statt einen erfundenen Text zu tragen.
+    this.versions = [...state.versions, { ...next, instruction: "", source: "manual", reasoning: null }];
+    this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 }, "edit");
+  }
+
+  /**
+   * Die Risiko-Warnung fuer genau das Muster des aktiven Standes quittieren.
+   *
+   * Vor der echten Ausfuehrung laeuft ein Kanarienvogel: dasselbe Muster auf einem kurzen
+   * Ausschnitt, mit Zeitmessung. Obsidian erlaubt keine Web-Worker, ein laufender Match
+   * ist also nicht abbrechbar — die Freigabe waere sonst ein Knopf, der das Fenster
+   * einfrieren kann (real eingetreten, GUI-Durchlauf 2026-07-27).
+   */
+  acceptRisk(text: string): void {
+    const state = this.current;
+    if (state.phase !== "preview") return;
+
+    const active = state.versions[state.active];
+
+    const probe = probeRisky(active.rule, text, { now: () => this.deps.now(), budgetMs: PROBE_BUDGET_MS });
+    if (!probe.ok) {
+      // Die Quittung wird NICHT gesetzt: sonst liefe das Muster beim naechsten
+      // Tastendruck ungebremst.
+      const problem: RuleProblem = {
+        kind: "too-slow",
+        ms: probe.ms,
+        sampleChars: probe.sampleChars,
+        longestLine: probe.longestLine,
+      };
+      const stopped = state.versions.map((version, i) =>
+        i === state.active ? { ...version, riskAccepted: null, hits: [], selected: [], problem } : version,
+      );
+      this.versions = stopped;
+      this.set({ ...state, versions: stopped }, "edit");
+      return;
+    }
+
+    const next = this.evaluateInto({ ...active, riskAccepted: active.rule.regex }, text);
+    this.versions = state.versions.map((version, i) => (i === state.active ? next : version));
+    this.set({ ...state, versions: this.versions }, "edit");
+  }
+
+  /**
+   * Einen Stand gegen den Text neu rechnen.
+   *
+   * Die Risiko-Quittung ueberlebt nur, solange das Muster dasselbe bleibt: eine Freigabe
+   * fuer (a+)+b sagt nichts ueber (a+)+bc.
+   */
+  private evaluateInto(version: Version, text: string): Version {
+    const riskAccepted = version.riskAccepted === version.rule.regex ? version.riskAccepted : null;
+
+    if (version.rule.regex.length === 0) {
+      return { ...version, riskAccepted, hits: [], selected: [], timedOutAtLine: null, problem: null };
+    }
+
+    const res = evaluate(version.rule, text, riskAccepted !== null, this.evalOptions());
+    if (res.kind !== "ok") {
+      return { ...version, riskAccepted, hits: [], selected: [], timedOutAtLine: null, problem: res };
+    }
+    return {
+      ...version,
+      riskAccepted,
+      hits: res.hits,
+      selected: res.hits.map(() => true),
+      timedOutAtLine: res.timedOutAtLine,
+      problem: null,
+    };
   }
 
   toggle(index: number): void {
@@ -101,18 +252,19 @@ export class TransmuteSession {
     if (this.current.phase !== "preview") return { kind: "changed" };
 
     const version = this.current.versions[this.current.active];
-    const compiled = compileRule(version.rule);
-    if (!compiled.ok) return { kind: "changed" };
+    // Dieselbe Freigabe wie in der Vorschau. Ohne das koennte ein quittiertes Muster
+    // angezeigt, aber nicht angewendet werden — und die Meldung waere die falsche
+    // ("die Notiz hat sich geaendert").
+    const allowRisky = version.riskAccepted === version.rule.regex;
+    const res = evaluate(version.rule, text, allowRisky, this.evalOptions());
+    if (res.kind !== "ok") return { kind: "changed" };
+    if (!sameMatches(version.hits, res.hits)) return { kind: "changed" };
+    return { kind: "ok", hits: res.hits };
+  }
 
-    const result = runRule(
-      text,
-      compiled.re,
-      version.rule.replacement,
-      isMultilinePattern(version.rule),
-      { budgetMs: this.options().budgetMs, now: () => this.deps.now() },
-    );
-    if (!sameMatches(version.hits, result.hits)) return { kind: "changed" };
-    return { kind: "ok", hits: result.hits };
+  private evalOptions(): EvalOptions {
+    const opts = this.options();
+    return { budgetMs: opts.budgetMs, maxHits: opts.maxHits, now: () => this.deps.now() };
   }
 
   async generate(instruction: string, text: string, target = ""): Promise<void> {
@@ -129,7 +281,11 @@ export class TransmuteSession {
   async refine(refinement: string, text: string, target = ""): Promise<void> {
     const sample = sampleForPrompt(text, this.options().sampleChars);
     const base = this.current.phase === "preview" ? this.current.versions.slice(0, this.current.active + 1) : [];
-    const rounds: Round[] = base.map((version) => ({ instruction: version.instruction, draft: version.rule }));
+    const rounds: Round[] = base.map((version) => ({
+      instruction: version.instruction,
+      draft: version.rule,
+      source: version.source,
+    }));
     const hits = this.activeVersion?.hits ?? [];
     await this.run(refinement, buildRefinePrompt(rounds, refinement, hits, sample, target), text);
   }
@@ -149,26 +305,27 @@ export class TransmuteSession {
       return;
     }
 
-    const compiled = compileRule(attempt.draft);
-    if (!compiled.ok) {
-      // Unerreichbar: ask() hat bereits kompiliert. Defensive Absicherung gegen kuenftige Umbauten.
-      this.set({ phase: "error", messageKey: "error.syntax", args: [""], raw: null });
+    const res = evaluate(attempt.draft, text, false, this.evalOptions());
+    if (res.kind !== "ok") {
+      // Im Modell-Pfad ist ein Problem ein Fehlerzustand: es gibt hier nichts zu tippen,
+      // an dem man es reparieren koennte.
+      const { messageKey, args } = problemToError(res);
+      this.set({ phase: "error", messageKey, args, raw: null });
       return;
     }
-
-    const result = runRule(text, compiled.re, attempt.draft.replacement, isMultilinePattern(attempt.draft), {
-      budgetMs: this.options().budgetMs,
-      now: () => this.deps.now(),
-    });
 
     this.versions = [
       ...this.versions,
       {
         instruction,
         rule: attempt.draft,
-        hits: result.hits,
-        selected: result.hits.map(() => true),
-        timedOutAtLine: result.timedOutAtLine,
+        hits: res.hits,
+        selected: res.hits.map(() => true),
+        timedOutAtLine: res.timedOutAtLine,
+        source: "model",
+        riskAccepted: null,
+        problem: null,
+        reasoning: attempt.reasoning,
       },
     ];
     this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 });
@@ -215,11 +372,11 @@ export class TransmuteSession {
       };
     }
 
-    return { ok: true, draft: parsed.draft };
+    return { ok: true, draft: parsed.draft, reasoning: res.reasoning };
   }
 
-  private set(state: SessionState): void {
+  private set(state: SessionState, reason: ChangeReason = "full"): void {
     this.current = state;
-    for (const cb of this.listeners) cb(state);
+    for (const cb of this.listeners) cb(state, reason);
   }
 }

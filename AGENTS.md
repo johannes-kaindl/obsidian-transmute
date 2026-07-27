@@ -5,10 +5,10 @@ Workspace-weite Standards (comply-or-explain): siehe [`../../_docs/CONVENTIONS.m
 
 **Profil:** `ts-node` · `obsidian-plugin`.
 
-**Stand 2026-07-25: Spec-Phase, noch kein Code.** Im Repo liegt bisher nur
-`docs/transmute-repo-spec.md` (Seed) und diese Datei. Alles unter „Architektur" ist
-**geplant**, nicht gebaut — beim Umsetzen gilt trotzdem: erst Kit-first-Sondierung
-(§ Kit-first-Befund), dann `superpowers:brainstorming` → Spec → Plan → TDD.
+**Stand 2026-07-27: 0.2.0 im Community-Store, 0.3.0 in Arbeit.** Der Kit-first-Befund
+unten beschreibt, was übernommen wurde — er bleibt als Begründungs-Kontext stehen. Für
+neue Vorhaben gilt weiterhin: erst Kit-first-Sondierung, dann `superpowers:brainstorming`
+→ Spec → Plan → TDD.
 
 ## Project character
 
@@ -153,16 +153,26 @@ testbar. Nur `main.ts`, Settings-Tab, Views/Modals und die HTTP-/Vault-Adapter i
 ```
 src/
 ├── core/
-│   ├── llm/          prompt-templates · response-schema (regex/flags/replacement/
-│   │                 explanation/confidence) · retry-bei-ungültiger-Regex
-│   ├── regex/        executor (Timeout-/Backtracking-Guard) · scope-resolver
-│   ├── diff/         (vendored aus image-to-markdown) diffLines · groupHunks · applySelection
-│   ├── safety/       snapshot-plan · guards (Warnschwelle „betrifft N Dateien")
-│   └── settings.ts   Typ + defaults (mergeSettings aus dem Kit)
-├── obsidian/         main · settings-tab · RuleModal · PreviewView · HistoryView ·
-│                     http (requestUrl-Adapter) · vault-io (Snapshot schreiben/lesen)
+│   ├── llm/          prompt · response (inkl. extractReasoning) · client
+│   ├── regex/        compile (allowRisky) · execute (Zeitbudget + maxHits) ·
+│   │                 guard · evaluate ← der EINE Ausführungspfad
+│   ├── cheatsheet.ts statische Regex-Referenz (Syntax verbatim, Text als i18n-Key)
+│   ├── session.ts    Zustandsmaschine inkl. Handpfad
+│   └── settings.ts   Typ + defaults (mergeSettings aus dem Kit) · MAX_HITS
+├── obsidian/         main · settings-tab · view · view-render · http · editor-io
 └── vendor/kit/       gevendorte Kit-Module (pure) — nie von Hand ändern
 ```
+
+**`evaluate()` ist der einzige Ort, an dem kompiliert und ausgeführt wird** — Modell-Pfad,
+Handbearbeitung und Revalidierung vor dem Schreiben gehen alle hindurch. Drei getrennte
+Stellen würden auseinanderlaufen; genau so ist in 0.2.0 die Anzeige von der Ausführung
+abgedriftet. Wer einen vierten Ausführungsweg braucht, baut ihn **nicht** daneben.
+
+**Der Panel-Körper ist dreigeteilt** (`.transmute-history` / `.transmute-rule` /
+`.transmute-outcome`). `renderPanel` zeichnet alles, `renderOutcome` nur die äußeren
+beiden — die Regel-Felder bleiben stehen, weil ein `root.empty()` unter dem Cursor Fokus,
+Cursorposition und den Undo-Stack des Feldes mitnimmt. Welcher Weg dran ist, sagt die
+Session über `onChange(state, reason)`.
 
 **Struktur-Vertrag LLM:** Das Modell antwortet **JSON** (`regex`, `flags`, `replacement`,
 `explanation`, `confidence`) — nicht Prosa. Ungültige Regex geht **einmal** mit dem Syntaxfehler
@@ -180,7 +190,7 @@ Noch keine — `package.json` existiert nicht. Beim Scaffolding den Dach-Standar
 
 ```bash
 npm run dev / build / deploy      # esbuild watch · prod-Bundle · Copy ins Vault-Plugin-Verzeichnis
-npm run lint                      # check-no-inline-disables + eslint (Store-Review-Checks)
+npm run lint                      # check-no-inline-disables + eslint --max-warnings 0
 npm test                          # vitest run
 npm run typecheck                 # tsc --noEmit (separat von vitest)
 npm run check:pure                # src/core darf `obsidian` nicht importieren
@@ -215,6 +225,29 @@ npm run gate                      # alles zusammen
   „Regex im Worker mit Kill-Switch" aus der Spec ist so **nicht** umsetzbar. Alternativen vor der
   Implementierung bewerten: Regex-Analyse *vor* der Ausführung (Redos-Heuristik auf dem Pattern) +
   Chunking mit Zeit-Budget-Check zwischen den Dateien, statt einen laufenden Match abzubrechen.
+- **`eslint src` gibt bei Warnungen exit 0**, während der Store-Scanner sie als Befund
+  meldet — deshalb läuft `lint` mit `--max-warnings 0` (2026-07-27; die `sentence-case`-Regel
+  hatte den Flag-Knopf `g` angemahnt und stand grün im Gate).
+- **`obsidianmd/ui/sentence-case` prüft String-Literale, keine Variablen.** Syntax, die
+  kein UI-Text ist (Regex-Flags, Muster), gehört in ein `<code>` und den Literalwert in
+  eine benannte Konstante — **kein** Inline-`disable`, das bricht am Gate.
+- **Ein Muster, das den Leerstring trifft** (`a*`, `\b`, `^`), liefert einen Treffer pro
+  Position, jeden mit der vollen Zeile in `before`/`after`. `collect()` schiebt `lastIndex`
+  korrekt vor, es hängt also nicht — aber ohne `maxHits` (500) wären das Tausende
+  DOM-Zeilen bei jedem Tastendruck.
+- **Das Zeitbudget in `runRule` greift nur ZWISCHEN Zeilen.** Ein einzelner entgleister
+  Match auf *einer* Zeile kommt nie zurück, und Obsidian kann ihn nicht abbrechen (keine
+  Web-Worker). Deshalb läuft vor einer Risiko-Freigabe `probeRisky()` — dasselbe Muster auf
+  20 Zeichen, mit Zeitmessung. **Ohne diesen Kanarienvogel ist jede Freigabe ein Knopf, der
+  das Fenster einfriert** (real eingetreten, GUI-Durchlauf 2026-07-27).
+- **Was in den `.transmute-rule`-Container gerendert wird, altert.** Der Container ist vom
+  Teil-Draw ausgenommen — dort gehört nur hinein, was sich beim Tippen *nicht* ändern
+  darf (die Felder selbst, der Spickzettel). Jede abgeleitete Anzeige (`/muster/flags`,
+  Erklärung, Treffer) gehört in `.transmute-outcome`. Beides ist schon einmal
+  falsch herum gewesen.
+- **`makeFakeEl()` aus dem Obsidian-Mock kennt kein `querySelector`.** Der Mock ist ein aus
+  fünf Plugins gepflegtes Superset und wird nicht lokal erweitert — die Suche liegt in
+  `tests/helpers/dom.ts` (`findByClass`/`findAllByTag`).
 - **`data.json`** ist git-ignored (Obsidian-persistierte Konfig), **`main.js`** ist Build-Artefakt.
 - **Release-CI ist GitHub-only** (`.github/` wird von Codeberg/Forgejo ignoriert).
 

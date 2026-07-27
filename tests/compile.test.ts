@@ -61,3 +61,29 @@ describe("compileRule", () => {
     expect(isMultilinePattern(draft({ regex: "a", flags: "i" }))).toBe(false);
   });
 });
+
+describe("compileRule mit allowRisky", () => {
+  it("weist ein riskantes Muster ohne Freigabe weiterhin zurueck", () => {
+    const res = compileRule(draft({ regex: "(a+)+b" }));
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.kind).toBe("risky");
+  });
+
+  it("kompiliert dasselbe Muster mit Freigabe", () => {
+    const res = compileRule(draft({ regex: "(a+)+b" }), { allowRisky: true });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.re.flags).toBe("g");
+  });
+
+  it("Freigabe hebelt Syntaxfehler nicht aus", () => {
+    const res = compileRule(draft({ regex: "(unbalanced" }), { allowRisky: true });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.kind).toBe("syntax");
+  });
+
+  it("Freigabe hebelt unbekannte Flags nicht aus", () => {
+    const res = compileRule(draft({ regex: "a", flags: "q" }), { allowRisky: true });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.kind).toBe("flags");
+  });
+});
