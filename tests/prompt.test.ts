@@ -49,7 +49,7 @@ describe("buildInitialPrompt", () => {
 
 describe("buildRefinePrompt", () => {
   it("traegt Verlauf, Nachschaerfung und echte Treffer", () => {
-    const rounds = [{ instruction: "erste Anweisung", draft: { regex: "a", flags: "g", replacement: "b", explanation: "" } }];
+    const rounds = [{ instruction: "erste Anweisung", draft: { regex: "a", flags: "g", replacement: "b", explanation: "" }, source: "model" as const }];
     const msgs = buildRefinePrompt(rounds, "aber nicht in Codebloecken", [hit("vorher", "nachher")], "probe");
     const joined = msgs.map((m) => m.content).join("\n");
     expect(joined).toContain("erste Anweisung");

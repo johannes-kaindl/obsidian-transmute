@@ -46,7 +46,7 @@ export type Hit = {
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 /** Eine Runde im Nachschaerf-Verlauf. */
-export type Round = { instruction: string; draft: RuleDraft | null };
+export type Round = { instruction: string; draft: RuleDraft | null; source: "model" | "manual" };
 
 /**
  * Ein Stand im Verlauf: was eingegeben wurde und was dabei herauskam.
@@ -62,4 +62,15 @@ export type Version = {
   hits: Hit[];
   selected: boolean[];
   timedOutAtLine: number | null;
+  /** Woher die Regel stammt — steuert die Beschriftung im Verlauf und ob eine
+   *  Handbearbeitung diesen Stand aendert oder einen neuen anhaengt. */
+  source: "model" | "manual";
+  /** Das Muster, fuer das die Risiko-Warnung quittiert wurde. Null = keine Quittung.
+   *  Bewusst der Pattern-String und kein Ja/Nein: eine Freigabe fuer (a+)+b sagt nichts
+   *  ueber (a+)+bc. */
+  riskAccepted: string | null;
+  /** Warum dieser Stand keine Treffer hat. Nur im Handpfad besetzt. */
+  problem: RuleProblem | null;
+  /** Gedankengang des Modells, falls es einen geliefert hat. */
+  reasoning: string | null;
 };

@@ -2,9 +2,9 @@ import { sameMatches } from "./anchor";
 import { buildInitialPrompt, buildRefinePrompt, buildRetryPrompt, sampleForPrompt } from "./llm/prompt";
 import { parseRuleResponse } from "./llm/response";
 import type { CompleteResult } from "./llm/client";
-import { compileRule, isMultilinePattern } from "./regex/compile";
-import { runRule } from "./regex/execute";
-import type { ChatMessage, Hit, Round, RuleDraft, Version } from "./types";
+import { compileRule } from "./regex/compile";
+import { evaluate, type EvalOptions } from "./regex/evaluate";
+import type { ChatMessage, Hit, Round, RuleDraft, RuleProblem, Version } from "./types";
 
 export type SessionState =
   | { phase: "idle" }
@@ -13,6 +13,20 @@ export type SessionState =
   | { phase: "error"; messageKey: string; args: string[]; raw: string | null };
 
 export type Revalidation = { kind: "ok"; hits: Hit[] } | { kind: "changed" };
+
+/** Ein Problem in die Meldung uebersetzen, die der Fehlerzustand anzeigt. */
+function problemToError(problem: RuleProblem): { messageKey: string; args: string[] } {
+  switch (problem.kind) {
+    case "syntax":
+      return { messageKey: "error.syntax", args: [problem.message] };
+    case "flags":
+      return { messageKey: "error.flags", args: [problem.message] };
+    case "risky":
+      return { messageKey: `risk.${problem.rule}`, args: [] };
+    case "too-many":
+      return { messageKey: "error.tooMany", args: [String(problem.limit)] };
+  }
+}
 
 export type SessionDeps = {
   complete(messages: ChatMessage[]): Promise<CompleteResult>;
@@ -101,18 +115,19 @@ export class TransmuteSession {
     if (this.current.phase !== "preview") return { kind: "changed" };
 
     const version = this.current.versions[this.current.active];
-    const compiled = compileRule(version.rule);
-    if (!compiled.ok) return { kind: "changed" };
+    // Dieselbe Freigabe wie in der Vorschau. Ohne das koennte ein quittiertes Muster
+    // angezeigt, aber nicht angewendet werden — und die Meldung waere die falsche
+    // ("die Notiz hat sich geaendert").
+    const allowRisky = version.riskAccepted === version.rule.regex;
+    const res = evaluate(version.rule, text, allowRisky, this.evalOptions());
+    if (res.kind !== "ok") return { kind: "changed" };
+    if (!sameMatches(version.hits, res.hits)) return { kind: "changed" };
+    return { kind: "ok", hits: res.hits };
+  }
 
-    const result = runRule(
-      text,
-      compiled.re,
-      version.rule.replacement,
-      isMultilinePattern(version.rule),
-      { budgetMs: this.options().budgetMs, maxHits: this.options().maxHits, now: () => this.deps.now() },
-    );
-    if (!sameMatches(version.hits, result.hits)) return { kind: "changed" };
-    return { kind: "ok", hits: result.hits };
+  private evalOptions(): EvalOptions {
+    const opts = this.options();
+    return { budgetMs: opts.budgetMs, maxHits: opts.maxHits, now: () => this.deps.now() };
   }
 
   async generate(instruction: string, text: string, target = ""): Promise<void> {
@@ -129,7 +144,11 @@ export class TransmuteSession {
   async refine(refinement: string, text: string, target = ""): Promise<void> {
     const sample = sampleForPrompt(text, this.options().sampleChars);
     const base = this.current.phase === "preview" ? this.current.versions.slice(0, this.current.active + 1) : [];
-    const rounds: Round[] = base.map((version) => ({ instruction: version.instruction, draft: version.rule }));
+    const rounds: Round[] = base.map((version) => ({
+      instruction: version.instruction,
+      draft: version.rule,
+      source: version.source,
+    }));
     const hits = this.activeVersion?.hits ?? [];
     await this.run(refinement, buildRefinePrompt(rounds, refinement, hits, sample, target), text);
   }
@@ -149,27 +168,27 @@ export class TransmuteSession {
       return;
     }
 
-    const compiled = compileRule(attempt.draft);
-    if (!compiled.ok) {
-      // Unerreichbar: ask() hat bereits kompiliert. Defensive Absicherung gegen kuenftige Umbauten.
-      this.set({ phase: "error", messageKey: "error.syntax", args: [""], raw: null });
+    const res = evaluate(attempt.draft, text, false, this.evalOptions());
+    if (res.kind !== "ok") {
+      // Im Modell-Pfad ist ein Problem ein Fehlerzustand: es gibt hier nichts zu tippen,
+      // an dem man es reparieren koennte.
+      const { messageKey, args } = problemToError(res);
+      this.set({ phase: "error", messageKey, args, raw: null });
       return;
     }
-
-    const result = runRule(text, compiled.re, attempt.draft.replacement, isMultilinePattern(attempt.draft), {
-      budgetMs: this.options().budgetMs,
-      maxHits: this.options().maxHits,
-      now: () => this.deps.now(),
-    });
 
     this.versions = [
       ...this.versions,
       {
         instruction,
         rule: attempt.draft,
-        hits: result.hits,
-        selected: result.hits.map(() => true),
-        timedOutAtLine: result.timedOutAtLine,
+        hits: res.hits,
+        selected: res.hits.map(() => true),
+        timedOutAtLine: res.timedOutAtLine,
+        source: "model",
+        riskAccepted: null,
+        problem: null,
+        reasoning: null,
       },
     ];
     this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 });

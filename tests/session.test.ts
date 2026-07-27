@@ -212,3 +212,29 @@ describe("TransmuteSession — Verlauf", () => {
     expect(session.activeVersion).toBeNull();
   });
 });
+
+describe("Staende tragen ihre Herkunft", () => {
+  it("markiert erzeugte Staende als model", async () => {
+    const complete = vi.fn().mockResolvedValue({ ok: true, content: answer("foo") });
+    const session = new TransmuteSession({ complete, now: () => 0 }, options);
+    await session.generate("alle foo", "foo");
+    const version = session.activeVersion;
+    expect(version?.source).toBe("model");
+    expect(version?.problem).toBeNull();
+    expect(version?.riskAccepted).toBeNull();
+  });
+
+  it("meldet zu viele Treffer als Fehlerzustand, nicht als leeren Stand", async () => {
+    const complete = vi.fn().mockResolvedValue({ ok: true, content: answer("a") });
+    const session = new TransmuteSession(
+      { complete, now: () => 0 },
+      () => ({ sampleChars: 500, budgetMs: 1000, maxHits: 3 }),
+    );
+    await session.generate("alle a", "aaaaaaaaaa");
+    expect(session.state.phase).toBe("error");
+    if (session.state.phase === "error") {
+      expect(session.state.messageKey).toBe("error.tooMany");
+      expect(session.state.args).toEqual(["3"]);
+    }
+  });
+});
