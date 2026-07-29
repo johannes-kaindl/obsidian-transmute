@@ -245,6 +245,14 @@ npm run gate                      # alles zusammen
   darf (die Felder selbst, der Spickzettel). Jede abgeleitete Anzeige (`/muster/flags`,
   Erklärung, Treffer) gehört in `.transmute-outcome`. Beides ist schon einmal
   falsch herum gewesen.
+- **Die Antwortsprache ist eine Modellfrage, keine Promptfrage.** Gemessen 2026-07-30 mit
+  `npm run lab:diagnose` (fünf Fälle, deutsche Oberfläche, Zielsprache ausdrücklich im
+  Prompt): `qwen/qwen3.6-35b-a3b` antwortet **5 von 5** deutsch, `google/gemma-4-e2b`
+  **4 von 5**. Ein 2B-Modell lässt eine Nebenbedingung fallen, während es gleichzeitig ein
+  JSON-Format treffen muss — **nicht** am Prompt schrauben, sondern das Modell empfehlen.
+- **Ein Reparaturvorschlag, der dem Muster gleicht, wird verworfen** (`session.diagnose`).
+  Kleine Modelle geben genau das nicht treffende Muster zurück; ein Knopf, der nichts
+  ändert, sieht wie ein Ausweg aus.
 - **Eine gelockerte Fassung eines Musters darf nie ausgeführt werden, ohne durch
   `evaluate()` zu gehen.** Die Sonden in `relax.ts` lockern genau eine Bedingung und laufen
   mit demselben Zeitbudget, derselben Obergrenze und ohne Risiko-Freigabe. Eine Lockerung,
