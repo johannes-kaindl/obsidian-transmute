@@ -186,3 +186,13 @@ describe("buildDiagnosePrompt", () => {
     expect(messages[0].content).not.toContain("$&");
   });
 });
+
+it("sagt dem Modell die Wahrheit ueber einen uebernommenen Vorschlag", () => {
+  const rounds = [
+    { instruction: "", draft: { regex: "foo", flags: "", replacement: "bar", explanation: "" }, source: "fix" as const },
+  ];
+  const messages = buildRefinePrompt(rounds, "enger", [], "text", "", "en");
+  const accepted = messages.find((m) => m.content.includes("accepted"));
+  expect(accepted).toBeDefined();
+  expect(messages.some((m) => m.content.includes("by hand"))).toBe(false);
+});

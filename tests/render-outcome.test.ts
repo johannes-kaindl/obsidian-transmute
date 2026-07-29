@@ -48,6 +48,7 @@ const version = (over: Partial<Version> = {}): Version => ({
   riskAccepted: null,
   problem: null,
   reasoning: null,
+  diagnosis: null,
   ...over,
 });
 

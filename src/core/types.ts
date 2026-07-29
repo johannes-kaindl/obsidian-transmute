@@ -1,4 +1,5 @@
 import type { RiskRule } from "./regex/guard-types";
+import type { ProbeFinding } from "./regex/relax";
 
 /**
  * Warum eine Regel nicht ausgefuehrt werden konnte.
@@ -46,8 +47,30 @@ export type Hit = {
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
+/**
+ * Warum ein Muster nichts trifft — auf Anforderung, nicht von selbst.
+ *
+ * Sie gehoert zu genau dem Muster, das sie erklaert: Beim naechsten Tastendruck faellt
+ * sie weg, wie die Modell-Erklaerung seit 0.3.0. Eine Diagnose fuer \d{4}-\d{2} sagt
+ * nichts ueber \d{4}\.\d{2}.
+ */
+export type Diagnosis =
+  | { kind: "running" }
+  | { kind: "done"; findings: ProbeFinding[]; text: string; fix: RuleDraft | null }
+  | { kind: "failed"; messageKey: string; args: string[] };
+
+/**
+ * Woher eine Regel stammt.
+ *
+ * "fix" ist ein vom Modell vorgeschlagener und von der Nutzer:in uebernommener
+ * Reparaturvorschlag — weder Modellzug noch Handarbeit. Der Unterschied ist nicht
+ * kosmetisch: `buildRefinePrompt` erzaehlte dem Modell sonst, die Regel sei von Hand
+ * geaendert worden, und das waere schlicht unwahr.
+ */
+export type RuleSource = "model" | "manual" | "fix";
+
 /** Eine Runde im Nachschaerf-Verlauf. */
-export type Round = { instruction: string; draft: RuleDraft | null; source: "model" | "manual" };
+export type Round = { instruction: string; draft: RuleDraft | null; source: RuleSource };
 
 /**
  * Ein Stand im Verlauf: was eingegeben wurde und was dabei herauskam.
@@ -65,7 +88,7 @@ export type Version = {
   timedOutAtLine: number | null;
   /** Woher die Regel stammt — steuert die Beschriftung im Verlauf und ob eine
    *  Handbearbeitung diesen Stand aendert oder einen neuen anhaengt. */
-  source: "model" | "manual";
+  source: RuleSource;
   /** Das Muster, fuer das die Risiko-Warnung quittiert wurde. Null = keine Quittung.
    *  Bewusst der Pattern-String und kein Ja/Nein: eine Freigabe fuer (a+)+b sagt nichts
    *  ueber (a+)+bc. */
@@ -74,4 +97,6 @@ export type Version = {
   problem: RuleProblem | null;
   /** Gedankengang des Modells, falls es einen geliefert hat. */
   reasoning: string | null;
+  /** Die angeforderte Diagnose zu diesem Muster, oder null. */
+  diagnosis: Diagnosis | null;
 };

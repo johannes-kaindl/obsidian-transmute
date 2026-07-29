@@ -86,6 +86,12 @@ export function buildRefinePrompt(
 ): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: "system", content: systemPrompt(lang) }];
   for (const round of rounds) {
+    if (round.source === "fix") {
+      // Die Wahrheit: der Vorschlag kam vom Modell und wurde uebernommen. „Von Hand
+      // geaendert" waere hier falsch und wuerde die naechste Runde in die Irre fuehren.
+      messages.push({ role: "user", content: `I accepted your suggested fix: ${JSON.stringify(round.draft)}` });
+      continue;
+    }
     if (round.source === "manual") {
       // Eine Handrunde hat keine Anweisung — sie IST das Ergebnis. Ein leerer
       // "Instruction:"-Zug wuerde das Modell zum Erfinden einladen.

@@ -92,7 +92,7 @@ describe("renderPanel", () => {
         ...base,
         state: {
           phase: "preview",
-          versions: [{ instruction: "i", rule: { regex: "foo", flags: "g", replacement: "bar", explanation: "matcht foo" }, hits: [hit()], selected: [true], timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null }],
+          versions: [{ instruction: "i", rule: { regex: "foo", flags: "g", replacement: "bar", explanation: "matcht foo" }, hits: [hit()], selected: [true], timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null, diagnosis: null }],
           active: 0,
         },
       },
@@ -113,7 +113,7 @@ describe("renderPanel", () => {
         ...base,
         state: {
           phase: "preview",
-          versions: [{ instruction: "i", rule: { regex: "#alt", flags: "i", replacement: "#neu", explanation: "" }, hits: [hit()], selected: [true], timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null }],
+          versions: [{ instruction: "i", rule: { regex: "#alt", flags: "i", replacement: "#neu", explanation: "" }, hits: [hit()], selected: [true], timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null, diagnosis: null }],
           active: 0,
         },
       },
@@ -130,7 +130,7 @@ describe("renderPanel", () => {
         ...base,
         state: {
           phase: "preview",
-          versions: [{ instruction: "i", rule: { regex: "(\\d+)", flags: "g", replacement: "Nr. $1", explanation: "" }, hits: [hit()], selected: [true], timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null }],
+          versions: [{ instruction: "i", rule: { regex: "(\\d+)", flags: "g", replacement: "Nr. $1", explanation: "" }, hits: [hit()], selected: [true], timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null, diagnosis: null }],
           active: 0,
         },
       },
@@ -151,7 +151,7 @@ describe("renderPanel", () => {
         pinnedName: "Projektnotizen",
         state: {
           phase: "preview",
-          versions: [{ instruction: "i", rule: { regex: "a", flags: "g", replacement: "b", explanation: "" }, hits: [hit()], selected: [true], timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null }],
+          versions: [{ instruction: "i", rule: { regex: "a", flags: "g", replacement: "b", explanation: "" }, hits: [hit()], selected: [true], timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null, diagnosis: null }],
           active: 0,
         },
       },
@@ -170,7 +170,7 @@ describe("renderPanel", () => {
         ...base,
         state: {
           phase: "preview",
-          versions: [{ instruction: "i", rule: { regex: "aa", flags: "g", replacement: "X", explanation: "" }, hits: [hit({ start: 3, end: 5, matched: "aa", replacement: "X", before: "aa aa", after: "aa X" })], selected: [true], timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null }],
+          versions: [{ instruction: "i", rule: { regex: "aa", flags: "g", replacement: "X", explanation: "" }, hits: [hit({ start: 3, end: 5, matched: "aa", replacement: "X", before: "aa aa", after: "aa X" })], selected: [true], timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null, diagnosis: null }],
           active: 0,
         },
       },
@@ -188,7 +188,7 @@ describe("renderPanel", () => {
         ...base,
         state: {
           phase: "preview",
-          versions: [{ instruction: "i", rule: { regex: "zzz", flags: "g", replacement: "", explanation: "" }, hits: [], selected: [], timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null }],
+          versions: [{ instruction: "i", rule: { regex: "zzz", flags: "g", replacement: "", explanation: "" }, hits: [], selected: [], timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null, diagnosis: null }],
           active: 0,
         },
       },
@@ -207,7 +207,7 @@ describe("renderPanel", () => {
         ...base,
         state: {
           phase: "preview",
-          versions: [{ instruction: "i", rule: { regex: "a", flags: "g", replacement: "b", explanation: "" }, hits: [hit()], selected: [true], timedOutAtLine: 41, source: "model" as const, riskAccepted: null, problem: null, reasoning: null }],
+          versions: [{ instruction: "i", rule: { regex: "a", flags: "g", replacement: "b", explanation: "" }, hits: [hit()], selected: [true], timedOutAtLine: 41, source: "model" as const, riskAccepted: null, problem: null, reasoning: null, diagnosis: null }],
           active: 0,
         },
       },
@@ -244,7 +244,7 @@ describe("renderPanel — Verlauf", () => {
     rule: { regex: "a", flags: "g", replacement: "b", explanation: "" },
     hits: Array.from({ length: count }, () => hit()),
     selected: Array.from({ length: count }, () => true),
-    timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null,
+    timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null, diagnosis: null,
   });
 
   it("zeigt keinen Verlauf, solange es nur einen Stand gibt", () => {
@@ -314,7 +314,7 @@ describe("renderPanel — Verlauf ist als Verlauf erkennbar", () => {
     rule: { regex: "a", flags: "g", replacement: "b", explanation: "" },
     hits: [hit()],
     selected: [true],
-    timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null,
+    timedOutAtLine: null, source: "model" as const, riskAccepted: null, problem: null, reasoning: null, diagnosis: null,
   });
 
   // Ohne Ueberschrift liest sich die Liste wie Teil des Ergebnisses statt wie ein Verlauf.

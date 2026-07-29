@@ -121,6 +121,7 @@ export class TransmuteSession {
         riskAccepted: null,
         problem: null,
         reasoning: null,
+        diagnosis: null,
       },
     ];
     this.set({ phase: "preview", versions: this.versions, active: 0 });
@@ -138,11 +139,12 @@ export class TransmuteSession {
     if (state.phase !== "preview") return;
 
     const active = state.versions[state.active];
-    // Die Erklaerung stammt vom Modell und beschreibt DESSEN Regel. Nach einem Eingriff
-    // von Hand beschreibt sie etwas anderes als das, was laeuft — also faellt sie weg.
-    // Der Modellstand im Verlauf behaelt seine.
+    // Die Erklaerung stammt vom Modell und beschreibt DESSEN Regel; die Diagnose erklaert
+    // das Muster, das sie untersucht hat. Nach einem Eingriff von Hand beschreiben beide
+    // etwas anderes als das, was laeuft — also fallen sie weg. Der Stand im Verlauf
+    // behaelt seine.
     const rule = { ...active.rule, ...patch, explanation: "" };
-    const next = this.evaluateInto({ ...active, rule }, text);
+    const next = this.evaluateInto({ ...active, rule, diagnosis: null }, text);
 
     if (active.source === "manual") {
       this.versions = state.versions.map((version, i) => (i === state.active ? next : version));
@@ -152,7 +154,7 @@ export class TransmuteSession {
 
     // Die Beschriftung im Verlauf kommt aus source, nicht aus instruction — deshalb
     // bleibt die Anweisung leer, statt einen erfundenen Text zu tragen.
-    this.versions = [...state.versions, { ...next, instruction: "", source: "manual", reasoning: null }];
+    this.versions = [...state.versions, { ...next, instruction: "", source: "manual", reasoning: null, diagnosis: null }];
     this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 }, "edit");
   }
 
@@ -326,6 +328,7 @@ export class TransmuteSession {
         riskAccepted: null,
         problem: null,
         reasoning: attempt.reasoning,
+        diagnosis: null,
       },
     ];
     this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 });
