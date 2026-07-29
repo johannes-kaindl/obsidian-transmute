@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildInitialPrompt, buildRefinePrompt, buildRetryPrompt, sampleForPrompt, sampleHits } from "../src/core/llm/prompt";
+import {
+  buildInitialPrompt,
+  buildRefinePrompt,
+  buildRetryPrompt,
+  languageName,
+  sampleForPrompt,
+  sampleHits,
+} from "../src/core/llm/prompt";
 import type { Hit } from "../src/core/types";
 
 const hit = (before: string, after: string): Hit => ({
@@ -114,5 +121,28 @@ describe("buildRefinePrompt mit Handrunden", () => {
     const msgs = buildRefinePrompt([{ instruction: "alle foo", draft, source: "model" as const }], "weiter", [], "text");
     expect(msgs.filter((m) => m.role === "assistant")).toHaveLength(1);
     expect(msgs[1].content).toContain("Instruction: alle foo");
+  });
+});
+
+describe("Zielsprache", () => {
+  it("nennt die Sprache im System-Prompt, statt sie erraten zu lassen", () => {
+    const messages = buildInitialPrompt("ersetze foo", "foo bar", "", "de");
+    expect(messages[0].content).toContain("Answer in German.");
+    expect(messages[0].content).not.toContain("the user's language");
+  });
+
+  it("nennt Englisch bei englischer Oberflaeche", () => {
+    const messages = buildInitialPrompt("replace foo", "foo bar", "", "en");
+    expect(messages[0].content).toContain("Answer in English.");
+  });
+
+  it("nennt sie auch beim Nachschaerfen", () => {
+    const messages = buildRefinePrompt([], "enger", [], "foo", "", "de");
+    expect(messages[0].content).toContain("Answer in German.");
+  });
+
+  it("uebersetzt den Sprachcode in einen Namen, den das Modell kennt", () => {
+    expect(languageName("de")).toBe("German");
+    expect(languageName("en")).toBe("English");
   });
 });
