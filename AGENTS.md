@@ -5,7 +5,7 @@ Workspace-weite Standards (comply-or-explain): siehe [`../../_docs/CONVENTIONS.m
 
 **Profil:** `ts-node` · `obsidian-plugin`.
 
-**Stand 2026-07-27: 0.2.0 im Community-Store, 0.3.0 in Arbeit.** Der Kit-first-Befund
+**Stand 2026-07-29: 0.3.0 im Community-Store, 0.4.0 in Arbeit.** Der Kit-first-Befund
 unten beschreibt, was übernommen wurde — er bleibt als Begründungs-Kontext stehen. Für
 neue Vorhaben gilt weiterhin: erst Kit-first-Sondierung, dann `superpowers:brainstorming`
 → Spec → Plan → TDD.
@@ -245,6 +245,19 @@ npm run gate                      # alles zusammen
   darf (die Felder selbst, der Spickzettel). Jede abgeleitete Anzeige (`/muster/flags`,
   Erklärung, Treffer) gehört in `.transmute-outcome`. Beides ist schon einmal
   falsch herum gewesen.
+- **Eine gelockerte Fassung eines Musters darf nie ausgeführt werden, ohne durch
+  `evaluate()` zu gehen.** Die Sonden in `relax.ts` lockern genau eine Bedingung und laufen
+  mit demselben Zeitbudget, derselben Obergrenze und ohne Risiko-Freigabe. Eine Lockerung,
+  die der Guard ablehnt, meldet **nichts** — ein fehlender Befund ist immer harmloser als
+  ein ausgeführtes Muster, das niemand geprüft hat.
+- **`[\b]` ist ein Backspace, kein Wortgrenzen-Anker**, und `[^abc]` beginnt nicht mit
+  einem Zeilenanker. Wer Muster per Text umbaut, muss Zeichenklassen kennen, sonst entsteht
+  ein anderes Muster als das geschriebene.
+- **Ein leerer `content` bei gefülltem `reasoning` ist keine leere Modellantwort**, sondern
+  ein Modell, das sein Token-Budget vollständig ins Denken gesteckt hat (gemessen: 512 von
+  551 Tokens, qwen3.6 unter LM Studio). `suppressParams` schickt `reasoning_effort: "none"`,
+  greift aber nur bei ausgeschaltetem Thinking-Schalter — deshalb hat der Fall eine eigene
+  Meldung (`CompleteResult.thoughtOnly`).
 - **`makeFakeEl()` aus dem Obsidian-Mock kennt kein `querySelector`.** Der Mock ist ein aus
   fünf Plugins gepflegtes Superset und wird nicht lokal erweitert — die Suche liegt in
   `tests/helpers/dom.ts` (`findByClass`/`findAllByTag`).
