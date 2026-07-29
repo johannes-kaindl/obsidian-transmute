@@ -25,6 +25,8 @@ const handlers: PanelHandlers = {
   onAcceptRisk: vi.fn(),
   onCopyRule: vi.fn(),
   onToggleReasoning: vi.fn(),
+  onDiagnose: vi.fn(),
+  onApplyFix: vi.fn(),
 };
 
 const base: Omit<PanelModel, "state"> = {
