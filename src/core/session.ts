@@ -1,11 +1,18 @@
 import { sameMatches } from "./anchor";
-import { buildInitialPrompt, buildRefinePrompt, buildRetryPrompt, sampleForPrompt } from "./llm/prompt";
-import { parseRuleResponse } from "./llm/response";
+import {
+  buildDiagnosePrompt,
+  buildInitialPrompt,
+  buildRefinePrompt,
+  buildRetryPrompt,
+  sampleForPrompt,
+} from "./llm/prompt";
+import { parseDiagnoseResponse, parseRuleResponse } from "./llm/response";
 import type { CompleteResult } from "./llm/client";
 import { compileRule } from "./regex/compile";
 import { evaluate, type EvalOptions } from "./regex/evaluate";
 import { probeRisky } from "./regex/probe";
-import type { ChatMessage, Hit, Round, RuleDraft, RuleProblem, Version } from "./types";
+import { probeRelaxations } from "./regex/relax";
+import type { ChatMessage, Diagnosis, Hit, Round, RuleDraft, RuleProblem, Version } from "./types";
 
 export type SessionState =
   | { phase: "idle" }
@@ -121,6 +128,7 @@ export class TransmuteSession {
         riskAccepted: null,
         problem: null,
         reasoning: null,
+        diagnosis: null,
       },
     ];
     this.set({ phase: "preview", versions: this.versions, active: 0 });
@@ -138,11 +146,12 @@ export class TransmuteSession {
     if (state.phase !== "preview") return;
 
     const active = state.versions[state.active];
-    // Die Erklaerung stammt vom Modell und beschreibt DESSEN Regel. Nach einem Eingriff
-    // von Hand beschreibt sie etwas anderes als das, was laeuft — also faellt sie weg.
-    // Der Modellstand im Verlauf behaelt seine.
+    // Die Erklaerung stammt vom Modell und beschreibt DESSEN Regel; die Diagnose erklaert
+    // das Muster, das sie untersucht hat. Nach einem Eingriff von Hand beschreiben beide
+    // etwas anderes als das, was laeuft — also fallen sie weg. Der Stand im Verlauf
+    // behaelt seine.
     const rule = { ...active.rule, ...patch, explanation: "" };
-    const next = this.evaluateInto({ ...active, rule }, text);
+    const next = this.evaluateInto({ ...active, rule, diagnosis: null }, text);
 
     if (active.source === "manual") {
       this.versions = state.versions.map((version, i) => (i === state.active ? next : version));
@@ -152,7 +161,7 @@ export class TransmuteSession {
 
     // Die Beschriftung im Verlauf kommt aus source, nicht aus instruction — deshalb
     // bleibt die Anweisung leer, statt einen erfundenen Text zu tragen.
-    this.versions = [...state.versions, { ...next, instruction: "", source: "manual", reasoning: null }];
+    this.versions = [...state.versions, { ...next, instruction: "", source: "manual", reasoning: null, diagnosis: null }];
     this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 }, "edit");
   }
 
@@ -326,6 +335,7 @@ export class TransmuteSession {
         riskAccepted: null,
         problem: null,
         reasoning: attempt.reasoning,
+        diagnosis: null,
       },
     ];
     this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 });
@@ -373,6 +383,122 @@ export class TransmuteSession {
     }
 
     return { ok: true, draft: parsed.draft, reasoning: res.reasoning };
+  }
+
+  /**
+   * Warum trifft das nicht?
+   *
+   * Erst messen, dann fragen: Die Lockerungs-Sonden laufen gegen den ganzen Text, das
+   * Modell sieht nur eine Probe. Ohne die Messung koennte es behaupten, im Text stehe
+   * nichts dergleichen, waehrend in Zeile 400 etwas steht — eine falsche Auskunft mit
+   * Autoritaet, und damit die teuerste Fehlerklasse fuer dieses Plugin.
+   *
+   * Kein `phase: "generating"`: Der Ladezustand ersetzt das ganze Panel und naehme den
+   * Stand mit, um den es geht.
+   */
+  async diagnose(text: string): Promise<void> {
+    const state = this.current;
+    if (state.phase !== "preview") return;
+
+    const index = state.active;
+    const version = state.versions[index];
+    // Genau der Fall, fuer den der Knopf da ist — sonst gibt es nichts zu erklaeren.
+    if (version.rule.regex.length === 0 || version.problem !== null || version.hits.length > 0) return;
+
+    const regex = version.rule.regex;
+    this.setDiagnosis(index, { kind: "running" });
+
+    const findings = probeRelaxations(version.rule, text, this.evalOptions());
+    const sample = sampleForPrompt(text, this.options().sampleChars);
+    const res = await this.deps.complete(buildDiagnosePrompt(version.rule, findings, sample, version.instruction));
+
+    if (!res.ok) {
+      const failed: Diagnosis =
+        res.thoughtOnly === true
+          ? { kind: "failed", messageKey: "error.thoughtOnly", args: [] }
+          : { kind: "failed", messageKey: "error.endpoint", args: [res.error] };
+      this.settleDiagnosis(index, regex, failed);
+      return;
+    }
+
+    // Prosa ist hier kein Fehlschlag, sondern die Antwort — deshalb auch kein Retry.
+    const parsed = parseDiagnoseResponse(res.content);
+    if (parsed.text.length === 0) {
+      this.settleDiagnosis(index, regex, { kind: "failed", messageKey: "error.emptyDiagnosis", args: [] });
+      return;
+    }
+    // Ein Vorschlag, der dem Muster gleicht, ist keiner — kleine Modelle geben genau das
+    // nicht treffende Muster zurueck (gemessen bei gemma-4-e2b, 2026-07-30). Ein Knopf,
+    // der nichts aendert, ist schlimmer als keiner: er sieht wie ein Ausweg aus.
+    const fix =
+      parsed.fix !== null && parsed.fix.regex === version.rule.regex && parsed.fix.flags === version.rule.flags
+        ? null
+        : parsed.fix;
+    this.settleDiagnosis(index, regex, { kind: "done", findings, text: parsed.text, fix });
+  }
+
+  /**
+   * Den vorgeschlagenen Reparaturvorschlag uebernehmen.
+   *
+   * Er wird als eigener Stand angehaengt und geht durch `evaluateInto()`, also durch
+   * `evaluate()` — ein Vorschlag mit ungueltigem Muster landet als `problem` im neuen
+   * Stand, genau wie eine Handeingabe. Kein Sonderpfad.
+   *
+   * Voll-Draw: Die Regel-Felder zeigen jetzt ein anderes Muster und muessen neu
+   * gezeichnet werden. Anders als beim Tippen steht der Cursor dabei in keinem Feld —
+   * es wurde ein Knopf gedrueckt.
+   */
+  applyFix(text: string): void {
+    const state = this.current;
+    if (state.phase !== "preview") return;
+
+    const diagnosis = state.versions[state.active].diagnosis;
+    if (diagnosis === null || diagnosis.kind !== "done" || diagnosis.fix === null) return;
+
+    const next = this.evaluateInto(
+      {
+        // Keine Anweisung: Der Verlauf beschriftet den Stand ueber source, nicht ueber
+        // einen erfundenen Text — und ein erfundener Text landete spaeter im Prompt.
+        instruction: "",
+        rule: diagnosis.fix,
+        hits: [],
+        selected: [],
+        timedOutAtLine: null,
+        source: "fix",
+        riskAccepted: null,
+        problem: null,
+        reasoning: null,
+        diagnosis: null,
+      },
+      text,
+    );
+
+    this.versions = [...state.versions, next];
+    this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 });
+  }
+
+  /**
+   * Ein eingetroffenes Ergebnis nur dann ablegen, wenn der Zielstand noch dasselbe Muster
+   * traegt — dieselbe Semantik wie bei der Risiko-Quittung.
+   *
+   * Der Index allein genuegt nicht (nach einer Handbearbeitung zeigt er auf ein anderes
+   * Muster), das Muster allein auch nicht (zwei Staende koennen dasselbe tragen).
+   */
+  private settleDiagnosis(index: number, regex: string, diagnosis: Diagnosis): void {
+    const state = this.current;
+    if (state.phase !== "preview") return;
+    const target = state.versions[index] as Version | undefined;
+    if (target === undefined || target.rule.regex !== regex) return;
+    this.setDiagnosis(index, diagnosis);
+  }
+
+  /** Teil-Draw ("edit"): Die Diagnose liegt im Ergebnis-Container, die Regel-Felder
+   *  duerfen dabei nicht neu gezeichnet werden. */
+  private setDiagnosis(index: number, diagnosis: Diagnosis): void {
+    const state = this.current;
+    if (state.phase !== "preview") return;
+    this.versions = state.versions.map((version, i) => (i === index ? { ...version, diagnosis } : version));
+    this.set({ ...state, versions: this.versions }, "edit");
   }
 
   private set(state: SessionState, reason: ChangeReason = "full"): void {

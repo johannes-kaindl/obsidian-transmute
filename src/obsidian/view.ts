@@ -150,6 +150,16 @@ export class TransmuteView extends ItemView {
         if (this.pinned === null) return;
         this.deps.session().acceptRisk(this.pinned.text);
       },
+      onDiagnose: () => {
+        // Dieselbe gemerkte Notiz wie fuer jede andere Runde — die Diagnose fragt ueber
+        // genau den Text, den die Vorschau zeigt.
+        if (this.pinned === null) return;
+        void this.deps.session().diagnose(this.pinned.text);
+      },
+      onApplyFix: () => {
+        if (this.pinned === null) return;
+        this.deps.session().applyFix(this.pinned.text);
+      },
       onCopyRule: () => {
         void this.copyRule();
       },

@@ -203,3 +203,12 @@ describe("Kanarienvogel vor der Freigabe", () => {
     expect(s.activeVersion?.hits).toHaveLength(1);
   });
 });
+
+it("loescht die Diagnose, sobald am Muster getippt wird", () => {
+  const s = session();
+  s.startManual();
+  // Von aussen gibt es keinen Weg, eine Diagnose zu setzen — hier steht sie stellvertretend
+  // fuer alles, was zu einem Muster gehoert und mit ihm veraltet.
+  s.editRule({ regex: "foo" }, "foo bar");
+  expect(s.activeVersion!.diagnosis).toBeNull();
+});

@@ -25,6 +25,8 @@ const handlers: PanelHandlers = {
   onAcceptRisk: vi.fn(),
   onCopyRule: vi.fn(),
   onToggleReasoning: vi.fn(),
+  onDiagnose: vi.fn(),
+  onApplyFix: vi.fn(),
 };
 
 const hit = (): Hit => ({
@@ -48,6 +50,7 @@ const version = (over: Partial<Version> = {}): Version => ({
   riskAccepted: null,
   problem: null,
   reasoning: null,
+  diagnosis: null,
   ...over,
 });
 
@@ -159,5 +162,75 @@ describe("Regression: was angezeigt wird, ist was laeuft", () => {
     const parts = renderPanel(root, model(version({ rule: { regex: "x", flags: "i", replacement: "y", explanation: "" } })), handlers);
     // compileRule erzwingt g — die Anzeige muss dasselbe tun.
     expect(parts?.outcome.textContent).toContain("/x/gi");
+  });
+});
+
+describe("Diagnose-Block", () => {
+  const draw = (over: Partial<Version>) => {
+    const root = makeFakeEl();
+    renderPanel(root, model(version(over)), handlers);
+    return root;
+  };
+
+  /** Ein Stand, der gesucht und nichts gefunden hat — die Lage, fuer die der Knopf da ist. */
+  const nothingFound: Partial<Version> = {
+    rule: { regex: "^foo", flags: "", replacement: "X", explanation: "" },
+    hits: [],
+  };
+
+  it("bietet den Knopf an, wenn nichts getroffen wurde", () => {
+    expect(findByClass(draw(nothingFound), "transmute-why")).not.toBeNull();
+  });
+
+  it("bietet ihn nicht an, wenn das Muster leer ist", () => {
+    const empty = { rule: { regex: "", flags: "", replacement: "", explanation: "" }, hits: [] };
+    expect(findByClass(draw(empty), "transmute-why")).toBeNull();
+  });
+
+  it("bietet ihn nicht an, wenn es Treffer gibt", () => {
+    const rule = { regex: "foo", flags: "", replacement: "bar", explanation: "" };
+    expect(findByClass(draw({ rule, hits: [hit()], selected: [true] }), "transmute-why")).toBeNull();
+  });
+
+  it("zeigt die gemessenen Befunde vor der Modell-Prosa", () => {
+    const root = draw({
+      ...nothingFound,
+      diagnosis: {
+        kind: "done",
+        findings: [{ kind: "no-anchors", line: 4 }],
+        text: "Der Anker passt nicht.",
+        fix: null,
+      },
+    });
+    const findings = findAllByClass<{ textContent: string }>(root, "transmute-finding");
+    expect(findings).toHaveLength(1);
+    // Zeilennummern werden 1-basiert angezeigt.
+    expect(findings[0].textContent).toContain("5");
+  });
+
+  it("zeigt keinen Uebernehmen-Knopf ohne Vorschlag", () => {
+    const root = draw({
+      ...nothingFound,
+      diagnosis: { kind: "done", findings: [], text: "Hier steht nichts dergleichen.", fix: null },
+    });
+    expect(findByClass(root, "transmute-apply-fix")).toBeNull();
+  });
+
+  it("zeigt ihn, sobald es einen gibt", () => {
+    const root = draw({
+      ...nothingFound,
+      diagnosis: {
+        kind: "done",
+        findings: [],
+        text: "So passt es.",
+        fix: { regex: "foo", flags: "", replacement: "X", explanation: "" },
+      },
+    });
+    expect(findByClass(root, "transmute-apply-fix")).not.toBeNull();
+  });
+
+  it("zeigt den Laufzustand statt des Knopfes", () => {
+    const root = draw({ ...nothingFound, diagnosis: { kind: "running" } });
+    expect(findByClass(root, "transmute-why")).toBeNull();
   });
 });

@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **"Why doesn't this match?"** — when a pattern finds nothing, a button explains why and
+  offers a correction you can accept with one click. Before asking the model, the plugin
+  measures against the **whole** note whether the same pattern would match with one
+  condition relaxed — ignoring case, dropping the anchors, dropping word boundaries,
+  allowing flexible whitespace. Those findings go to the model as facts, with line
+  numbers. If none of them match, "there is nothing of the kind in this text" is a
+  measurement rather than a guess. The model is explicitly allowed to suggest nothing,
+  because a tool that always invents a fix is a tool that invents.
+
+### Changed
+
+- The language of the interface is now stated to the model instead of left for it to
+  infer. This also applies to the explanation of a generated rule.
+
+### Fixed
+
+- A reasoning model that spends its entire token budget on thinking is now reported as
+  such, instead of showing the generic endpoint error.
+
 ## [0.3.0] — 2026-07-27
 
 ### Added

@@ -47,6 +47,8 @@ export type PanelHandlers = {
   onAcceptRisk(): void;
   onCopyRule(): void;
   onToggleReasoning(): void;
+  onDiagnose(): void;
+  onApplyFix(): void;
 };
 
 type El = HTMLElement;
@@ -379,6 +381,49 @@ function renderActions(parent: El, version: Version, handlers: PanelHandlers): v
 }
 
 /**
+ * Der Diagnose-Block unter der Null-Treffer-Meldung.
+ *
+ * Das Gemessene steht VOR der Modell-Prosa: Ein Befund aus dem ganzen Text traegt weiter
+ * als ein Satz, der auf einer Textprobe fusst.
+ */
+function renderDiagnosis(parent: El, version: Version, handlers: PanelHandlers): void {
+  // Genau die Lage, in der die Frage sinnvoll ist. Ein leeres Muster hat noch nichts
+  // gesucht; bei einem Problem steht der Grund schon da.
+  if (version.problem !== null || version.rule.regex.length === 0 || version.hits.length > 0) return;
+
+  const box = parent.createDiv({ cls: "transmute-diagnosis" });
+  const diagnosis = version.diagnosis;
+
+  if (diagnosis === null) {
+    const ask = box.createEl("button", { text: t("view.whyNoMatch"), cls: "transmute-link transmute-why" });
+    ask.addEventListener("click", () => handlers.onDiagnose());
+    return;
+  }
+  if (diagnosis.kind === "running") {
+    box.createDiv({ text: t("view.diagnosing"), cls: "transmute-empty" });
+    return;
+  }
+  if (diagnosis.kind === "failed") {
+    box.createDiv({ text: t(diagnosis.messageKey, ...diagnosis.args), cls: "transmute-warning" });
+    return;
+  }
+
+  for (const finding of diagnosis.findings) {
+    const row = box.createDiv({ cls: "transmute-finding" });
+    row.createSpan({ text: t(`probe.${finding.kind}`) });
+    if (finding.line !== null) row.createSpan({ text: ` · ${t("view.line", finding.line + 1)}` });
+  }
+  box.createDiv({ text: diagnosis.text, cls: "transmute-explanation" });
+
+  if (diagnosis.fix === null) {
+    box.createDiv({ text: t("view.noFix"), cls: "transmute-empty" });
+    return;
+  }
+  const use = box.createEl("button", { text: t("view.applyFix"), cls: "transmute-apply-fix" });
+  use.addEventListener("click", () => handlers.onApplyFix());
+}
+
+/**
  * Verlauf und Ergebnis neu zeichnen, ohne die Regel-Felder anzufassen.
  *
  * Das ist der Weg fuer die Live-Vorschau: alles ueber und unter dem Formular darf sich
@@ -399,6 +444,7 @@ export function renderOutcome(parts: PanelParts, model: PanelModel, handlers: Pa
   renderExplanation(parts.outcome, version);
   renderReasoning(parts.outcome, version, model, handlers);
   renderHits(parts.outcome, version, handlers);
+  renderDiagnosis(parts.outcome, version, handlers);
   renderRefineRow(parts.outcome, model, handlers);
   renderActions(parts.outcome, version, handlers);
 }

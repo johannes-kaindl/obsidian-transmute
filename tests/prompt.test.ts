@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildInitialPrompt, buildRefinePrompt, buildRetryPrompt, sampleForPrompt, sampleHits } from "../src/core/llm/prompt";
+import {
+  buildDiagnosePrompt,
+  buildInitialPrompt,
+  buildRefinePrompt,
+  buildRetryPrompt,
+  languageName,
+  sampleForPrompt,
+  sampleHits,
+} from "../src/core/llm/prompt";
 import type { Hit } from "../src/core/types";
 
 const hit = (before: string, after: string): Hit => ({
@@ -114,5 +122,99 @@ describe("buildRefinePrompt mit Handrunden", () => {
     const msgs = buildRefinePrompt([{ instruction: "alle foo", draft, source: "model" as const }], "weiter", [], "text");
     expect(msgs.filter((m) => m.role === "assistant")).toHaveLength(1);
     expect(msgs[1].content).toContain("Instruction: alle foo");
+  });
+});
+
+describe("Zielsprache", () => {
+  it("nennt die Sprache im System-Prompt, statt sie erraten zu lassen", () => {
+    const messages = buildInitialPrompt("ersetze foo", "foo bar", "", "de");
+    expect(messages[0].content).toContain("Answer in German.");
+    expect(messages[0].content).not.toContain("the user's language");
+  });
+
+  it("nennt Englisch bei englischer Oberflaeche", () => {
+    const messages = buildInitialPrompt("replace foo", "foo bar", "", "en");
+    expect(messages[0].content).toContain("Answer in English.");
+  });
+
+  it("nennt sie auch beim Nachschaerfen", () => {
+    const messages = buildRefinePrompt([], "enger", [], "foo", "", "de");
+    expect(messages[0].content).toContain("Answer in German.");
+  });
+
+  it("uebersetzt den Sprachcode in einen Namen, den das Modell kennt", () => {
+    expect(languageName("de")).toBe("German");
+    expect(languageName("en")).toBe("English");
+  });
+});
+
+describe("buildDiagnosePrompt", () => {
+  const rule = { regex: "^foo", flags: "", replacement: "bar", explanation: "" };
+
+  it("erlaubt dem Modell ausdruecklich, keine Reparatur vorzuschlagen", () => {
+    const messages = buildDiagnosePrompt(rule, [], "text", "", "de");
+    expect(messages[0].content).toContain("null");
+    expect(messages[0].content).toContain("Answer in German.");
+  });
+
+  it("stellt die gemessenen Befunde voran, mit Zeilennummer", () => {
+    const messages = buildDiagnosePrompt(rule, [{ kind: "no-anchors", line: 11 }], "text", "", "en");
+    const user = messages[1].content;
+    expect(user).toContain("line 12");
+    expect(user).toContain("anchors");
+  });
+
+  it("sagt es ausdruecklich, wenn keine Lockerung geholfen hat", () => {
+    const messages = buildDiagnosePrompt(rule, [], "text", "", "en");
+    expect(messages[1].content).toContain("None of these relaxations");
+  });
+
+  it("nimmt die Anweisung mit, wenn es eine gibt", () => {
+    const messages = buildDiagnosePrompt(rule, [], "text", "ersetze foo", "en");
+    expect(messages[1].content).toContain("ersetze foo");
+  });
+
+  it("laesst die Anweisungszeile weg, wenn von Hand getippt wurde", () => {
+    const messages = buildDiagnosePrompt(rule, [], "text", "", "en");
+    expect(messages[1].content).not.toContain("Instruction:");
+  });
+
+  it("schickt den Spickzettel nicht mit", () => {
+    // Regex ist Allgemeinwissen; ein kurzer Prompt ist der, bei dem kleine Modelle
+    // noch das JSON treffen.
+    const messages = buildDiagnosePrompt(rule, [], "text", "", "en");
+    expect(messages[0].content).not.toContain("$&");
+  });
+});
+
+it("sagt dem Modell die Wahrheit ueber einen uebernommenen Vorschlag", () => {
+  const rounds = [
+    { instruction: "", draft: { regex: "foo", flags: "", replacement: "bar", explanation: "" }, source: "fix" as const },
+  ];
+  const messages = buildRefinePrompt(rounds, "enger", [], "text", "", "en");
+  const accepted = messages.find((m) => m.content.includes("accepted"));
+  expect(accepted).toBeDefined();
+  expect(messages.some((m) => m.content.includes("by hand"))).toBe(false);
+});
+
+describe("Diagnose-Prompt nennt den Ausfuehrungsmodus", () => {
+  // Gefunden im Lab-Lauf gegen qwen3.6-35b (2026-07-30): das Modell erklaerte ^ als
+  // "absoluter Anfang des gesamten Textes, der Text beginnt mit YAML-Frontmatter" —
+  // inhaltlich falsch, weil runRule zeilenweise ausfuehrt. Wer an diesem Plugin Regex
+  // lernt, lernt es dann falsch.
+  it("sagt beim zeilenweisen Muster, dass Anker pro Zeile greifen", () => {
+    const rule = { regex: "^hund", flags: "", replacement: "x", explanation: "" };
+    const sys = buildDiagnosePrompt(rule, [], "text", "", "de")[0].content;
+    expect(sys).toContain("line by line");
+    expect(sys).toContain("each line");
+  });
+
+  it("sagt beim Volltext-Muster das Gegenteil", () => {
+    // s-, m-Flag oder \n im Muster schalten runRule auf den Volltext-Pfad — dort waere
+    // "pro Zeile" die falsche Auskunft.
+    const rule = { regex: "^hund", flags: "s", replacement: "x", explanation: "" };
+    const sys = buildDiagnosePrompt(rule, [], "text", "", "de")[0].content;
+    expect(sys).toContain("whole text at once");
+    expect(sys).not.toContain("line by line");
   });
 });
