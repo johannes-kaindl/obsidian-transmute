@@ -1,11 +1,18 @@
 import { sameMatches } from "./anchor";
-import { buildInitialPrompt, buildRefinePrompt, buildRetryPrompt, sampleForPrompt } from "./llm/prompt";
-import { parseRuleResponse } from "./llm/response";
+import {
+  buildDiagnosePrompt,
+  buildInitialPrompt,
+  buildRefinePrompt,
+  buildRetryPrompt,
+  sampleForPrompt,
+} from "./llm/prompt";
+import { parseDiagnoseResponse, parseRuleResponse } from "./llm/response";
 import type { CompleteResult } from "./llm/client";
 import { compileRule } from "./regex/compile";
 import { evaluate, type EvalOptions } from "./regex/evaluate";
 import { probeRisky } from "./regex/probe";
-import type { ChatMessage, Hit, Round, RuleDraft, RuleProblem, Version } from "./types";
+import { probeRelaxations } from "./regex/relax";
+import type { ChatMessage, Diagnosis, Hit, Round, RuleDraft, RuleProblem, Version } from "./types";
 
 export type SessionState =
   | { phase: "idle" }
@@ -376,6 +383,75 @@ export class TransmuteSession {
     }
 
     return { ok: true, draft: parsed.draft, reasoning: res.reasoning };
+  }
+
+  /**
+   * Warum trifft das nicht?
+   *
+   * Erst messen, dann fragen: Die Lockerungs-Sonden laufen gegen den ganzen Text, das
+   * Modell sieht nur eine Probe. Ohne die Messung koennte es behaupten, im Text stehe
+   * nichts dergleichen, waehrend in Zeile 400 etwas steht — eine falsche Auskunft mit
+   * Autoritaet, und damit die teuerste Fehlerklasse fuer dieses Plugin.
+   *
+   * Kein `phase: "generating"`: Der Ladezustand ersetzt das ganze Panel und naehme den
+   * Stand mit, um den es geht.
+   */
+  async diagnose(text: string): Promise<void> {
+    const state = this.current;
+    if (state.phase !== "preview") return;
+
+    const index = state.active;
+    const version = state.versions[index];
+    // Genau der Fall, fuer den der Knopf da ist — sonst gibt es nichts zu erklaeren.
+    if (version.rule.regex.length === 0 || version.problem !== null || version.hits.length > 0) return;
+
+    const regex = version.rule.regex;
+    this.setDiagnosis(index, { kind: "running" });
+
+    const findings = probeRelaxations(version.rule, text, this.evalOptions());
+    const sample = sampleForPrompt(text, this.options().sampleChars);
+    const res = await this.deps.complete(buildDiagnosePrompt(version.rule, findings, sample, version.instruction));
+
+    if (!res.ok) {
+      const failed: Diagnosis =
+        res.thoughtOnly === true
+          ? { kind: "failed", messageKey: "error.thoughtOnly", args: [] }
+          : { kind: "failed", messageKey: "error.endpoint", args: [res.error] };
+      this.settleDiagnosis(index, regex, failed);
+      return;
+    }
+
+    // Prosa ist hier kein Fehlschlag, sondern die Antwort — deshalb auch kein Retry.
+    const parsed = parseDiagnoseResponse(res.content);
+    if (parsed.text.length === 0) {
+      this.settleDiagnosis(index, regex, { kind: "failed", messageKey: "error.emptyDiagnosis", args: [] });
+      return;
+    }
+    this.settleDiagnosis(index, regex, { kind: "done", findings, text: parsed.text, fix: parsed.fix });
+  }
+
+  /**
+   * Ein eingetroffenes Ergebnis nur dann ablegen, wenn der Zielstand noch dasselbe Muster
+   * traegt — dieselbe Semantik wie bei der Risiko-Quittung.
+   *
+   * Der Index allein genuegt nicht (nach einer Handbearbeitung zeigt er auf ein anderes
+   * Muster), das Muster allein auch nicht (zwei Staende koennen dasselbe tragen).
+   */
+  private settleDiagnosis(index: number, regex: string, diagnosis: Diagnosis): void {
+    const state = this.current;
+    if (state.phase !== "preview") return;
+    const target = state.versions[index] as Version | undefined;
+    if (target === undefined || target.rule.regex !== regex) return;
+    this.setDiagnosis(index, diagnosis);
+  }
+
+  /** Teil-Draw ("edit"): Die Diagnose liegt im Ergebnis-Container, die Regel-Felder
+   *  duerfen dabei nicht neu gezeichnet werden. */
+  private setDiagnosis(index: number, diagnosis: Diagnosis): void {
+    const state = this.current;
+    if (state.phase !== "preview") return;
+    this.versions = state.versions.map((version, i) => (i === index ? { ...version, diagnosis } : version));
+    this.set({ ...state, versions: this.versions }, "edit");
   }
 
   private set(state: SessionState, reason: ChangeReason = "full"): void {
