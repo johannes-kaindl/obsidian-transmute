@@ -63,3 +63,21 @@ describe("extractModelIds", () => {
     expect(extractModelIds({ data: [{ noid: 1 }] })).toEqual([]);
   });
 });
+
+describe("leerer Content", () => {
+  const body = (message: Record<string, unknown>) => JSON.stringify({ choices: [{ message }] });
+
+  it("meldet gesondert, wenn nur nachgedacht wurde", async () => {
+    const client = new RuleClient(transportWith(body({ content: "", reasoning_content: "viel gedacht" })), config);
+    const res = await client.complete([{ role: "user", content: "x" }]);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.thoughtOnly).toBe(true);
+  });
+
+  it("bleibt bei der Endpunkt-Meldung, wenn auch kein Gedankengang da ist", async () => {
+    const client = new RuleClient(transportWith(body({ content: "" })), config);
+    const res = await client.complete([{ role: "user", content: "x" }]);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.thoughtOnly).toBeUndefined();
+  });
+});

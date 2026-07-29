@@ -13,7 +13,11 @@ export interface JsonTransport {
 
 export type CompleteResult =
   | { ok: true; content: string; reasoning: string | null }
-  | { ok: false; error: string };
+  /** thoughtOnly: Der Aufruf gelang, aber das Modell hat sein Token-Budget vollstaendig
+   *  ins Denken gesteckt — gemessen bei qwen3.6 unter LM Studio (512 von 551 Tokens).
+   *  Das ist die tueckischere Fehlerklasse als ein toter Port: kein Fehlerstatus, nur
+   *  ein leerer String, der sich als leere Modellantwort tarnt. */
+  | { ok: false; error: string; thoughtOnly?: boolean };
 
 export type ClientConfig = {
   endpoint: string;
@@ -84,6 +88,8 @@ export class RuleClient {
 
     const content = extractChatContent(parsed);
     if (content === null || content.trim().length === 0) {
+      const reasoning = extractReasoning(parsed, content ?? "");
+      if (reasoning !== null) return { ok: false, error: reasoning.slice(0, 300), thoughtOnly: true };
       return { ok: false, error: errorMessage(res.text) };
     }
     return { ok: true, content, reasoning: extractReasoning(parsed, content) };
