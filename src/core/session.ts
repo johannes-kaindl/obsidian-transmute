@@ -427,7 +427,14 @@ export class TransmuteSession {
       this.settleDiagnosis(index, regex, { kind: "failed", messageKey: "error.emptyDiagnosis", args: [] });
       return;
     }
-    this.settleDiagnosis(index, regex, { kind: "done", findings, text: parsed.text, fix: parsed.fix });
+    // Ein Vorschlag, der dem Muster gleicht, ist keiner — kleine Modelle geben genau das
+    // nicht treffende Muster zurueck (gemessen bei gemma-4-e2b, 2026-07-30). Ein Knopf,
+    // der nichts aendert, ist schlimmer als keiner: er sieht wie ein Ausweg aus.
+    const fix =
+      parsed.fix !== null && parsed.fix.regex === version.rule.regex && parsed.fix.flags === version.rule.flags
+        ? null
+        : parsed.fix;
+    this.settleDiagnosis(index, regex, { kind: "done", findings, text: parsed.text, fix });
   }
 
   /**

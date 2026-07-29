@@ -147,3 +147,20 @@ describe("applyFix", () => {
     if (session.state.phase === "preview") expect(session.state.versions).toHaveLength(1);
   });
 });
+
+it("verwirft einen Vorschlag, der dem Muster gleicht", async () => {
+  // gemma-4-e2b hat als Reparatur genau das nicht treffende Muster zurueckgegeben
+  // (Lab-Lauf 2026-07-30). Ein Knopf, der nichts aendert, ist schlimmer als keiner:
+  // er sieht wie ein Ausweg aus.
+  const complete = vi.fn().mockResolvedValue({
+    ok: true,
+    reasoning: null,
+    content: JSON.stringify({ diagnosis: "Die Wortgrenzen passen nicht.", fix: { regex: "^foo", flags: "" } }),
+  });
+  const session = manualSession(complete, "^foo", "nichts");
+  await session.diagnose("nichts");
+
+  const diagnosis = session.activeVersion!.diagnosis!;
+  expect(diagnosis.kind).toBe("done");
+  if (diagnosis.kind === "done") expect(diagnosis.fix).toBeNull();
+});
