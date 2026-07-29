@@ -196,3 +196,25 @@ it("sagt dem Modell die Wahrheit ueber einen uebernommenen Vorschlag", () => {
   expect(accepted).toBeDefined();
   expect(messages.some((m) => m.content.includes("by hand"))).toBe(false);
 });
+
+describe("Diagnose-Prompt nennt den Ausfuehrungsmodus", () => {
+  // Gefunden im Lab-Lauf gegen qwen3.6-35b (2026-07-30): das Modell erklaerte ^ als
+  // "absoluter Anfang des gesamten Textes, der Text beginnt mit YAML-Frontmatter" —
+  // inhaltlich falsch, weil runRule zeilenweise ausfuehrt. Wer an diesem Plugin Regex
+  // lernt, lernt es dann falsch.
+  it("sagt beim zeilenweisen Muster, dass Anker pro Zeile greifen", () => {
+    const rule = { regex: "^hund", flags: "", replacement: "x", explanation: "" };
+    const sys = buildDiagnosePrompt(rule, [], "text", "", "de")[0].content;
+    expect(sys).toContain("line by line");
+    expect(sys).toContain("each line");
+  });
+
+  it("sagt beim Volltext-Muster das Gegenteil", () => {
+    // s-, m-Flag oder \n im Muster schalten runRule auf den Volltext-Pfad — dort waere
+    // "pro Zeile" die falsche Auskunft.
+    const rule = { regex: "^hund", flags: "s", replacement: "x", explanation: "" };
+    const sys = buildDiagnosePrompt(rule, [], "text", "", "de")[0].content;
+    expect(sys).toContain("whole text at once");
+    expect(sys).not.toContain("line by line");
+  });
+});

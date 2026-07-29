@@ -1,4 +1,5 @@
 import { getLang, type Lang } from "../../vendor/kit/i18n";
+import { isMultilinePattern } from "../regex/compile";
 import type { ProbeFinding, ProbeKind } from "../regex/relax";
 import type { ChatMessage, Hit, Round, RuleDraft } from "../types";
 
@@ -160,6 +161,23 @@ function findingLines(findings: ProbeFinding[]): string[] {
   ];
 }
 
+/**
+ * Wie das Muster wirklich laeuft — das Modell kann es nicht wissen.
+ *
+ * `runRule` geht zeilenweise vor; `^` und `$` verankern deshalb pro **Zeile**, nicht am
+ * Dokument. Ohne diesen Satz erklaert ein Modell den Anker als Textanfang und begruendet
+ * das Nicht-Treffen mit dem YAML-Frontmatter (beobachtet bei qwen3.6-35b, 2026-07-30) —
+ * eine Erklaerung, die plausibel klingt und falsch ist. Wer an diesem Plugin Regex lernt,
+ * lernt es dann falsch.
+ *
+ * Bei s-/m-Flag oder \n im Muster laeuft der Volltext-Pfad, und dann gilt das Gegenteil.
+ */
+function executionMode(rule: RuleDraft): string {
+  return isMultilinePattern(rule)
+    ? "This pattern runs against the whole text at once, so ^ and $ anchor to the whole text."
+    : "The pattern is executed line by line, so ^ and $ anchor to the start and end of each line — never to the beginning of the document. Do not explain a failure by what stands at the top of the file.";
+}
+
 const DIAGNOSE_RULES = [
   "Answer with a single JSON object and nothing else. No code fence.",
   "Fields:",
@@ -195,6 +213,8 @@ export function buildDiagnosePrompt(
     "and suggest a correction when one is warranted.",
     "",
     `Answer in ${languageName(lang)}.`,
+    "",
+    executionMode(rule),
     "",
     ...DIAGNOSE_RULES,
   ].join("\n");
