@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractChatContent, extractReasoning, parseRuleResponse } from "../src/core/llm/response";
+import { extractChatContent, extractReasoning, parseDiagnoseResponse, parseRuleResponse } from "../src/core/llm/response";
 
 const valid = '{"regex":"\\\\d+","flags":"g","replacement":"N","explanation":"Zahlen"}';
 
@@ -83,5 +83,41 @@ describe("extractReasoning", () => {
 
   it("kommt mit einer kaputten Antwort zurecht", () => {
     expect(extractReasoning(null, "{}")).toBeNull();
+  });
+});
+
+describe("parseDiagnoseResponse", () => {
+  it("liest Diagnose und Reparatur aus JSON", () => {
+    const raw = JSON.stringify({ diagnosis: "Der Anker passt nicht.", fix: { regex: "foo", flags: "i", replacement: "bar" } });
+    const res = parseDiagnoseResponse(raw);
+    expect(res.text).toBe("Der Anker passt nicht.");
+    expect(res.fix).toEqual({ regex: "foo", flags: "i", replacement: "bar", explanation: "" });
+  });
+
+  it("nimmt JSON auch aus einem Code-Fence", () => {
+    const res = parseDiagnoseResponse('```json\n{"diagnosis":"X","fix":null}\n```');
+    expect(res.text).toBe("X");
+    expect(res.fix).toBeNull();
+  });
+
+  it("nimmt Prosa als Antwort, statt sie als Fehler zu behandeln", () => {
+    // Der Regel-Pfad braucht maschinenlesbares JSON; hier IST die Prosa das Ergebnis.
+    const res = parseDiagnoseResponse("Dein Muster verlangt einen Bindestrich, im Text stehen Punkte.");
+    expect(res.text).toBe("Dein Muster verlangt einen Bindestrich, im Text stehen Punkte.");
+    expect(res.fix).toBeNull();
+  });
+
+  it("trennt den Gedankengang ab", () => {
+    const res = parseDiagnoseResponse("<think>hmm</think>Der Text enthaelt nichts dergleichen.");
+    expect(res.text).toBe("Der Text enthaelt nichts dergleichen.");
+  });
+
+  it("liefert leeren Text, wenn nichts uebrig bleibt", () => {
+    expect(parseDiagnoseResponse("<think>nur gedacht</think>").text).toBe("");
+  });
+
+  it("verwirft eine Reparatur ohne Muster", () => {
+    const raw = JSON.stringify({ diagnosis: "X", fix: { flags: "i" } });
+    expect(parseDiagnoseResponse(raw).fix).toBeNull();
   });
 });

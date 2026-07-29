@@ -1,5 +1,6 @@
 import { getLang, type Lang } from "../../vendor/kit/i18n";
-import type { ChatMessage, Hit, Round } from "../types";
+import type { ProbeFinding, ProbeKind } from "../regex/relax";
+import type { ChatMessage, Hit, Round, RuleDraft } from "../types";
 
 /** Sprachname, wie ein Modell ihn versteht — ein ISO-Code ist dafuer zu leise. */
 export function languageName(lang: Lang): string {
@@ -120,5 +121,97 @@ export function buildRetryPrompt(previous: ChatMessage[], badAnswer: string, pro
     ...previous,
     { role: "assistant", content: badAnswer },
     { role: "user", content: `That did not work: ${problem}. Answer again with a single valid JSON object and nothing else.` },
+  ];
+}
+
+/**
+ * Die gemessenen Befunde in Saetze, die das Modell lesen kann.
+ *
+ * Bewusst englisch und bewusst als Tatsachenbehauptung: Das ist kein UI-Text, sondern
+ * Beweismaterial. Die Uebersetzung fuer die Anzeige liegt in den i18n-Strings.
+ */
+const FINDING_TEXT: Record<ProbeKind, string> = {
+  "ignore-case": "the same pattern matches when upper- and lowercase are ignored",
+  "no-anchors": "the same pattern matches once the ^ / $ anchors are removed",
+  "no-boundaries": "the same pattern matches once the \\b word boundaries are removed",
+  "loose-space": "the same pattern matches when a literal space may be several whitespace characters",
+};
+
+function findingLines(findings: ProbeFinding[]): string[] {
+  if (findings.length === 0) {
+    return [
+      "I ran the pattern again with each of these conditions relaxed, one at a time,",
+      "against the WHOLE text: ignore case, drop anchors, drop word boundaries,",
+      "allow flexible whitespace. None of these relaxations produced a match either.",
+    ];
+  }
+  return [
+    "I measured this against the WHOLE text (not just the sample below):",
+    ...findings.map((finding) => {
+      const where = finding.line === null ? "many times" : `in line ${finding.line + 1}`;
+      return `- ${FINDING_TEXT[finding.kind]} — ${where}.`;
+    }),
+  ];
+}
+
+const DIAGNOSE_RULES = [
+  "Answer with a single JSON object and nothing else. No code fence.",
+  "Fields:",
+  '  "diagnosis" — one to three short sentences saying why the pattern finds nothing.',
+  '  "fix"       — a corrected rule as {"regex": "…", "flags": "…", "replacement": "…"},',
+  "                or null.",
+  "",
+  "Rules:",
+  '- Use null for "fix" when the text simply contains nothing of the kind. Do NOT invent',
+  "  a pattern in that case — saying so plainly is the more useful answer.",
+  "- The measurements above are facts. Do not contradict them.",
+  "- Be concrete: name the character or condition that fails, not the concept.",
+  "- Never use nested quantifiers such as (a+)+ — they can hang the editor.",
+];
+
+/**
+ * Warum ein Muster nichts trifft — mit dem Gemessenen als Grundlage.
+ *
+ * Das Modell sieht den Text nur als Probe. Die Sonden-Befunde stammen dagegen vom ganzen
+ * Text; sie stehen deshalb VOR der Probe im Prompt und sind ausdruecklich als Tatsachen
+ * ausgewiesen. Ohne sie koennte das Modell behaupten, im Text stehe nichts dergleichen,
+ * waehrend in Zeile 400 etwas steht.
+ */
+export function buildDiagnosePrompt(
+  rule: RuleDraft,
+  findings: ProbeFinding[],
+  sample: string,
+  instruction: string,
+  lang: Lang = getLang(),
+): ChatMessage[] {
+  const system = [
+    "You explain why a JavaScript regular expression found no matches in a text,",
+    "and suggest a correction when one is warranted.",
+    "",
+    `Answer in ${languageName(lang)}.`,
+    "",
+    ...DIAGNOSE_RULES,
+  ].join("\n");
+
+  const intent = instruction.trim().length === 0 ? [] : [`The user asked for: ${instruction.trim()}`, ""];
+
+  return [
+    { role: "system", content: system },
+    {
+      role: "user",
+      content: [
+        `Pattern: /${rule.regex}/${rule.flags}`,
+        `Replacement: ${rule.replacement}`,
+        "It found nothing.",
+        "",
+        ...intent,
+        ...findingLines(findings),
+        "",
+        "Sample of the text:",
+        "---",
+        sample,
+        "---",
+      ].join("\n"),
+    },
   ];
 }

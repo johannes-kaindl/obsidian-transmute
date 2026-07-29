@@ -108,3 +108,44 @@ export function parseRuleResponse(raw: string): ParseResult {
     },
   };
 }
+
+export type DiagnoseResult = { text: string; fix: RuleDraft | null };
+
+function readFix(value: unknown): RuleDraft | null {
+  if (typeof value !== "object" || value === null) return null;
+  const obj = value as Record<string, unknown>;
+  if (typeof obj.regex !== "string" || obj.regex.length === 0) return null;
+  return {
+    regex: obj.regex,
+    flags: typeof obj.flags === "string" ? obj.flags : "",
+    replacement: typeof obj.replacement === "string" ? obj.replacement : "",
+    // Die Erklaerung zur Reparatur IST die Diagnose — ein zweites Feld waere die
+    // gleiche Aussage an zwei Orten, die auseinanderlaufen koennen.
+    explanation: "",
+  };
+}
+
+/**
+ * Die Antwort auf die Diagnose-Frage auswerten.
+ *
+ * Anders als beim Regel-Pfad ist fehlendes JSON hier **kein** Fehlschlag: Antwortet das
+ * Modell in Prosa, ist die Prosa genau das, wonach gefragt war. Deshalb auch kein Retry —
+ * ein Netz-Aufruf pro Klick.
+ */
+export function parseDiagnoseResponse(raw: string): DiagnoseResult {
+  const clean = stripThink(raw).trim();
+  const candidate = firstJsonObject(stripFence(clean));
+  if (candidate !== null) {
+    try {
+      const parsed: unknown = JSON.parse(candidate);
+      if (typeof parsed === "object" && parsed !== null) {
+        const obj = parsed as Record<string, unknown>;
+        const text = typeof obj.diagnosis === "string" ? obj.diagnosis.trim() : "";
+        if (text.length > 0) return { text, fix: readFix(obj.fix) };
+      }
+    } catch {
+      // Kaputtes JSON ist hier kein Grund zu scheitern — der Rohtext bleibt brauchbar.
+    }
+  }
+  return { text: clean, fix: null };
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildDiagnosePrompt,
   buildInitialPrompt,
   buildRefinePrompt,
   buildRetryPrompt,
@@ -144,5 +145,44 @@ describe("Zielsprache", () => {
   it("uebersetzt den Sprachcode in einen Namen, den das Modell kennt", () => {
     expect(languageName("de")).toBe("German");
     expect(languageName("en")).toBe("English");
+  });
+});
+
+describe("buildDiagnosePrompt", () => {
+  const rule = { regex: "^foo", flags: "", replacement: "bar", explanation: "" };
+
+  it("erlaubt dem Modell ausdruecklich, keine Reparatur vorzuschlagen", () => {
+    const messages = buildDiagnosePrompt(rule, [], "text", "", "de");
+    expect(messages[0].content).toContain("null");
+    expect(messages[0].content).toContain("Answer in German.");
+  });
+
+  it("stellt die gemessenen Befunde voran, mit Zeilennummer", () => {
+    const messages = buildDiagnosePrompt(rule, [{ kind: "no-anchors", line: 11 }], "text", "", "en");
+    const user = messages[1].content;
+    expect(user).toContain("line 12");
+    expect(user).toContain("anchors");
+  });
+
+  it("sagt es ausdruecklich, wenn keine Lockerung geholfen hat", () => {
+    const messages = buildDiagnosePrompt(rule, [], "text", "", "en");
+    expect(messages[1].content).toContain("None of these relaxations");
+  });
+
+  it("nimmt die Anweisung mit, wenn es eine gibt", () => {
+    const messages = buildDiagnosePrompt(rule, [], "text", "ersetze foo", "en");
+    expect(messages[1].content).toContain("ersetze foo");
+  });
+
+  it("laesst die Anweisungszeile weg, wenn von Hand getippt wurde", () => {
+    const messages = buildDiagnosePrompt(rule, [], "text", "", "en");
+    expect(messages[1].content).not.toContain("Instruction:");
+  });
+
+  it("schickt den Spickzettel nicht mit", () => {
+    // Regex ist Allgemeinwissen; ein kurzer Prompt ist der, bei dem kleine Modelle
+    // noch das JSON treffen.
+    const messages = buildDiagnosePrompt(rule, [], "text", "", "en");
+    expect(messages[0].content).not.toContain("$&");
   });
 });
