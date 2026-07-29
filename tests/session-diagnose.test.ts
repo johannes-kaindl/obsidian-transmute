@@ -97,3 +97,53 @@ describe("diagnose", () => {
     expect(session.activeVersion!.diagnosis).toBeNull();
   });
 });
+
+describe("applyFix", () => {
+  const withFix = async () => {
+    const complete = vi.fn().mockResolvedValue({
+      ok: true,
+      reasoning: null,
+      content: JSON.stringify({
+        diagnosis: "Der Anker passt nicht.",
+        fix: { regex: "foo", flags: "", replacement: "X" },
+      }),
+    });
+    const session = manualSession(complete, "^foo", "bar foo");
+    await session.diagnose("bar foo");
+    return session;
+  };
+
+  it("haengt den Vorschlag als eigenen Stand an und fuehrt ihn aus", async () => {
+    const session = await withFix();
+    const before = session.state.phase === "preview" ? session.state.versions.length : 0;
+    session.applyFix("bar foo");
+
+    expect(session.state.phase).toBe("preview");
+    if (session.state.phase === "preview") {
+      expect(session.state.versions).toHaveLength(before + 1);
+      expect(session.state.active).toBe(before);
+    }
+    expect(session.activeVersion!.source).toBe("fix");
+    expect(session.activeVersion!.rule.regex).toBe("foo");
+    expect(session.activeVersion!.hits).toHaveLength(1);
+    // Der neue Stand traegt keine Diagnose — er ist ja das Ergebnis einer.
+    expect(session.activeVersion!.diagnosis).toBeNull();
+  });
+
+  it("laesst den vorigen Stand samt Diagnose stehen", async () => {
+    const session = await withFix();
+    session.applyFix("bar foo");
+    if (session.state.phase === "preview") {
+      expect(session.state.versions[0].rule.regex).toBe("^foo");
+      expect(session.state.versions[0].diagnosis!.kind).toBe("done");
+    }
+  });
+
+  it("tut nichts, wenn es keinen Vorschlag gibt", async () => {
+    const complete = vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: "Hier steht nichts dergleichen." });
+    const session = manualSession(complete, "^foo", "nichts");
+    await session.diagnose("nichts");
+    session.applyFix("nichts");
+    if (session.state.phase === "preview") expect(session.state.versions).toHaveLength(1);
+  });
+});

@@ -431,6 +431,46 @@ export class TransmuteSession {
   }
 
   /**
+   * Den vorgeschlagenen Reparaturvorschlag uebernehmen.
+   *
+   * Er wird als eigener Stand angehaengt und geht durch `evaluateInto()`, also durch
+   * `evaluate()` — ein Vorschlag mit ungueltigem Muster landet als `problem` im neuen
+   * Stand, genau wie eine Handeingabe. Kein Sonderpfad.
+   *
+   * Voll-Draw: Die Regel-Felder zeigen jetzt ein anderes Muster und muessen neu
+   * gezeichnet werden. Anders als beim Tippen steht der Cursor dabei in keinem Feld —
+   * es wurde ein Knopf gedrueckt.
+   */
+  applyFix(text: string): void {
+    const state = this.current;
+    if (state.phase !== "preview") return;
+
+    const diagnosis = state.versions[state.active].diagnosis;
+    if (diagnosis === null || diagnosis.kind !== "done" || diagnosis.fix === null) return;
+
+    const next = this.evaluateInto(
+      {
+        // Keine Anweisung: Der Verlauf beschriftet den Stand ueber source, nicht ueber
+        // einen erfundenen Text — und ein erfundener Text landete spaeter im Prompt.
+        instruction: "",
+        rule: diagnosis.fix,
+        hits: [],
+        selected: [],
+        timedOutAtLine: null,
+        source: "fix",
+        riskAccepted: null,
+        problem: null,
+        reasoning: null,
+        diagnosis: null,
+      },
+      text,
+    );
+
+    this.versions = [...state.versions, next];
+    this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 });
+  }
+
+  /**
    * Ein eingetroffenes Ergebnis nur dann ablegen, wenn der Zielstand noch dasselbe Muster
    * traegt — dieselbe Semantik wie bei der Risiko-Quittung.
    *
