@@ -1,10 +1,10 @@
 # Transmute
 
-> [🇬🇧 English](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/README.md) · 🇩🇪 Deutsch
+> [🇬🇧 English](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/README.md) · 🇩🇪 Deutsch
 
-[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/LICENSE)
-[![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-lightgrey.svg)](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/LICENSE-DOCS)
-[![Release](https://img.shields.io/gitea/v/release/jkaindl/obsidian-transmute?gitea_url=https%3A%2F%2Fcodeberg.org&label=release)](https://codeberg.org/jkaindl/obsidian-transmute/releases)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/LICENSE)
+[![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-lightgrey.svg)](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/LICENSE-DOCS)
+[![Release](https://img.shields.io/gitea/v/release/jkaindl/obsidian-transmute?gitea_url=https%3A%2F%2Fgit.jkaindl.de&label=release)](https://git.jkaindl.de/jkaindl/obsidian-transmute/releases)
 ![Platform](https://img.shields.io/badge/platform-Obsidian%201.8.7%2B%20·%20desktop%20%26%20mobile-7c3aed)
 
 **Beschreibe in normaler Sprache, was ersetzt werden soll — ein lokales LLM schreibt die Regex, du prüfst jeden Treffer, bevor irgendetwas geschrieben wird.**
@@ -40,12 +40,12 @@ Transmute schließt eine Lücke, die Obsidian offen lässt: Die eingebaute Suche
 
 ### Manuell
 
-`main.js`, `manifest.json` und `styles.css` aus dem [letzten Release](https://codeberg.org/jkaindl/obsidian-transmute/releases) nach `<vault>/.obsidian/plugins/transmute/` legen, dann unter **Settings → Community plugins** aktivieren.
+`main.js`, `manifest.json` und `styles.css` aus dem [letzten Release](https://git.jkaindl.de/jkaindl/obsidian-transmute/releases) nach `<vault>/.obsidian/plugins/transmute/` legen, dann unter **Settings → Community plugins** aktivieren.
 
 ### From source
 
 ```bash
-git clone https://codeberg.org/jkaindl/obsidian-transmute
+git clone https://git.jkaindl.de/jkaindl/obsidian-transmute
 cd obsidian-transmute
 npm install
 npm run build   # → main.js
@@ -89,14 +89,14 @@ In die Notiz wird erst geschrieben, wenn **„Anwenden"** geklickt wird. Dann we
 
 ## Handbuch
 
-Die vollständige Dokumentation folgt dem [Diátaxis](https://diataxis.fr)-Rahmenwerk — siehe [docs/manual/index.md](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/docs/manual/index.md):
+Die vollständige Dokumentation folgt dem [Diátaxis](https://diataxis.fr)-Rahmenwerk — siehe [docs/manual/index.md](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/docs/manual/index.md):
 
 - **Tutorial** — von null bis zur ersten angewendeten Ersetzung.
 - **How-to-Guides** — aufgabenorientierte Rezepte (mehrere Endpunkte, eine Regel nachschärfen, rückgängig machen, eine „unsicheres Muster"-Fehlermeldung behandeln).
 - **Reference** — Einstellungen, Commands, Fehlermeldungen, der JSON-Vertrag.
 - **Explanation** — warum Vorschau-vor-Anwendung der Kern des Designs ist, warum es kein eigenes Snapshot-System gibt, und warum der Sicherheits-Guard ohne Web-Worker auskommt.
 
-Release-Notizen im [Changelog](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/CHANGELOG.md).
+Release-Notizen im [Changelog](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/CHANGELOG.md).
 
 ## Verwandtes
 
@@ -104,11 +104,11 @@ Release-Notizen im [Changelog](https://codeberg.org/jkaindl/obsidian-transmute/s
 
 ## Mitwirken
 
-Beiträge sind willkommen. Bitte [CONTRIBUTING.md](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/CONTRIBUTING.md) für den Workflow lesen (testgetrieben, `main` immer grün, Feature-Arbeit in `feat/<name>`, Conventional Commits) sowie [AGENTS.md](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/AGENTS.md) für Architektur und Modul-Konventionen. Das kanonische Repository liegt auf [Codeberg](https://codeberg.org/jkaindl/obsidian-transmute); GitHub (`johannes-kaindl/obsidian-transmute`) ist ein Mirror.
+Beiträge sind willkommen. Bitte [CONTRIBUTING.md](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/CONTRIBUTING.md) für den Workflow lesen (testgetrieben, `main` immer grün, Feature-Arbeit in `feat/<name>`, Conventional Commits) sowie [AGENTS.md](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/AGENTS.md) für Architektur und Modul-Konventionen. Das kanonische Repository liegt auf [Forgejo](https://git.jkaindl.de/jkaindl/obsidian-transmute); GitHub (`johannes-kaindl/obsidian-transmute`) ist ein Mirror.
 
 ## Lizenz
 
-- **Code:** [AGPL-3.0-or-later](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/LICENSE). Eine kommerzielle Dual-License ist auf Anfrage verfügbar, falls die AGPL-Copyleft nicht passt.
-- **Dokumentation und Text:** [CC BY-SA 4.0](https://codeberg.org/jkaindl/obsidian-transmute/src/branch/main/LICENSE-DOCS).
+- **Code:** [AGPL-3.0-or-later](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/LICENSE). Eine kommerzielle Dual-License ist auf Anfrage verfügbar, falls die AGPL-Copyleft nicht passt.
+- **Dokumentation und Text:** [CC BY-SA 4.0](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/LICENSE-DOCS).
 
 Copyright © 2026 Johannes Kaindl.

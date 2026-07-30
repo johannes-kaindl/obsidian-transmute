@@ -270,7 +270,7 @@ npm run gate                      # alles zusammen
   fünf Plugins gepflegtes Superset und wird nicht lokal erweitert — die Suche liegt in
   `tests/helpers/dom.ts` (`findByClass`/`findAllByTag`).
 - **`data.json`** ist git-ignored (Obsidian-persistierte Konfig), **`main.js`** ist Build-Artefakt.
-- **Release-CI ist GitHub-only** (`.github/` wird von Codeberg/Forgejo ignoriert).
+- **Release-CI ist GitHub-only** (`.github/` wird von Forgejo ignoriert).
 
 ## Offene Entscheidungen
 
@@ -279,7 +279,7 @@ Aus `docs/transmute-repo-spec.md` §9 — nach Workspace-Standard bereits **ents
 - **Repo-Slug bleibt `obsidian-transmute`** (konsistent mit `obsidian-letterhead`/`obsidian-paperize`);
   manifest-`id` `transmute`, Anzeigename „Transmute". Der Store verbietet „Obsidian" im *Plugin*-Namen,
   nicht im Repo-Namen. **Noch zu prüfen:** ob die id `transmute` im Community-Store frei ist.
-- **Hosting: Codeberg = `origin`/Quelle, GitHub = Push-Mirror** (CORE-GIT-01). Release über das
+- **Hosting: Forgejo = `origin`/Quelle, GitHub = Push-Mirror** (CORE-GIT-01). Release über das
   **zentrale** `../tools/release/` (Dual-Push) — nicht `release.mjs` aus einem Nachbarn kopieren
   (offene Lesson vom 2026-07-25: die vendorte Variante pusht Tag-zuerst und triggert auf einem
   leeren Remote keinen Workflow). Einrichtung über den Dach-Skill `plugin-release-setup`.
