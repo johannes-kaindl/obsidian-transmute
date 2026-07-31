@@ -55,93 +55,23 @@ selben Bildfeld (Alchemie/Transmutation, „vault hygiene"), deckt aber Vault-Hy
 **Nicht-Ziele (MVP-Scope-Grenzen):** kein RAG/semantische Suche · keine allgemeine
 Vault-Hygiene-Suite · keine Chat-Oberfläche als Hauptinterface · kein „Apply ohne Preview" in v0.1.
 
-## Kit-first-Befund (Sondierung 2026-07-25 — vor dem ersten Commit machen, nicht danach)
+## Kit-first-Befund (Ergebnis)
 
-Die Kit-first-Regel des Dachs (`../AGENTS.md`) ist hier ungewöhnlich ertragreich: **fast der
-gesamte LLM-Unterbau und der Diff-Kern existieren bereits im Ökosystem.** Neu zu bauen ist im
-Wesentlichen die Regex-Domäne (Prompt, Validierung, Scope-Auflösung, Snapshot/Undo).
+Die Sondierung vom 2026-07-25 war ungewöhnlich ertragreich: fast der gesamte LLM-Unterbau
+kam fertig aus dem Ökosystem, neu gebaut wurde im Wesentlichen die Regex-Domäne. Übernommen:
 
-**Übernehmen (vendoren aus `obsidian-kit`, `src/vendor/kit/`):**
+- **Vendored aus `obsidian-kit`** (`src/vendor/kit/`, nie von Hand ändern): `endpoint.ts`,
+  `endpoint_diagnostics.ts`, `i18n.ts`, `reasoning.ts`, `settings.ts`, `think-splitter.ts`.
+- **Aus Nachbar-Plugins übernommen:** Endpoint-Zeilen-Editor + pure Editor-Model
+  (`yijing-oracle`), EndpointResolver/Probe/Modell-Liste (`vim-dojo`), Chat-Response-Auswertung
+  (`vault-crews`), `raceTimeout` (`local-image-generator`), Inline-`eslint-disable`-Gate
+  (`markdown-presentation`), `debrief-lab`-Muster für Prompt-Tuning (`vim-dojo`).
+- **Neu gebaut (kein Vorbild im Ökosystem):** NL→Regex-Prompt + Antwort-Validierung ·
+  Regex-Ausführung mit Backtracking-Guard (`evaluate()`) · Scope-Auflösung · Snapshot/Undo.
 
-| Bedarf | Quelle | Status |
-|---|---|---|
-| Endpoint normalisieren / aktiven auflösen / Liste parsen | `obsidian-kit/pure` → `endpoint.ts` (`normalizeEndpoint`/`resolveActiveEndpoint`/`parseEndpointList`) | im Kit @0.3.0 |
-| Endpunkt-Diagnose (refused/unknown-host/timeout/not-an-llm-api) + Presets | `obsidian-kit/pure` → `endpoint_diagnostics.ts` (`classifyEndpointStatus`/`validateEndpointInput`/`ENDPOINT_PRESETS`) | im Kit @0.5.0 |
-| Settings-Merge (`loadData` → Defaults) | `obsidian-kit/pure` → `settings.ts` (`mergeSettings`) | im Kit @0.4.0 |
-| i18n (EN kanonisch, EN/DE) | `obsidian-kit/pure` → `i18n.ts` | im Kit — PROF-OBS-07 ist Pflicht |
-| Reasoning-Suppression + `<think>`-Split (die lokalen Qwen3.6 sind Thinker) | `obsidian-kit/pure` → `reasoning.ts`, `think-splitter.ts` | im Kit @0.6.0 |
-| Kontextlängen-Info | `obsidian-kit/pure` → `model-context.ts` | im Kit |
-
-### Endpoint-Management: das reifste Paket übernehmen, nicht neu bauen
-
-Der Endpunkt-Teil ist im Ökosystem **ausgereift** — er wird als Ganzes übernommen. Best-of aus
-zwei Repos (beide gehören zum „guten Schnitt": pure Model-Datei + schmaler Host-Vertrag +
-injizierte Probe):
-
-- **UI + pure Editor-Logik → `yijing-oracle`** (jüngster Stand, 0.3.0/2026-07-16):
-  `src/obsidian/settings/endpoint-list.ts` (`buildEndpointList`, 106 Zeilen: Zeile je Endpunkt +
-  Adder-Leerzeile, Status-Icon pro Zeile mit Form **und** Farbe **und** `aria-label` (WCAG 1.4.1),
-  Warn-Icon aus `validateEndpointInput`, Trash-Button, Preset-Buttons, aktiv-Marker aus der Probe)
-  + `src/core/settings/endpoint-editor-model.ts` (`applyEndpointEdit`/`activeIndexFromStatuses`/
-  `statusKindKey`/`warnRuleKey`, pure). **Warum yijing und nicht vault-crews:** yijing ist die
-  i18n-fähige Fassung — `statusKindKey`/`warnRuleKey` liefern Übersetzungs-Keys statt Text. Das
-  Kit-Feld `EndpointStatus.klartext` ist **hart deutsch** und würde in einem EN/DE-Plugin bei
-  englischer Oberfläche deutschen Text zeigen.
-- **Laufzeit-Auflösung → `vim-dojo`:** `src/llm/endpointResolver.ts` (`EndpointResolver` —
-  Session-Cache + geteilter In-flight-Promise, fehlgeschlagene Resolves werden *nicht* gecacht;
-  das Kit macht bewusst nur einen Resolver-Durchlauf und überlässt Caching dem Aufrufer),
-  `endpointProbe.ts` (Probe → Status **+ Modell-Liste in einem Zug**) und `modelList.ts`
-  (`extractModelIds`, robust gegen kaputte `data`-Arrays) — letzteres ist die Quelle für das
-  Modell-Dropdown und damit die technische Basis der Modellagnostik.
-- **Nicht kopieren:** `vault-rag/src/settings.ts` `buildEndpointList` und
-  `image-to-markdown/src/settings.ts` (inline) — Copy-Paste-Zweig, die pure Logik liegt dort im
-  Modul, das `obsidian` importiert, Tests ziehen die DOM-Schicht mit.
-- **Zwei Gotchas, die zum Muster gehören:** Commit auf **`blur`**, nicht `onChange` (sonst hängt
-  der Adder jeden Tastendruck als eigene Zeile an: `h`, `ht`, `htt`, …) — und Handler dürfen den
-  Render-Index nicht festhalten, sondern lösen Zeilen über ihren **Wert** auf (ein Blur-Commit
-  einer anderen Zeile mutiert die Liste synchron, bevor der Klick-Handler läuft).
-
-Mit der Übernahme wird transmute das **3. Exemplar des guten Schnitts** → im nächsten
-`/drift-audit` ist die Kit-Extraktion des Zeilen-Editors zu bewerten (Registry nennt dafür
-9 offene Generalisierungen; **nicht** nebenbei mitmachen, das ist ein eigenes Vorhaben).
-
-**Übernehmen (aus Nachbar-Plugins kopieren — Registry-Katalog, nicht Kit):**
-
-- **Diff-Kern** — `image-to-markdown/src/diff.ts` (`diffLines`/`groupHunks`/`applySelection`, pure,
-  TDD) + `diff_modal.ts` (Hunk-Checkboxen). Das ist **exakt** der Preview/Selektiv-Apply-Bedarf aus
-  Punkt 1. Registry führt es als Kit-Kandidat mit n=1 — **transmute wird das 2. Exemplar**, also bei
-  Übernahme Registry-Zeile hochzählen und Kit-Extraktion bewerten. `applySelection` liefert den
-  *fertigen Body* (nicht boolean) — dieses Vertragsdetail ist load-bearing.
-- **Nicht-Streaming-Chat-Antwort auswerten** — `vault-crews/src/core/chat-response.ts`
-  (`extractChatContent`/`isContextOverflow`/`extractErrorMessage`). Transmute braucht **eine
-  strukturierte JSON-Antwort, kein Streaming** — das ist der richtige Baustein, nicht `parseSSE`.
-- **Obsidian-freier LLM-Client** — `yijing-oracle/src/obsidian/chat-client.ts`: `ChatClient` mit
-  **injiziertem `httpGet`/`httpPost`** → in Node ohne obsidian-Mock testbar. Muster übernehmen.
-- **Bestätigungs-Modal** — Registry-Zeile mit 4 Exemplaren (`vault-crews`, `vault-rag`,
-  `finance-ledger`, `kuro-gamification`). Nimm die **Promise-Fassade** (`confirmAction(): Promise<boolean>`)
-  aus `finance-ledger/src/ui/promptModal.ts`. Zwei Details, die beim Neubau fehlen: `finish()` nullt
-  den Callback (sonst doppelte Auflösung) und `onClose() → finish(false)` (sonst hängt das Promise
-  bei Esc).
-- **Endpoint-Zeilen-Editor (Settings)** — guter Schnitt: `vault-crews/src/obsidian/settings.ts`
-  `buildListEditor` + pure `endpoint-editor-model.ts` (bzw. `yijing-oracle`, `vim-dojo`). **Nicht**
-  von `vault-rag`/`image-to-markdown` kopieren (Copy-Paste-Zweig, pure Logik im obsidian-Modul).
-  Gotcha: Commit auf **`blur`**, nicht `onChange` — sonst hängt jeder Tastendruck eine Zeile an.
-- **Timeout um `requestUrl`** — `Promise.race`+`setTimeout` (`requestUrl` kennt weder timeout noch
-  abort). Registry: `local-image-generator/src/core/timeout.ts` `raceTimeout`, 4. Instanz.
-- **Prompt-Tuning ohne Rebuild** — `vim-dojo/scripts/debrief-lab.mjs` (CLI gegen den lokalen
-  Endpoint, editierbare Persona-Datei + Samples). Für die NL→Regex-Prompt-Iteration ist das der
-  Weg; nicht über Plugin-Rebuilds tunen.
-- **Inline-`eslint-disable`-Gate** — `markdown-presentation/scripts/check-no-inline-disables.mjs`
-  als erster Schritt von `npm run lint` (der Store wertet ein disable einer `obsidianmd/*`-Regel als
-  Error; hat anderswo zwei Wartungs-Releases gekostet).
-
-**Neu zu bauen (kein Vorbild im Ökosystem):** NL→Regex-Prompt + Antwort-Schema-Validierung ·
-Regex-Ausführung mit Backtracking-Guard · Scope-Resolver (Tag/Pfad/Frontmatter → Dateiliste) ·
-Snapshot/Undo-Stack über mehrere Dateien.
-
-**Pflicht nach dem Bauen:** Registry-Einträge im Dach (`../REGISTRY.md`) für die neuen
-nicht-trivialen Bausteine — v.a. Snapshot/Undo und der Backtracking-Guard sind für jedes
-schreibende Plugin interessant.
+Die vollständige Sondierung (Quellen-Abwägungen, Registry-Zähler, Gotcha-Herleitungen) liegt
+im Cockpit (`$VAULT/25_Coding/obsidian-transmute/`). Für neue Vorhaben gilt weiterhin:
+erst Kit-first (`../AGENTS.md` + `../REGISTRY.md`), dann bauen.
 
 ## Architecture principles (geplant)
 
@@ -185,17 +115,20 @@ zurück ans Modell, danach Fehlermeldung an die Nutzer:in. Nie ungeprüft anwend
 
 ## Commands
 
-Noch keine — `package.json` existiert nicht. Beim Scaffolding den Dach-Standard übernehmen
-(Vorlage: `image-to-markdown`, `yijing-oracle`):
+`package.json` trägt 15 Scripts — die wichtigsten:
 
 ```bash
-npm run dev / build / deploy      # esbuild watch · prod-Bundle · Copy ins Vault-Plugin-Verzeichnis
-npm run lint                      # check-no-inline-disables + eslint --max-warnings 0
+npm run dev / build / deploy      # esbuild watch · prod-Bundle (tsc + esbuild) · Copy nach $OBSIDIAN_PLUGIN_DIR
+npm run lint                      # check-no-inline-disables + eslint src --max-warnings 0
 npm test                          # vitest run
-npm run typecheck                 # tsc --noEmit (separat von vitest)
-npm run check:pure                # src/core darf `obsidian` nicht importieren
-npm run gate                      # alles zusammen
+npm run typecheck                 # tsc --noEmit (dazu: typecheck:test, typecheck:scripts)
+npm run check:pure                # scripts/check-pure.mjs — src/core darf `obsidian` nicht importieren
+npm run gate                      # lint + alle Typechecks + test + check:pure + build
+npm run lab:diagnose              # Diagnose-Lab gegen den lokalen Endpoint (scripts/diagnose-lab.ts)
+npm run release / version-bump / preflight   # delegieren ans zentrale ../tools/release/ (Dach)
 ```
+
+(Dazu `lint:portal` — eslint mit `eslint.portal.config.mjs`.)
 
 ## Conventions
 
@@ -278,7 +211,7 @@ Aus `docs/transmute-repo-spec.md` §9 — nach Workspace-Standard bereits **ents
 
 - **Repo-Slug bleibt `obsidian-transmute`** (konsistent mit `obsidian-letterhead`/`obsidian-paperize`);
   manifest-`id` `transmute`, Anzeigename „Transmute". Der Store verbietet „Obsidian" im *Plugin*-Namen,
-  nicht im Repo-Namen. **Noch zu prüfen:** ob die id `transmute` im Community-Store frei ist.
+  nicht im Repo-Namen.
 - **Hosting: Forgejo = `origin`/Quelle, GitHub = Push-Mirror** (CORE-GIT-01). Release über das
   **zentrale** `../tools/release/` (Dual-Push) — nicht `release.mjs` aus einem Nachbarn kopieren
   (offene Lesson vom 2026-07-25: die vendorte Variante pusht Tag-zuerst und triggert auf einem
