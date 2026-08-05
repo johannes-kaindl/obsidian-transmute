@@ -105,8 +105,7 @@ export function buildEndpointList(containerEl: HTMLElement, opts: EndpointListOp
             .setIcon("chevrons-up")
             .setTooltip(t("set.epMoveToFront"))
             .onClick(() => {
-              const index = opts.list.findIndex((e) => e.url === cfg.url);
-              if (index > 0) commit(moveEndpointToFront(opts.list, index));
+              commit(moveEndpointToFront(opts.list, i));
             }),
         );
       }
@@ -115,17 +114,22 @@ export function buildEndpointList(containerEl: HTMLElement, opts: EndpointListOp
       roleEls.push(roleEl);
 
       // Das Status-Icon ist KEIN Loesch-Button — Loeschen laeuft ueber diesen Trash.
-      // Ueber die URL aufloesen, nicht ueber den Render-Index und nicht ueber indexOf:
-      // ein Blur-Commit einer anderen Zeile mutiert die Liste synchron, bevor der Klick
-      // laeuft — und indexOf vergliche bei Objekten Referenzen, die nach einem Commit
-      // nicht mehr dieselben sind.
+      // Ueber den bei Render-Zeit fixierten Index `i` aufloesen (wie beim Schluesselfeld
+      // oben), nicht ueber `opts.list.findIndex((e) => e.url === cfg.url)`: zwei Zeilen
+      // koennen dieselbe URL mit unterschiedlichem Schluessel tragen (z.B. zwei Keys gegen
+      // dieselbe Basis-URL, prod/test) — findIndex traefe dann IMMER die erste, egal welche
+      // Zeile geklickt wurde. `i` ist die Position dieser Zeile in genau dem `opts.list`,
+      // mit dem dieser Render-Durchlauf gebaut wurde; dieses Array wird erst beim naechsten
+      // vollen Rebuild (nach dem asynchronen `saveSettings` in `commit()`) ersetzt, nicht von
+      // einem Blur-Commit einer anderen Zeile im selben Durchlauf. `i` bleibt also fuer die
+      // Lebensdauer dieses Renders exakt diese Zeile — unabhaengig davon, was anderswo editiert
+      // wird.
       setting.addExtraButton((b) =>
         b
           .setIcon("trash-2")
           .setTooltip(t("set.epRemove"))
           .onClick(() => {
-            const index = opts.list.findIndex((e) => e.url === cfg.url);
-            if (index >= 0) commit(applyEndpointEdit(opts.list, index, "url", "", false));
+            commit(applyEndpointEdit(opts.list, i, "url", "", false));
           }),
       );
     }

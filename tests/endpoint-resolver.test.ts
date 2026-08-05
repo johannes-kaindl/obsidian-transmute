@@ -42,4 +42,15 @@ describe("EndpointResolver", () => {
     await r.resolve();
     expect(ping).toHaveBeenCalledTimes(2);
   });
+
+  it("reicht apiKey an ping durch und behaelt ihn im aufgeloesten Eintrag — fehlt er hier, gilt ein gehosteter Endpunkt nie als erreichbar", async () => {
+    const withKey: EndpointConfig = { url: "https://api.example.com", apiKey: "sk-secret" };
+    const ping = vi.fn(async (e: EndpointConfig) => e.apiKey === "sk-secret");
+    const r = new EndpointResolver(() => [withKey], ping);
+
+    const resolved = await r.resolve();
+
+    expect(ping).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "sk-secret" }));
+    expect(resolved).toEqual(expect.objectContaining({ apiKey: "sk-secret" }));
+  });
 });

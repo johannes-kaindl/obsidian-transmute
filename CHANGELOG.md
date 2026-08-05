@@ -16,11 +16,21 @@ All notable changes to this project are documented here. The format follows
   numbers. If none of them match, "there is nothing of the kind in this text" is a
   measurement rather than a guess. The model is explicitly allowed to suggest nothing,
   because a tool that always invents a fix is a tool that invents.
+- **An API key per endpoint row.** Hosted endpoints (OpenRouter and similar) need one; the
+  field sits right next to the URL, masked, and never appears in plain text anywhere in the
+  interface.
+- **A "use first" button per row**, to reorder the fallback list without retyping it — the
+  order of the list is the priority, so reordering is the only way to say which endpoint is
+  preferred.
+- **A role readout per row** — active, reachable, unreachable, or skipped — so a fallback
+  list that silently skips a hosted endpoint over a missing key is visible instead of quiet.
 
 ### Changed
 
 - The language of the interface is now stated to the model instead of left for it to
   infer. This also applies to the explanation of a generated rule.
+- Endpoint lists from an older `data.json` (a plain list of URL strings) are migrated to the
+  new config form automatically on load. No endpoint is lost in the process.
 
 ### Fixed
 
