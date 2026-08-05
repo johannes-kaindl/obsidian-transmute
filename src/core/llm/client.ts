@@ -1,4 +1,5 @@
 import { normalizeEndpoint } from "../../vendor/kit/endpoint";
+import { authHeaders, type EndpointConfig } from "../../vendor/kit/endpoint_config";
 import { suppressParams } from "../../vendor/kit/reasoning";
 import { effectiveSuppress } from "../reasoning-toggle";
 import type { ChatMessage } from "../types";
@@ -7,8 +8,8 @@ import { extractChatContent, extractReasoning } from "./response";
 /** Netz-Port. Die Implementierung lebt in der obsidian-Schicht (requestUrl) —
  *  hier bleibt der Kern obsidian-frei und in Node testbar (PROF-OBS-12). */
 export interface JsonTransport {
-  postJson(url: string, body: unknown, timeoutMs: number): Promise<{ status: number; text: string }>;
-  getJson(url: string, timeoutMs: number): Promise<{ status: number; text: string }>;
+  postJson(url: string, body: unknown, timeoutMs: number, headers?: Record<string, string>): Promise<{ status: number; text: string }>;
+  getJson(url: string, timeoutMs: number, headers?: Record<string, string>): Promise<{ status: number; text: string }>;
 }
 
 export type CompleteResult =
@@ -21,6 +22,8 @@ export type CompleteResult =
 
 export type ClientConfig = {
   endpoint: string;
+  /** Schlüssel des aktiven Endpunkts. Leer/fehlend = lokaler Server ohne Auth. */
+  apiKey?: string;
   model: string;
   timeoutMs: number;
   suppressReasoning: boolean;
@@ -76,7 +79,9 @@ export class RuleClient {
       ...suppressParams(effectiveSuppress(cfg.model, cfg.suppressReasoning)),
     };
 
-    const res = await this.transport.postJson(`${base}/v1/chat/completions`, body, cfg.timeoutMs);
+    const res = await this.transport.postJson(
+      `${base}/v1/chat/completions`, body, cfg.timeoutMs, authHeaders(cfg.apiKey),
+    );
     if (res.status < 200 || res.status >= 300) return { ok: false, error: errorMessage(res.text) };
 
     let parsed: unknown;
@@ -95,9 +100,11 @@ export class RuleClient {
     return { ok: true, content, reasoning: extractReasoning(parsed, content) };
   }
 
-  async listModels(endpoint: string): Promise<string[]> {
+  async listModels(ep: EndpointConfig): Promise<string[]> {
     const cfg = this.config();
-    const res = await this.transport.getJson(`${normalizeEndpoint(endpoint)}/v1/models`, cfg.timeoutMs);
+    const res = await this.transport.getJson(
+      `${normalizeEndpoint(ep.url)}/v1/models`, cfg.timeoutMs, authHeaders(ep.apiKey),
+    );
     if (res.status < 200 || res.status >= 300) return [];
     try {
       return extractModelIds(JSON.parse(res.text));

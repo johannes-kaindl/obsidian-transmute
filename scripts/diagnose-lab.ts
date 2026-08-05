@@ -63,17 +63,17 @@ const CASES: { name: string; rule: RuleDraft; expect: ProbeKind[] }[] = [
 ];
 
 const transport: JsonTransport = {
-  async postJson(url, body, timeoutMs) {
+  async postJson(url, body, timeoutMs, headers) {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     });
     return { status: res.status, text: await res.text() };
   },
-  async getJson(url, timeoutMs) {
-    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  async getJson(url, timeoutMs, headers) {
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
     return { status: res.status, text: await res.text() };
   },
 };
@@ -85,6 +85,7 @@ function flag(name: string): string | null {
 
 async function main(): Promise<void> {
   const endpoint = flag("endpoint") ?? "http://127.0.0.1:1234";
+  const apiKey = flag("api-key") ?? undefined;
   const lang = (flag("lang") ?? "de") as Lang;
   const thinking = process.argv.includes("--thinking");
   const note = flag("note");
@@ -96,12 +97,14 @@ async function main(): Promise<void> {
 
   const client = new RuleClient(transport, () => ({
     endpoint,
+    apiKey,
     model: flag("model") ?? "",
     timeoutMs: 180000,
     suppressReasoning: !thinking,
   }));
 
-  const models = flag("model") !== null ? [flag("model") as string] : await client.listModels(endpoint);
+  const models =
+    flag("model") !== null ? [flag("model") as string] : await client.listModels({ url: endpoint, apiKey });
   const chat = models.filter((id) => !id.includes("embed"));
   if (chat.length === 0) {
     console.log(`Kein Modell erreichbar unter ${endpoint} — läuft der Server?`);

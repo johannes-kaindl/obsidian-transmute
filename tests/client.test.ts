@@ -28,6 +28,7 @@ describe("RuleClient.complete", () => {
       "http://127.0.0.1:1234/v1/chat/completions",
       expect.anything(),
       1000,
+      {},
     );
   });
 

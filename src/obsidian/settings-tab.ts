@@ -88,13 +88,22 @@ export class TransmuteSettingTab extends PluginSettingTab {
     return setting.settingEl;
   }
 
+  // Bruecke fuer den (noch string-basierten) Zeilen-Editor: der volle EndpointConfig-
+  // Editor mit eigenem Schluessel-/Modell-Feld je Zeile kommt erst mit der naechsten
+  // Aufgabe (Zeilen-Editor-UI). Bis dahin bleiben apiKey/model bestehender Eintraege
+  // ueber die URL als Schluessel erhalten — nur wirklich neue Zeilen sind URL-only.
   private renderEndpoints(setting: Setting): void {
+    const urls = this.plugin.settings.endpoints.map((e) => e.url);
     buildEndpointList(this.hostFor(setting), {
-      list: this.plugin.settings.endpoints,
-      setList: (next) => {
-        this.plugin.settings.endpoints = next;
+      list: urls,
+      setList: (nextUrls) => {
+        const byUrl = new Map(this.plugin.settings.endpoints.map((e) => [e.url, e] as const));
+        this.plugin.settings.endpoints = nextUrls.map((url) => byUrl.get(url) ?? { url });
       },
-      probe: (endpoint) => probeEndpoint(endpoint, 5000),
+      probe: (url) => {
+        const cfg = this.plugin.settings.endpoints.find((e) => e.url === url) ?? { url };
+        return probeEndpoint(cfg, 5000);
+      },
       commit: () => {
         void this.plugin.saveSettings().then(() => {
           this.plugin.resolver.invalidate();

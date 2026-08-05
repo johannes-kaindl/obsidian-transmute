@@ -4,6 +4,7 @@ import { TransmuteSession } from "./core/session";
 import { DEFAULT_SETTINGS, loadSettings, MAX_HITS, type TransmuteSettings } from "./core/settings";
 import "./core/i18n/strings";
 import { pickLang, setLang } from "./vendor/kit/i18n";
+import type { EndpointConfig } from "./vendor/kit/endpoint_config";
 import { EndpointResolver } from "./obsidian/endpoint";
 import { obsidianTransport, pingEndpoint } from "./obsidian/http";
 import { TransmuteSettingTab } from "./obsidian/settings-tab";
@@ -36,7 +37,8 @@ export default class TransmutePlugin extends Plugin {
     );
 
     this.client = new RuleClient(obsidianTransport, () => ({
-      endpoint: this.activeEndpoint,
+      endpoint: this.activeEndpoint.url,
+      apiKey: this.activeEndpoint.apiKey,
       model: this.settings.model,
       timeoutMs: this.settings.timeoutMs,
       suppressReasoning: this.settings.suppressReasoning,
@@ -100,19 +102,19 @@ export default class TransmutePlugin extends Plugin {
     // nichts zu tun
   }
 
-  private activeEndpoint = "";
+  private activeEndpoint: EndpointConfig = { url: "" };
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
   }
 
   async reloadModels(): Promise<void> {
-    const endpoint = (await this.resolver.resolve()) ?? this.settings.endpoints[0] ?? "";
-    if (endpoint.length === 0) {
+    const resolved = (await this.resolver.resolve()) ?? this.settings.endpoints[0];
+    if (!resolved || resolved.url.trim().length === 0) {
       this.knownModels = [];
       return;
     }
-    this.knownModels = await this.client.listModels(endpoint);
+    this.knownModels = await this.client.listModels(resolved);
   }
 
   private async activatePanel(): Promise<void> {
