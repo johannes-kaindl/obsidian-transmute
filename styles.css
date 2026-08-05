@@ -232,6 +232,24 @@
   color: var(--text-warning);
 }
 
+.transmute-ep-role {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  margin-left: var(--size-4-2);
+}
+
+.transmute-ep-role.is-active {
+  color: var(--text-normal);
+  font-weight: var(--font-semibold);
+}
+
+.transmute-ep-thirdparty {
+  color: var(--text-warning);
+  margin-left: var(--size-4-2);
+  display: inline-flex;
+  align-items: center;
+}
+
 .transmute-versions {
   display: flex;
   flex-direction: column;
