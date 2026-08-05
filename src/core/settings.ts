@@ -1,9 +1,12 @@
 import { mergeSettings } from "../vendor/kit/settings";
+import { migrateEndpointList, type EndpointConfig } from "../vendor/kit/endpoint_config";
 
 export type ScopeKind = "file" | "selection";
 
 export type TransmuteSettings = {
-  endpoints: string[];
+  /** Geordnete Fallback-Kette; der erste erreichbare gewinnt. Jede Zeile trägt ihren
+   *  eigenen API-Schlüssel, damit lokale und gehostete Anbieter in EINER Liste stehen können. */
+  endpoints: EndpointConfig[];
   model: string;
   timeoutMs: number;
   suppressReasoning: boolean;
@@ -26,7 +29,7 @@ export type TransmuteSettings = {
 export const MAX_HITS = 500;
 
 export const DEFAULT_SETTINGS: TransmuteSettings = {
-  endpoints: ["http://127.0.0.1:1234"],
+  endpoints: [{ url: "http://127.0.0.1:1234" }],
   model: "",            // modellagnostisch: kommt aus GET /v1/models
   timeoutMs: 120000,
   suppressReasoning: true,
@@ -37,5 +40,10 @@ export const DEFAULT_SETTINGS: TransmuteSettings = {
 };
 
 export function loadSettings(raw: unknown): TransmuteSettings {
-  return mergeSettings(DEFAULT_SETTINGS, raw);
+  const merged = mergeSettings(DEFAULT_SETTINGS, raw);
+  // mergeSettings ist ein shallow, typ-blinder Merge: `endpoints` kann aus einer data.json
+  // von vor 0.5.0 noch string[] sein. migrateEndpointList ist die einzige Stelle, die das
+  // geradezieht — danach ist der Typ im ganzen Repo verlässlich.
+  const rawList = merged.endpoints as unknown as (string | EndpointConfig)[] | undefined;
+  return { ...merged, endpoints: migrateEndpointList(undefined, rawList) };
 }
