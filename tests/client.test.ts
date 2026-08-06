@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { RuleClient, extractModelIds, type JsonTransport } from "../src/core/llm/client";
+import { RuleClient, type JsonTransport } from "../src/core/llm/client";
 
 const config = () => ({ endpoint: "http://127.0.0.1:1234", model: "m", timeoutMs: 1000, suppressReasoning: true });
 
@@ -50,18 +50,6 @@ describe("RuleClient.complete", () => {
     await client.complete([{ role: "user", content: "x" }]);
     const body = (transport.postJson as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][1];
     expect((body as { model: string }).model).toBe("");
-  });
-});
-
-describe("extractModelIds", () => {
-  it("liest die ids aus data", () => {
-    expect(extractModelIds({ data: [{ id: "a" }, { id: "b" }] })).toEqual(["a", "b"]);
-  });
-
-  it("ist robust gegen kaputte Antworten", () => {
-    expect(extractModelIds({})).toEqual([]);
-    expect(extractModelIds(null)).toEqual([]);
-    expect(extractModelIds({ data: [{ noid: 1 }] })).toEqual([]);
   });
 });
 

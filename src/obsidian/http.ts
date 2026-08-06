@@ -3,26 +3,15 @@ import type { JsonTransport } from "../core/llm/client";
 import { classifyEndpointStatus, type EndpointStatus } from "../vendor/kit/endpoint_diagnostics";
 import { normalizeEndpoint } from "../vendor/kit/endpoint";
 import { authHeaders, type EndpointConfig } from "../vendor/kit/endpoint_config";
+import { withTimeout } from "../vendor/kit/timeout";
 
 type Wire = { status: number; text: string; timedOut: boolean; error: string | null };
 
-/** requestUrl kennt weder Timeout noch Abort — deshalb der Promise.race-Wrapper.
- *  window statt activeWindow: der Timer beruehrt kein DOM, die Popout-Regel aus
- *  PROF-OBS-13 zielt auf DOM-gebundene Timer. `obsidianmd/prefer-window-timers`
- *  verlangt hier ausdruecklich window. */
-function withTimeout(work: Promise<Wire>, timeoutMs: number): Promise<Wire> {
-  return new Promise<Wire>((resolve) => {
-    const timer = window.setTimeout(
-      () => resolve({ status: 0, text: "", timedOut: true, error: null }),
-      timeoutMs,
-    );
-    void work.then((value) => {
-      window.clearTimeout(timer);
-      resolve(value);
-    });
-  });
-}
-
+/** Timeout-Wrapper aus dem Kit — requestUrl kennt weder Timeout noch Abort.
+ *  window statt activeWindow als Timer-Port: der Timer beruehrt kein DOM, die
+ *  Popout-Regel aus PROF-OBS-13 zielt auf DOM-gebundene Timer, und
+ *  `obsidianmd/prefer-window-timers` verlangt hier ausdruecklich window. Die Bindung
+ *  an window gehoert deshalb in diese Schicht, nicht in das pure Kit-Modul. */
 async function send(
   url: string,
   method: "GET" | "POST",
@@ -46,7 +35,8 @@ async function send(
       error: err instanceof Error ? err.message : String(err),
     }));
 
-  return withTimeout(work, timeoutMs);
+  const raced = await withTimeout(work, timeoutMs, window);
+  return raced.timedOut ? { status: 0, text: "", timedOut: true, error: null } : raced.value;
 }
 
 export const obsidianTransport: JsonTransport = {

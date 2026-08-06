@@ -1,12 +1,7 @@
 {
-  "note": "Verbatim snapshots aus obsidian-kit/src/pure. Never hand-edit. Re-copy from obsidian-kit to update.",
-  "modules": [
-    { "file": "endpoint.ts", "source": "obsidian-kit", "version": "0.15.0", "sha": "06eba63" },
-    { "file": "endpoint_diagnostics.ts", "source": "obsidian-kit", "version": "0.15.0", "sha": "06eba63" },
-    { "file": "settings.ts", "source": "obsidian-kit", "version": "0.15.0", "sha": "06eba63" },
-    { "file": "i18n.ts", "source": "obsidian-kit", "version": "0.15.0", "sha": "06eba63" },
-    { "file": "think-splitter.ts", "source": "obsidian-kit", "version": "0.15.0", "sha": "06eba63" },
-    { "file": "reasoning.ts", "source": "obsidian-kit", "version": "0.15.0", "sha": "06eba63" },
-    { "file": "endpoint_config.ts", "source": "obsidian-kit", "version": "0.23.0", "sha": "d11339a" }
-  ]
+  "source": "obsidian-kit",
+  "version": "0.24.0",
+  "sha": "e8c6b3e",
+  "vendored": "endpoint endpoint_config endpoint_diagnostics settings i18n think-splitter reasoning timeout",
+  "note": "Verbatim snapshot. Never hand-edit — change the kit, then re-run tools/sync-kit.sh."
 }

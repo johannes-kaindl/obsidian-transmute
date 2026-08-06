@@ -1,3 +1,4 @@
+import { extractModelIds } from "../../vendor/kit/endpoint_diagnostics";
 import { normalizeEndpoint } from "../../vendor/kit/endpoint";
 import { authHeaders, type EndpointConfig } from "../../vendor/kit/endpoint_config";
 import { suppressParams } from "../../vendor/kit/reasoning";
@@ -28,17 +29,6 @@ export type ClientConfig = {
   timeoutMs: number;
   suppressReasoning: boolean;
 };
-
-/** Modell-ids aus GET /v1/models. Robust gegen fehlende/kaputte data-Arrays —
- *  das ist die technische Basis der Modellagnostik (kein hartkodierter Modellname). */
-export function extractModelIds(body: unknown): string[] {
-  if (typeof body !== "object" || body === null) return [];
-  const data = (body as { data?: unknown }).data;
-  if (!Array.isArray(data)) return [];
-  return data
-    .map((entry) => (typeof entry === "object" && entry !== null ? (entry as { id?: unknown }).id : undefined))
-    .filter((id): id is string => typeof id === "string");
-}
 
 function errorMessage(text: string): string {
   try {

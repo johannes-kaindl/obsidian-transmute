@@ -1,4 +1,4 @@
-// vendored from obsidian-kit#0.23.0 — verbatim, nie von Hand editieren
+// vendored from obsidian-kit, src/pure/endpoint_config.ts — nicht von Hand editieren.
 /** Obsidian-freie Wahrheit für Endpunkt-Einträge: Struktur, Auth-Header, Modellwahl,
  *  Migration alter String-Listen und Listen-Bearbeitung.
  *

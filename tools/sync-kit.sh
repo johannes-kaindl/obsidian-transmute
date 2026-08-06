@@ -5,7 +5,7 @@ set -euo pipefail
 
 KIT="${KIT_DIR:-../obsidian-kit}"
 DEST="src/vendor/kit"
-MODULES=(endpoint endpoint_diagnostics settings i18n think-splitter reasoning)
+MODULES=(endpoint endpoint_config endpoint_diagnostics settings i18n think-splitter reasoning timeout)
 
 [ -d "$KIT/src/pure" ] || { echo "Kit nicht gefunden unter $KIT (KIT_DIR setzen)" >&2; exit 1; }
 mkdir -p "$DEST"
