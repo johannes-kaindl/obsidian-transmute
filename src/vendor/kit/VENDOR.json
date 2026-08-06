@@ -1,7 +1,7 @@
 {
   "source": "obsidian-kit",
-  "version": "0.24.0",
-  "sha": "e8c6b3e",
-  "vendored": "endpoint endpoint_config endpoint_diagnostics settings i18n think-splitter reasoning timeout",
+  "version": "0.25.0",
+  "sha": "1ca3861",
+  "vendored": "endpoint endpoint_config endpoint_diagnostics settings i18n think-splitter reasoning timeout settings_walker folder-suggest",
   "note": "Verbatim snapshot. Never hand-edit — change the kit, then re-run tools/sync-kit.sh."
 }

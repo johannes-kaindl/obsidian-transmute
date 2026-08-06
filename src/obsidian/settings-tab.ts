@@ -2,6 +2,7 @@ import { App, PluginSettingTab, Setting, type SettingDefinitionItem } from "obsi
 import type TransmutePlugin from "../main";
 import type { ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
+import { renderSettingDefinitions, settingBodyHost, refreshSettingsTab } from "../vendor/kit/settings_walker";
 import { buildEndpointList } from "./settings/endpoint-list";
 import { probeEndpoint } from "./http";
 
@@ -78,18 +79,8 @@ export class TransmuteSettingTab extends PluginSettingTab {
     return defs as unknown as SettingDefinitionItem[];
   }
 
-  /** Der Walker uebergibt genau eine Setting-Zeile, unsere Bloecke zeichnen mehrere.
-   *  settingEl traegt Obsidians setting-item-Klasse (flex-Row mit genau zwei Kindern) —
-   *  ohne das Strippen wuerden verschachtelte Zeilen zu flex-Kindern statt zu stapeln. */
-  private hostFor(setting: Setting): HTMLElement {
-    setting.settingEl.empty();
-    setting.settingEl.removeClass("setting-item");
-    setting.settingEl.addClass("transmute-settings-host");
-    return setting.settingEl;
-  }
-
   private renderEndpoints(setting: Setting): void {
-    buildEndpointList(this.hostFor(setting), {
+    buildEndpointList(settingBodyHost(setting), {
       list: this.plugin.settings.endpoints,
       setList: (next) => {
         this.plugin.settings.endpoints = next;
@@ -105,7 +96,7 @@ export class TransmuteSettingTab extends PluginSettingTab {
   }
 
   private renderModel(setting: Setting): void {
-    const host = this.hostFor(setting);
+    const host = settingBodyHost(setting);
     const row = new Setting(host).setName(t("set.model")).setDesc(t("set.modelDesc"));
     row.addDropdown((d) => {
       d.addOption("", t("set.modelAuto"));
@@ -134,76 +125,21 @@ export class TransmuteSettingTab extends PluginSettingTab {
   }
 
   private refreshUi(): void {
-    // update() gibt es erst ab 1.13 — Feature-Check statt Cast auf eine unbekannte API.
-    const self = this as unknown as { update?: () => void };
-    if (typeof self.update === "function") self.update();
-    else this.renderImperative();
+    refreshSettingsTab(this, () => this.renderImperative());
   }
 
-  /** Walkt DIESELBEN Definitionen mit der klassischen Setting-API. */
+  private cleanupPrevious: () => void = () => {};
+
   private renderImperative(): void {
+    this.cleanupPrevious();
     const { containerEl } = this;
     containerEl.empty();
-
-    for (const raw of this.getSettingDefinitions()) {
-      const group = raw as unknown as GroupDef;
-      if (group.type !== "group") continue;
-      if (group.heading !== undefined) new Setting(containerEl).setName(group.heading).setHeading();
-
-      for (const item of group.items ?? []) {
-        const setting = new Setting(containerEl);
-        if (item.name !== undefined) setting.setName(item.name);
-        if (item.desc !== undefined) setting.setDesc(item.desc);
-        if (item.render) {
-          item.render(setting);
-          continue;
-        }
-        const control = item.control;
-        if (!control) continue;
-        this.renderControl(setting, control);
-      }
-    }
-  }
-
-  private renderControl(setting: Setting, control: ControlDef): void {
-    const value = this.getControlValue(control.key);
-    const current = value === undefined ? "" : String(value);
-    switch (control.type) {
-      case "dropdown":
-        setting.addDropdown((d) => {
-          for (const [key, label] of Object.entries(control.options ?? {})) d.addOption(key, label);
-          d.setValue(current);
-          d.onChange((value) => {
-            this.setControlValue(control.key, value);
-          });
-        });
-        break;
-      case "toggle":
-        setting.addToggle((toggle) => {
-          toggle.setValue(value === true);
-          toggle.onChange((value) => {
-            this.setControlValue(control.key, value);
-          });
-        });
-        break;
-      case "number":
-        setting.addText((text) => {
-          text.inputEl.type = "number";
-          text.setValue(current);
-          text.onChange((value) => {
-            this.setControlValue(control.key, value);
-          });
-        });
-        break;
-      default:
-        setting.addText((text) => {
-          text.setValue(current);
-          if (control.placeholder !== undefined) text.setPlaceholder(control.placeholder);
-          text.onChange((value) => {
-            this.setControlValue(control.key, value);
-          });
-        });
-    }
+    this.cleanupPrevious = renderSettingDefinitions(
+      containerEl,
+      this.getSettingDefinitions(),
+      this,
+      this.app,
+    );
   }
 
   getControlValue(key: string): string | number | boolean | undefined {
