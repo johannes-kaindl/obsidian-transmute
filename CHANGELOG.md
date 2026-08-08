@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-08-08
+
 ### Added
 
 - **"Why doesn't this match?"** — when a pattern finds nothing, a button explains why and
