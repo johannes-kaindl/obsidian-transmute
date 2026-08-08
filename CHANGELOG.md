@@ -36,6 +36,9 @@ All notable changes to this project are documented here. The format follows
 
 - A reasoning model that spends its entire token budget on thinking is now reported as
   such, instead of showing the generic endpoint error.
+- An endpoint that answers with 401 or 403 is now reported as a missing or invalid key
+  instead of "not an OpenAI-compatible endpoint" — which is the one case a hosted endpoint
+  with a wrong key hits every time.
 
 ## [0.3.0] — 2026-07-27
 
