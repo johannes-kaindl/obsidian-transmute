@@ -2,12 +2,12 @@
 
 > [🇬🇧 English](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/README.md) · 🇩🇪 Deutsch
 
+**Beschreibe in normaler Sprache, was ersetzt werden soll — ein lokales LLM schreibt die Regex, du prüfst jeden Treffer, bevor irgendetwas geschrieben wird.**
+
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/LICENSE)
 [![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-lightgrey.svg)](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/LICENSE-DOCS)
 [![Release](https://img.shields.io/gitea/v/release/jkaindl/obsidian-transmute?gitea_url=https%3A%2F%2Fgit.jkaindl.de&label=release)](https://git.jkaindl.de/jkaindl/obsidian-transmute/releases)
 ![Platform](https://img.shields.io/badge/platform-Obsidian%201.8.7%2B%20·%20desktop%20%26%20mobile-7c3aed)
-
-**Beschreibe in normaler Sprache, was ersetzt werden soll — ein lokales LLM schreibt die Regex, du prüfst jeden Treffer, bevor irgendetwas geschrieben wird.**
 
 ## Funktionen
 
