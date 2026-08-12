@@ -1,32 +1,45 @@
-// Der Store wertet ein Inline-`eslint-disable` einer obsidianmd-Regel als ERROR — unabhaengig
-// von der Begruendung. Das hat anderswo zwei reine Wartungs-Releases gekostet, obwohl das
-// Verbot woertlich in der eslint-Config stand (CORE-META-15: Regel ohne Check ist keine Regel).
+// Store-Review-Gate: KEIN inline `// eslint-disable*` in src/.
+// Kanonische Fassung: obsidian-plugins/tools/release-template/scripts/ — nie von Hand
+// editieren, Aenderungen im Template (template_drift_check.py prueft Byte-Gleichheit).
+//
+// Warum ein eigenes Gate: die Obsidian-Community-Store-Review wertet ein Inline-disable einer
+// `obsidianmd/*`-Regel als ERROR — unabhaengig davon, wie gut es begruendet ist. Das hat
+// zwei reine Wartungs-Releases gekostet (obsidian-transmute 0.3.1 und 0.6.1), weil die
+// Konvention zwar in eslint.config.mjs stand, aber nichts sie erzwungen hat: ein disable
+// laesst `npm run lint` gruen durchlaufen und faellt erst Tage spaeter im Review auf.
+//
+// Konsequenz: eine Regel, die stoert, wird entweder im Code aufgeloest (z. B. `document` →
+// `workspace.rootSplit.doc`; Placeholder umformuliert) oder als file-scoped Override mit
+// Begruendung in eslint.overrides.mjs eingetragen — dort ist sie sichtbar und reviewbar.
+// Beides ist store-tauglich, das Inline-disable nicht.
+//
+// Das Gate blockt ALLE Inline-disables, nicht nur `obsidianmd/*`: die Regel-Herkunft steht dem
+// Kommentar nicht zuverlaessig an (`// eslint-disable-next-line` ohne Regelnamen deaktiviert
+// alles), und die file-scoped-Alternative steht ohnehin fuer jede Regel offen.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const ROOT = "src";
-const PATTERN = /eslint-disable/;
+const DISABLE = /\/[/*]\s*eslint-disable/;
+const hits = [];
 
 function walk(dir) {
-  return readdirSync(dir).flatMap((entry) => {
-    const full = join(dir, entry);
-    return statSync(full).isDirectory() ? walk(full) : [full];
-  });
+  for (const e of readdirSync(dir)) {
+    const p = join(dir, e);
+    if (statSync(p).isDirectory()) walk(p);
+    else if (p.endsWith(".ts")) {
+      readFileSync(p, "utf8").split("\n").forEach((line, i) => {
+        if (DISABLE.test(line)) hits.push(`${p}:${i + 1}: ${line.trim()}`);
+      });
+    }
+  }
 }
 
-const offenders = [];
-for (const file of walk(ROOT).filter((f) => f.endsWith(".ts"))) {
-  readFileSync(file, "utf8")
-    .split("\n")
-    .forEach((line, i) => {
-      if (PATTERN.test(line)) offenders.push(`${file}:${i + 1}`);
-    });
-}
+walk("src");
 
-if (offenders.length > 0) {
-  console.error("Inline eslint-disable ist verboten (der Store wertet es als Error).");
-  console.error("Ausweg: file-scoped Override in eslint.config.mjs, mit Begruendung.");
-  for (const o of offenders) console.error(`  ${o}`);
+if (hits.length) {
+  console.error("Inline eslint-disable is not allowed in src/ (community store rejects it):");
+  for (const h of hits) console.error(`  ${h}`);
+  console.error("\nFix the code, or add a justified file-scoped override in eslint.overrides.mjs.");
   process.exit(1);
 }
-console.log("check-no-inline-disables: sauber");
+console.log("no inline eslint-disable OK");
