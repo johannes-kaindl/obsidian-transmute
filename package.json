@@ -12,7 +12,6 @@
     "test": "node scripts/check-no-nul-bytes.mjs && vitest run",
     "lab:diagnose": "esbuild scripts/diagnose-lab.ts --bundle --platform=node --format=esm --outfile=.lab-diagnose.mjs --log-level=warning && node .lab-diagnose.mjs",
     "lint": "node scripts/check-no-inline-disables.mjs && eslint src --max-warnings 0",
-    "lint:portal": "eslint -c eslint.portal.config.mjs src",
     "check:pure": "node scripts/check-pure.mjs",
     "gate": "npm run lint && npm run typecheck && npm run typecheck:test && npm run typecheck:scripts && npm test && npm run check:pure && npm run build",
     "deploy": "npm run build && cp main.js manifest.json styles.css \"${OBSIDIAN_PLUGIN_DIR:?set OBSIDIAN_PLUGIN_DIR}\"/",

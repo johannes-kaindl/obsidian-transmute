@@ -128,7 +128,10 @@ npm run lab:diagnose              # Diagnose-Lab gegen den lokalen Endpoint (scr
 npm run release / version-bump / preflight   # delegieren ans zentrale ../tools/release/ (Dach)
 ```
 
-(Dazu `lint:portal` — eslint mit `eslint.portal.config.mjs`.)
+(Ein separates `lint:portal` gibt es seit 2026-08-13 nicht mehr: der template-verwaltete
+`eslint.config.mjs`-Kern **ist** der Store-Scanner-Spiegel, lokale Abweichungen stehen sichtbar
+in `eslint.overrides.mjs`. Ein zweiter, handgepflegter Spiegel war genau die Drift-Quelle,
+die er abfangen sollte.)
 
 ## Conventions
 
