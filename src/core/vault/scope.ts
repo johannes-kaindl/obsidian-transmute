@@ -48,8 +48,14 @@ function hasTag(tags: string[], wanted: string): boolean {
  */
 function fieldMatches(value: unknown, wanted: string): boolean {
   if (Array.isArray(value)) return value.some((v) => fieldMatches(v, wanted));
-  if (value === null || value === undefined) return false;
-  return String(value).toLowerCase() === wanted.toLowerCase();
+  // Bewusst nur Primitive: ein verschachteltes Objekt im Frontmatter hat keinen
+  // sinnvollen Textwert, und `String(obj)` waere "[object Object]" — das wuerde bei
+  // einem Filterwert "[object Object]" sogar treffen.
+  if (typeof value === "string") return value.toLowerCase() === wanted.toLowerCase();
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value).toLowerCase() === wanted.toLowerCase();
+  }
+  return false;
 }
 
 function inFolder(path: string, folder: string, includeSubfolders: boolean): boolean {
