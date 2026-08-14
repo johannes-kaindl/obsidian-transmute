@@ -1,5 +1,7 @@
 import { t } from "../vendor/kit/i18n";
 import type { VaultFilter } from "../core/vault/scope";
+import type { FileHits } from "../core/vault/run";
+import { countSelected, fileCheckState } from "../core/vault/selection";
 
 type El = HTMLElement;
 
@@ -80,4 +82,66 @@ export function renderScopeBlock(
   const btn = block.createEl("button", { cls: "transmute-compute", text: t("view.computePreview") });
   btn.disabled = empty;
   btn.onclick = (): void => handlers.onComputePreview();
+}
+
+export type VaultListModel = {
+  files: FileHits[];
+  /** Welche Dateien aufgeklappt sind. Gehoert ins Modell, nicht ins DOM — ein Teil-Draw
+   *  wuerde den Zustand sonst bei jedem Haekchen verlieren. */
+  expanded: Set<string>;
+  totalHits: number;
+};
+
+export type VaultListHandlers = {
+  onToggleFile(path: string): void;
+  onToggleHit(path: string, index: number): void;
+  onExpand(path: string): void;
+  onSetAll(value: boolean): void;
+};
+
+export function renderVaultList(
+  parent: El,
+  model: VaultListModel,
+  handlers: VaultListHandlers,
+): void {
+  const counted = countSelected(model.files);
+  const head = parent.createDiv({ cls: "transmute-list-head" });
+  head.createSpan({
+    cls: "transmute-affected",
+    text: t("view.affected", String(counted.files), String(counted.hits)),
+  });
+  const all = head.createEl("button", { text: t("view.selectAll") });
+  all.onclick = (): void => handlers.onSetAll(true);
+  const none = head.createEl("button", { text: t("view.selectNone") });
+  none.onclick = (): void => handlers.onSetAll(false);
+
+  const list = parent.createDiv({ cls: "transmute-file-list" });
+  for (const file of model.files) {
+    const row = list.createDiv({ cls: "transmute-file-row" });
+
+    const box = row.createEl("input", { cls: "transmute-file-check", type: "checkbox" });
+    const state = fileCheckState(file);
+    box.checked = state === "all";
+    box.indeterminate = state === "some";
+    box.disabled = !file.complete;
+    box.onchange = (): void => handlers.onToggleFile(file.path);
+
+    const name = row.createSpan({ cls: "transmute-file-name", text: file.path });
+    name.onclick = (): void => handlers.onExpand(file.path);
+    row.createSpan({ cls: "transmute-file-count", text: String(file.hits.length) });
+
+    if (!model.expanded.has(file.path)) continue;
+
+    const hits = list.createDiv({ cls: "transmute-file-hits" });
+    file.hits.forEach((hit, index) => {
+      const hitRow = hits.createDiv({ cls: "transmute-hit-row" });
+      const hitBox = hitRow.createEl("input", { cls: "transmute-hit-check", type: "checkbox" });
+      hitBox.checked = file.selected[index] === true;
+      hitBox.disabled = !file.complete;
+      hitBox.onchange = (): void => handlers.onToggleHit(file.path, index);
+      hitRow.createSpan({ cls: "transmute-hit-line", text: t("view.line", String(hit.line + 1)) });
+      hitRow.createDiv({ cls: "transmute-hit-before", text: hit.before });
+      hitRow.createDiv({ cls: "transmute-hit-after", text: hit.after });
+    });
+  }
 }
