@@ -86,10 +86,13 @@ src/
 │   ├── llm/          prompt · response (inkl. extractReasoning) · client
 │   ├── regex/        compile (allowRisky) · execute (Zeitbudget + maxHits) ·
 │   │                 guard · evaluate ← der EINE Ausführungspfad
+│   ├── vault/        scope (Kandidaten) · run (Lauf) · selection (zwei Ebenen) ·
+│   │                 snapshot · apply · sample · state — alles pure, IO injiziert
 │   ├── cheatsheet.ts statische Regex-Referenz (Syntax verbatim, Text als i18n-Key)
 │   ├── session.ts    Zustandsmaschine inkl. Handpfad
 │   └── settings.ts   Typ + defaults (mergeSettings aus dem Kit) · MAX_HITS
-├── obsidian/         main · settings-tab · view · view-render · http · editor-io
+├── obsidian/         main · settings-tab · view · view-render · vault-render ·
+│                     http · editor-io · vault-io · snapshot-io · confirm-modal
 └── vendor/kit/       gevendorte Kit-Module (pure) — nie von Hand ändern
 ```
 
@@ -205,6 +208,26 @@ die er abfangen sollte.)
 - **`makeFakeEl()` aus dem Obsidian-Mock kennt kein `querySelector`.** Der Mock ist ein aus
   fünf Plugins gepflegtes Superset und wird nicht lokal erweitert — die Suche liegt in
   `tests/helpers/dom.ts` (`findByClass`/`findAllByTag`).
+- **Ein vault-weiter Lauf ohne `yieldToUi` hat einen Abbrechen-Knopf, der nichts tut.**
+  `cachedRead` löst oft aus dem Cache auf und erzeugt nur einen Mikrotask — der Renderer
+  kommt nie zum Zeichnen und stellt den Klick nie zu. Der Fortschrittszähler muss auf
+  demselben Zeit-Gate feuern (250 ms), nicht pro Datei, sonst steht er bei großen Notizen
+  und sieht aus wie ein Freeze. Muster geerbt aus `apple-health/src/core/pipeline.ts`.
+- **Der Drift-Schutz gehört in den `vault.process`-Callback**, nicht davor: dort liegt der
+  frische Inhalt vor, und read-modify-write ist atomar. Verglichen wird die
+  **Treffermenge** (`sameHits`), nie der Text — ein Linter, der `updated:` ins Frontmatter
+  schreibt, verschiebt jeden Offset (Regression 0.2.0).
+- **`metadataCache.getTags()` gibt es in den offiziellen Typen nicht.** Die Tag-Liste für
+  die Vervollständigung wird aus den Datei-Caches gesammelt (`allTags` in `vault-io.ts`).
+  Undokumentierte APIs sind im Store-Review ein Befund, keine Abkürzung.
+- **Der Umfangs-Block gehört in den Panel-Rumpf, nicht in `.transmute-rule`.** Den
+  Regel-Container gibt es erst im Preview-Zustand — der Umfang wird aber *vorher* gewählt.
+- **Handler nicht als Referenz weiterreichen** (`onFilter: handlers.onFilter`): das bricht
+  am `unbound-method`-Lint. Arrow-Wrapper verwenden.
+- **Eine additive Union-Erweiterung braucht die Suche nach ihren Konsumenten.** `ScopeKind`
+  um `"vault"` zu erweitern ließ Typecheck und Tests grün — der Setter im Settings-Tab
+  (`String(value) === "selection" ? … : "file"`) hätte die neue Variante still auf `file`
+  zurückgesetzt. Derselbe Mechanismus wie beim `unauthorized`-Bug in 0.4.0.
 - **`data.json`** ist git-ignored (Obsidian-persistierte Konfig), **`main.js`** ist Build-Artefakt.
 - **Release-CI ist GitHub-only** (`.github/` wird von Forgejo ignoriert).
 

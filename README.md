@@ -15,7 +15,8 @@
 - **Preview before anything is written.** Every match is shown before/after, line by line, with its own checkbox. Nothing changes in your note until you click **"Apply"** — and only the checked matches are written.
 - **No separate undo system needed.** Applying writes through the editor, so the change lands in Obsidian's own undo stack — **Cmd+Z reverts it in one step**, exactly like any other edit.
 - **Iterative refinement.** Not quite right? Type a follow-up such as "but not inside code blocks" and click **"Refine"** — the plugin sends the conversation history *and* the actual matches found so far back to the model, so it can see what it got wrong.
-- **Scope control.** Run on the whole note or on your current selection; the default is configurable in settings.
+- **Scope control, up to the whole vault.** Run on the current note, on your selection, or across every note — filtered by folder, tag and a frontmatter property. The preview does not change with the scope: every affected file and every match is shown before anything is written, grouped by file and collapsed, so a rule touching 340 files is still 340 lines you can go through.
+- **A snapshot before every vault-wide replacement.** The affected files are copied before the first change, and one button puts them back. If the snapshot cannot be written, nothing is written. A file you edited after the replacement is left alone and named, rather than silently overwritten.
 - **A history you can go back through.** Refining is trial and error, and the third attempt can be worse than the first. Every round is kept: from the second one on, the panel lists them with their instruction and match count, and one click returns to any earlier version — the later ones stay. Refining from an earlier version continues *that* one.
 - **The rule sticks to its note.** The note is pinned when the preview is generated, and the panel names it. Refining and applying go to that note no matter which tab has focus — and applying re-runs the rule first, so an edit elsewhere in the note (or a linter plugin rewriting your frontmatter on save) doesn't matter, while an edit to a matched span stops the write instead of silently replacing the wrong text.
 - **Model and thinking switchable from the panel.** Both also live in settings, but noticing mid-try that another model fits better shouldn't cost two dialogs. A model the endpoint no longer offers is reported rather than silently swapped, and a model that always thinks (gpt-oss, harmony) shows a locked toggle instead of pretending it can be turned off.
@@ -67,12 +68,14 @@ Then copy `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/p
 
 1. Point the plugin at your local server (see [Configuration](#configuration) below) and make sure a model is loaded.
 2. Click the ribbon icon **"Transmute"** (or run the command **"Open panel"**) to open the panel in the sidebar.
-3. Pick a scope: **"Whole note"** or **"Selection"**.
+3. Pick a scope: **"Whole note"**, **"Selection"** or **"Whole vault"**. For the vault, narrow it down with the folder, tag and property fields — the line underneath tells you how many notes are in scope ("412 of 2140 notes").
 4. Describe the change in the instruction box, e.g. *"turn dates from DD.MM.YYYY into YYYY-MM-DD"*, and click **"Preview"**.
 5. Review the preview: the generated pattern, its plain-language explanation, and every match with a before/after line and a checkbox. Deselect anything you don't want, or use **"Select all"** / **"Select none"**.
 6. Not quite right? Type a follow-up in the refine box (e.g. *"but not inside code blocks"*) and click **"Refine"** — the model sees the previous rounds and the actual matches it produced.
 7. Refined more than once? The panel now shows a **history** above the pattern — click any earlier step to go back to it. Refining from there continues that version; the later ones stay in the list.
 8. Click **"Apply"**. Only the checked matches are written, in a single editor transaction — so **Cmd+Z** reverts the whole thing in one step, and your cursor and scroll position survive. **"Discard"** throws the result away and leaves your instruction standing.
+
+**Across the vault**, two things differ. The preview is not recomputed while you type — reading a few hundred notes is not something to do between two keystrokes, so it sits behind **"Compute preview"**; while it runs you get a progress line and a **"Cancel"** button that really stops it. And applying writes to files that are not open in an editor, so Cmd+Z cannot help: a snapshot is written first, above 50 affected files a dialog asks once more, and afterwards a **"Undo"** button restores the snapshot. Files that changed between preview and apply are skipped and named — never replaced against a text you did not see.
 
 ### Configuration
 
@@ -83,9 +86,11 @@ Open **Settings → Community plugins → Transmute**. Settings are grouped unde
 | **Endpoints** | `["http://127.0.0.1:1234"]` | Ordered list of OpenAI-compatible servers, tried in order; the first reachable one is used. Each row can carry its own **API key** — leave it empty for a local server, set it to mix in a hosted provider (e.g. OpenRouter) alongside your local ones. One-click presets for LM Studio and Ollama, a "Use first" reorder button, a per-row reachability status, and a "Test connections" button. |
 | **Model** | `""` (empty) | Which model to request. Empty lets the server choose whichever is loaded. A dropdown is filled from the active endpoint's `/v1/models`; use the reload button to refresh it. |
 | **Request timeout (ms)** | `120000` | How long to wait for the model to answer before giving up. |
-| **Default scope** | `file` (Whole note) | Which scope a new rule starts with — "Whole note" or "Selection". Switchable per run in the panel. |
+| **Default scope** | `file` (Whole note) | Which scope a new rule starts with — "Whole note", "Selection" or "Whole vault". Switchable per run in the panel. |
 | **Text sample sent to the model** | `2000` (characters) | How much of the scope text is sent along with the instruction, so the model can see what it is matching against. |
 | **Time budget for running the pattern (ms)** | `2000` | A pattern that runs longer than this on a line-by-line scan is stopped, and the matches found so far are shown with a notice. |
+| **Ask before this many files** | `50` | A vault-wide replacement affecting at least this many files asks once more before writing. |
+| **Snapshots to keep** | `5` | How many snapshot folders are kept under `<config dir>/plugins/transmute/snapshots/`. Older ones are removed after each replacement. |
 | **Show a separate "replace with" field** | `false` | Adds a second, optional input for the target pattern. Off by default — many instructions ("strip trailing whitespace", "make headings one level deeper") have no target pattern at all. |
 | **Ask reasoning models to skip thinking** | `true` | Sends reasoning-suppression parameters to the endpoint (and strips `<think>` blocks from the answer either way) so reasoning-capable local models answer faster and more reliably. Measured on this task: ~1.7 s and 5/5 correct with suppression, 26–56 s and 4/5 without. Also switchable from the panel. |
 

@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The whole vault.** A rule can now run across every note instead of just the open one,
+  filtered by folder, tag and a frontmatter property. The preview stays what it was — every
+  file and every match is shown before anything is written, grouped by file and collapsed,
+  so that 340 files are 340 lines rather than 1,204.
+- **A snapshot before every vault-wide replacement**, written before the first change. If it
+  cannot be written, nothing is. One button restores it afterwards; a file that was edited
+  in the meantime is left alone and named rather than silently overwritten.
+- **A confirmation above a configurable number of files** (50 by default), and a setting for
+  how many snapshots to keep (5 by default).
+
+### Changed
+
+- Scope "whole vault" does not recompute on every keystroke — it has a button. Reading a few
+  hundred notes is not something to do between two keys.
+- A vault-wide rule no longer needs an open note. The example the model works from is taken
+  from the open note when the filter includes it, and from the first matching notes
+  otherwise — and which one it was is shown above the input.
+
 ## [0.4.0] — 2026-08-08
 
 ### Added
