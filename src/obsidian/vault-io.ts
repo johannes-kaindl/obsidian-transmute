@@ -36,6 +36,22 @@ export function listCandidates(app: App, filter: VaultFilter): string[] {
   return selectCandidates(all, filter);
 }
 
+/**
+ * Alle im Vault vergebenen Tags, fuer die Vervollstaendigung.
+ *
+ * Bewusst aus den Datei-Caches gesammelt und nicht ueber `metadataCache.getTags()`: das
+ * ist eine undokumentierte API, die in den offiziellen Typen nicht existiert.
+ */
+export function allTags(app: App): string[] {
+  const out = new Set<string>();
+  for (const file of app.vault.getMarkdownFiles()) {
+    for (const tag of tagsOf(app.metadataCache.getFileCache(file))) {
+      out.add(tag.startsWith("#") ? tag : `#${tag}`);
+    }
+  }
+  return [...out].sort();
+}
+
 function fileAt(app: App, path: string): TFile | null {
   const file = app.vault.getFileByPath(path);
   return file instanceof TFile ? file : null;

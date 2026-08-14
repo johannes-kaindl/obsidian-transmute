@@ -66,11 +66,17 @@ export class TransmuteSettingTab extends PluginSettingTab {
             control: {
               type: "dropdown",
               key: "defaultScope",
-              options: { file: t("view.scope.file"), selection: t("view.scope.selection") },
+              options: {
+                file: t("view.scope.file"),
+                selection: t("view.scope.selection"),
+                vault: t("view.scope.vault"),
+              },
             },
           },
           { name: t("set.sampleChars"), desc: t("set.sampleCharsDesc"), control: { type: "number", key: "sampleChars", min: 200 } },
           { name: t("set.budgetMs"), desc: t("set.budgetMsDesc"), control: { type: "number", key: "budgetMs", min: 200 } },
+          { name: t("set.confirmThreshold"), desc: t("set.confirmThresholdDesc"), control: { type: "number", key: "confirmThreshold", min: 1 } },
+          { name: t("set.snapshotKeep"), desc: t("set.snapshotKeepDesc"), control: { type: "number", key: "snapshotKeep", min: 0 } },
           { name: t("set.suppressReasoning"), desc: t("set.suppressReasoningDesc"), control: { type: "toggle", key: "suppressReasoning" } },
           { name: t("set.showTargetField"), desc: t("set.showTargetFieldDesc"), control: { type: "toggle", key: "showTargetField" } },
         ],
@@ -155,6 +161,10 @@ export class TransmuteSettingTab extends PluginSettingTab {
         return s.sampleChars;
       case "budgetMs":
         return s.budgetMs;
+      case "confirmThreshold":
+        return s.confirmThreshold;
+      case "snapshotKeep":
+        return s.snapshotKeep;
       case "suppressReasoning":
         return s.suppressReasoning;
       case "showTargetField":
@@ -177,14 +187,25 @@ export class TransmuteSettingTab extends PluginSettingTab {
       case "timeoutMs":
         s.timeoutMs = Math.max(1000, asInt(s.timeoutMs));
         break;
-      case "defaultScope":
-        s.defaultScope = String(value) === "selection" ? "selection" : ("file" satisfies ScopeKind);
+      case "defaultScope": {
+        // Vollstaendig ueber die Union gehen: ein Vergleich auf eine einzelne Variante
+        // laesst jede spaeter hinzugekommene still auf "file" zurueckfallen.
+        const wanted = String(value);
+        const known: ScopeKind[] = ["file", "selection", "vault"];
+        s.defaultScope = known.find((k) => k === wanted) ?? "file";
         break;
+      }
       case "sampleChars":
         s.sampleChars = Math.max(200, asInt(s.sampleChars));
         break;
       case "budgetMs":
         s.budgetMs = Math.max(200, asInt(s.budgetMs));
+        break;
+      case "confirmThreshold":
+        s.confirmThreshold = Math.max(1, asInt(s.confirmThreshold));
+        break;
+      case "snapshotKeep":
+        s.snapshotKeep = Math.max(0, asInt(s.snapshotKeep));
         break;
       case "suppressReasoning":
         s.suppressReasoning = Boolean(value);

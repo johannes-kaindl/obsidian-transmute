@@ -7,6 +7,12 @@ import { modelChoices, thinkToggleView } from "../core/reasoning-toggle";
 import { clipContext } from "../core/snippet";
 import type { Hit, RuleDraft, RuleProblem, Version } from "../core/types";
 import { t } from "../vendor/kit/i18n";
+import type { VaultFilter } from "../core/vault/scope";
+import {
+  renderRunState, renderScopeBlock, renderVaultList, renderVaultOutcome,
+  type VaultListModel, type VaultOutcome, type VaultScopeModel,
+} from "./vault-render";
+import type { RunState } from "../core/vault/state";
 
 export type PanelModel = {
   state: SessionState;
@@ -25,6 +31,14 @@ export type PanelModel = {
   /** Gehoert ins Modell, nicht ins DOM: der Ergebnis-Container wird bei jedem
    *  Live-Update neu gezeichnet und wuerde ein offenes <details> sonst zuklappen. */
   reasoningOpen: boolean;
+  /** Nur bei scope === "vault" gesetzt. */
+  vault?: VaultPanel;
+};
+
+/** Alles, was der vault-weite Lauf zum Zeichnen braucht. */
+export type VaultPanel = VaultScopeModel & VaultListModel & {
+  run: RunState;
+  outcome: VaultOutcome;
 };
 
 export type PanelHandlers = {
@@ -49,6 +63,13 @@ export type PanelHandlers = {
   onToggleReasoning(): void;
   onDiagnose(): void;
   onApplyFix(): void;
+  onFilter(patch: Partial<VaultFilter>): void;
+  onComputePreview(): void;
+  onToggleFile(path: string): void;
+  onToggleHit(path: string, index: number): void;
+  onExpand(path: string): void;
+  onAbort(): void;
+  onUndo(): void;
 };
 
 type El = HTMLElement;
@@ -99,6 +120,7 @@ function scopeSwitch(parent: El, model: PanelModel, handlers: PanelHandlers): vo
   const options: { kind: ScopeKind; key: string }[] = [
     { kind: "file", key: "view.scope.file" },
     { kind: "selection", key: "view.scope.selection" },
+    { kind: "vault", key: "view.scope.vault" },
   ];
   for (const option of options) {
     const button = row.createEl("button", { text: t(option.key), cls: "transmute-scope-btn" });
@@ -443,7 +465,18 @@ export function renderOutcome(parts: PanelParts, model: PanelModel, handlers: Pa
   renderProblem(parts.outcome, version, handlers);
   renderExplanation(parts.outcome, version);
   renderReasoning(parts.outcome, version, model, handlers);
-  renderHits(parts.outcome, version, handlers);
+  if (model.scope === "vault" && model.vault !== undefined) {
+    renderRunState(parts.outcome, model.vault.run, () => handlers.onAbort());
+    renderVaultList(parts.outcome, model.vault, {
+      onToggleFile: (path) => handlers.onToggleFile(path),
+      onToggleHit: (path, index) => handlers.onToggleHit(path, index),
+      onExpand: (path) => handlers.onExpand(path),
+      onSetAll: (value) => handlers.onSetAll(value),
+    });
+    renderVaultOutcome(parts.outcome, model.vault.outcome, () => handlers.onUndo());
+  } else {
+    renderHits(parts.outcome, version, handlers);
+  }
   renderDiagnosis(parts.outcome, version, handlers);
   renderRefineRow(parts.outcome, model, handlers);
   renderActions(parts.outcome, version, handlers);
@@ -482,6 +515,15 @@ export function renderPanel(root: El, model: PanelModel, handlers: PanelHandlers
   // Kein eigener Titel: der Reiter traegt ihn bereits (Obsidian-Konvention fuer Panels).
   modelRow(root, model, handlers);
   scopeSwitch(root, model, handlers);
+
+  // Der Umfang wird gewaehlt, BEVOR eine Regel existiert — der Block gehoert deshalb in
+  // den Panel-Rumpf und nicht in den Regel-Container, den es im Ruhezustand nicht gibt.
+  if (model.scope === "vault" && model.vault !== undefined) {
+    renderScopeBlock(root, model.vault, {
+      onFilter: (patch) => handlers.onFilter(patch),
+      onComputePreview: () => handlers.onComputePreview(),
+    });
+  }
 
   const input = root.createEl("textarea", {
     attr: { rows: "3", placeholder: t("view.instructionPlaceholder") },

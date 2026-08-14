@@ -78,6 +78,13 @@ export default class TransmutePlugin extends Plugin {
             this.settings.suppressReasoning = value;
             void this.saveSettings();
           },
+          runOptions: () => ({
+            sampleChars: this.settings.sampleChars,
+            budgetMs: this.settings.budgetMs,
+            maxHits: MAX_HITS,
+          }),
+          confirmThreshold: () => this.settings.confirmThreshold,
+          snapshotKeep: () => this.settings.snapshotKeep,
         }),
     );
 

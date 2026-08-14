@@ -27,6 +27,13 @@ const handlers: PanelHandlers = {
   onToggleReasoning: vi.fn(),
   onDiagnose: vi.fn(),
   onApplyFix: vi.fn(),
+  onFilter: vi.fn(),
+  onComputePreview: vi.fn(),
+  onToggleFile: vi.fn(),
+  onToggleHit: vi.fn(),
+  onExpand: vi.fn(),
+  onAbort: vi.fn(),
+  onUndo: vi.fn(),
 };
 
 const hit = (): Hit => ({

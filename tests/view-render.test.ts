@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { makeFakeEl } from "./__mocks__/obsidian";
 import { findByClass } from "./helpers/dom";
+import { EMPTY_FILTER } from "../src/core/vault/scope";
+import { RUN_IDLE } from "../src/core/vault/state";
 import { renderPanel, type PanelHandlers, type PanelModel } from "../src/obsidian/view-render";
 import type { Hit } from "../src/core/types";
 import "../src/core/i18n/strings";
@@ -27,6 +29,13 @@ const handlers: PanelHandlers = {
   onToggleReasoning: vi.fn(),
   onDiagnose: vi.fn(),
   onApplyFix: vi.fn(),
+  onFilter: vi.fn(),
+  onComputePreview: vi.fn(),
+  onToggleFile: vi.fn(),
+  onToggleHit: vi.fn(),
+  onExpand: vi.fn(),
+  onAbort: vi.fn(),
+  onUndo: vi.fn(),
 };
 
 const base: Omit<PanelModel, "state"> = {
@@ -335,5 +344,44 @@ describe("renderPanel — Verlauf ist als Verlauf erkennbar", () => {
     const root = makeFakeEl();
     renderPanel(root, { ...base, state: { phase: "preview", versions: [version("a")], active: 0 } }, handlers);
     expect(root.textContent).not.toContain("History");
+  });
+});
+
+describe("Vault-Scope im Panel", () => {
+  const vaultPanel = {
+    filter: EMPTY_FILTER,
+    candidates: 412,
+    total: 2140,
+    folders: [],
+    tags: [],
+    files: [],
+    expanded: new Set<string>(),
+    totalHits: 0,
+    run: RUN_IDLE,
+    outcome: { applied: null, skippedChanged: [], unreadable: [], incomplete: [] },
+  };
+
+  it("bietet den ganzen Vault als dritte Wahl an", () => {
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, state: { phase: "idle" } }, handlers);
+    expect(root.textContent).toContain("Whole vault");
+  });
+
+  it("zeigt bei Scope vault den Umfangs-Block, schon bevor eine Regel steht", () => {
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, scope: "vault", vault: vaultPanel, state: { phase: "idle" } }, handlers);
+    expect(findByClass(root, "transmute-scope-block")).not.toBeNull();
+  });
+
+  it("bietet bei Scope vault einen Knopf statt einer Live-Vorschau", () => {
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, scope: "vault", vault: vaultPanel, state: { phase: "idle" } }, handlers);
+    expect(findByClass(root, "transmute-compute")).not.toBeNull();
+  });
+
+  it("zeigt den Umfangs-Block nicht bei Scope Datei", () => {
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, state: { phase: "idle" } }, handlers);
+    expect(findByClass(root, "transmute-scope-block")).toBeNull();
   });
 });
