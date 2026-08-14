@@ -2,6 +2,7 @@ import { t } from "../vendor/kit/i18n";
 import type { VaultFilter } from "../core/vault/scope";
 import type { FileHits } from "../core/vault/run";
 import { countSelected, fileCheckState } from "../core/vault/selection";
+import { canAbort, type RunPhase, type RunState } from "../core/vault/state";
 
 type El = HTMLElement;
 
@@ -143,5 +144,57 @@ export function renderVaultList(
       hitRow.createDiv({ cls: "transmute-hit-before", text: hit.before });
       hitRow.createDiv({ cls: "transmute-hit-after", text: hit.after });
     });
+  }
+}
+
+const PHASE_KEY: Record<RunPhase, string> = {
+  reading: "view.scanning",
+  matching: "view.scanning",
+  writing: "view.writing",
+  restoring: "view.restoring",
+};
+
+export function renderRunState(parent: El, state: RunState, onAbort: () => void): void {
+  if (state.status !== "running") return;
+  const box = parent.createDiv({ cls: "transmute-run" });
+  box.createSpan({
+    cls: "transmute-run-line",
+    text: t(PHASE_KEY[state.phase], String(state.done), String(state.total)),
+  });
+  if (!canAbort(state)) return;
+  const btn = box.createEl("button", { cls: "transmute-abort", text: t("view.cancel") });
+  btn.onclick = (): void => onAbort();
+}
+
+export type VaultOutcome = {
+  applied: { files: number; hits: number; snapshotDir: string } | null;
+  skippedChanged: string[];
+  unreadable: string[];
+  /** Zu gross, um vollstaendig gemessen zu werden — bewusst nicht geschrieben. */
+  incomplete: string[];
+};
+
+export function renderVaultOutcome(parent: El, outcome: VaultOutcome, onUndo: () => void): void {
+  if (outcome.applied !== null) {
+    const box = parent.createDiv({ cls: "transmute-vault-outcome" });
+    box.createDiv({
+      cls: "transmute-applied",
+      text: t("view.appliedVault", String(outcome.applied.hits), String(outcome.applied.files)),
+    });
+    box.createDiv({ cls: "transmute-snapshot", text: t("view.snapshotAt", outcome.applied.snapshotDir) });
+    const undo = box.createEl("button", { cls: "transmute-undo", text: t("view.undo") });
+    undo.onclick = (): void => onUndo();
+  }
+
+  // Jeder Grund bekommt seine eigene Zeile: „uebersprungen" ohne Grund ist eine Meldung,
+  // die den Nutzer ratlos zuruecklaesst.
+  const notes: [string[], string, string][] = [
+    [outcome.skippedChanged, "transmute-skipped-changed", "view.skippedChanged"],
+    [outcome.unreadable, "transmute-skipped-unreadable", "view.skippedUnreadable"],
+    [outcome.incomplete, "transmute-skipped-incomplete", "view.skippedIncomplete"],
+  ];
+  for (const [items, cls, key] of notes) {
+    if (items.length === 0) continue;
+    parent.createDiv({ cls, text: t(key, String(items.length)) });
   }
 }
