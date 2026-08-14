@@ -1,7 +1,7 @@
 import { mergeSettings } from "../vendor/kit/settings";
 import { migrateEndpointList, type EndpointConfig } from "../vendor/kit/endpoint_config";
 
-export type ScopeKind = "file" | "selection";
+export type ScopeKind = "file" | "selection" | "vault";
 
 export type TransmuteSettings = {
   /** Geordnete Fallback-Kette; der erste erreichbare gewinnt. Jede Zeile trägt ihren
@@ -16,6 +16,10 @@ export type TransmuteSettings = {
   /** Zweites, optionales Feld fuer das Ziel-Muster einblenden (Default aus:
    *  viele Anweisungen haben gar kein Ziel-Muster). */
   showTargetField: boolean;
+  /** Ab wie vielen betroffenen Dateien vor dem Schreiben nachgefragt wird. */
+  confirmThreshold: number;
+  /** Wie viele Snapshot-Ordner aufgehoben werden. */
+  snapshotKeep: number;
 };
 
 /**
@@ -37,6 +41,8 @@ export const DEFAULT_SETTINGS: TransmuteSettings = {
   budgetMs: 2000,
   defaultScope: "file",
   showTargetField: false,
+  confirmThreshold: 50,
+  snapshotKeep: 5,
 };
 
 export function loadSettings(raw: unknown): TransmuteSettings {

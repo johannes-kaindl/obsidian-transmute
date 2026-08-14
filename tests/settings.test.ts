@@ -11,6 +11,17 @@ describe("loadSettings", () => {
   it("startet ohne hartkodiertes Modell (Modellagnostik)", () => {
     expect(DEFAULT_SETTINGS.model).toBe("");
   });
+
+  it("bringt Schwelle und Snapshot-Anzahl als Vorgabe mit", () => {
+    expect(DEFAULT_SETTINGS.confirmThreshold).toBe(50);
+    expect(DEFAULT_SETTINGS.snapshotKeep).toBe(5);
+  });
+
+  it("ergaenzt die neuen Felder in einer alten data.json", () => {
+    const geladen = loadSettings({ endpoints: [{ url: "http://x" }], model: "" });
+    expect(geladen.confirmThreshold).toBe(50);
+    expect(geladen.snapshotKeep).toBe(5);
+  });
 });
 
 describe("i18n", () => {
