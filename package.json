@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && node esbuild.config.mjs --production",
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
-    "typecheck:scripts": "tsc -p tsconfig.scripts.json --noEmit",
+    "typecheck:scripts": "if test -d ../tools/obsidian-cdp; then tsc -p tsconfig.scripts.json --noEmit; else echo 'typecheck:scripts uebersprungen: ../tools/obsidian-cdp fehlt (die Treiber importieren die zentrale CDP-Bruecke aus dem Dach-Checkout; in CI/fremden Checkouts nicht vorhanden)'; fi",
     "test": "node scripts/check-no-nul-bytes.mjs && vitest run",
     "lab:diagnose": "esbuild scripts/diagnose-lab.ts --bundle --platform=node --format=esm --outfile=.lab-diagnose.mjs --log-level=warning && node .lab-diagnose.mjs",
     "shots": "esbuild scripts/shots.ts --bundle --platform=node --format=esm --outfile=.shots.mjs --log-level=warning && node .shots.mjs",

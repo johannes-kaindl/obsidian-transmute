@@ -27,7 +27,7 @@
  * ```
  */
 
-import { attachTo, Cdp, closeExtraLeaves, notices, pollUntil, setPluginSetting } from "./lib/cdp.js";
+import { attachTo, Cdp, closeExtraLeaves, notices, pollUntil, setPluginSetting } from "../../tools/obsidian-cdp/cdp.js";
 
 const PLUGIN_ID = "transmute";
 const VIEW_TYPE = "transmute-panel";

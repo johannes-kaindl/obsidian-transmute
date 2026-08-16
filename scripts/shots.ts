@@ -24,9 +24,9 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { attachTo, closeExtraLeaves, openExisting, pollUntil, setAppConfig, type Cdp } from "./lib/cdp.js";
-import { boxAround, boxOf, capture, setWindowSize, writeShot } from "./lib/shot.js";
-import { buildVault, stagingVaultDir } from "./lib/vault.js";
+import { attachTo, closeExtraLeaves, openExisting, pollUntil, setAppConfig, type Cdp } from "../../tools/obsidian-cdp/cdp.js";
+import { boxAround, boxOf, capture, setWindowSize, writeShot } from "../../tools/obsidian-cdp/shot.js";
+import { buildVault, stagingVaultDir } from "../../tools/obsidian-cdp/vault.js";
 
 const PLUGIN_ID = "transmute";
 const VIEW_TYPE = "transmute-panel";
