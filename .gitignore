@@ -7,3 +7,4 @@ data.json
 .lab-vault.mjs
 test-vault/
 .gui-smoke.mjs
+.shots.mjs

@@ -11,6 +11,8 @@
     "typecheck:scripts": "tsc -p tsconfig.scripts.json --noEmit",
     "test": "node scripts/check-no-nul-bytes.mjs && vitest run",
     "lab:diagnose": "esbuild scripts/diagnose-lab.ts --bundle --platform=node --format=esm --outfile=.lab-diagnose.mjs --log-level=warning && node .lab-diagnose.mjs",
+    "shots": "esbuild scripts/shots.ts --bundle --platform=node --format=esm --outfile=.shots.mjs --log-level=warning && node .shots.mjs",
+    "shots:check": "test -f ../../_docs/readme/readme_lint.py && python3 ../../_docs/readme/readme_lint.py . || echo \"readme_lint nicht verfuegbar (nur lokal beim Maintainer)\"",
     "smoke:gui": "esbuild scripts/gui-smoke.ts --bundle --platform=node --format=esm --outfile=.gui-smoke.mjs --log-level=warning && node .gui-smoke.mjs",
     "lab:vault": "esbuild scripts/make-test-vault.ts --bundle --platform=node --format=esm --outfile=.lab-vault.mjs --log-level=warning && node .lab-vault.mjs",
     "lint": "node scripts/check-no-inline-disables.mjs && eslint src --max-warnings 0",

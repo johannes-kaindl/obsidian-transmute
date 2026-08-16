@@ -9,6 +9,8 @@
 [![Release](https://img.shields.io/gitea/v/release/jkaindl/obsidian-transmute?gitea_url=https%3A%2F%2Fgit.jkaindl.de&label=release)](https://git.jkaindl.de/jkaindl/obsidian-transmute/releases)
 ![Platform](https://img.shields.io/badge/platform-Obsidian%201.8.7%2B%20·%20desktop%20%26%20mobile-7c3aed)
 
+<p align="center"><img src="https://git.jkaindl.de/jkaindl/obsidian-transmute/raw/branch/main/docs/images/preview.png" width="600" alt="Das Transmute-Panel neben einer Notiz: Muster, Ersetzung und jeder Treffer mit Vorher- und Nachher-Zeile, jeder einzeln abwählbar"></p>
+
 ## Funktionen
 
 - **Suchen & Ersetzen in natürlicher Sprache.** Tippe, was sich ändern soll (z. B. „Daten von TT.MM.JJJJ in JJJJ-MM-TT umwandeln"), und ein lokales OpenAI-kompatibles LLM macht daraus eine JavaScript-Regex, ein Ersetzungsmuster und eine Ein-Satz-Erklärung in Klartext, was das Muster trifft.
@@ -16,9 +18,16 @@
 - **Kein eigenes Undo-System nötig.** Das Anwenden schreibt über den Editor, die Änderung landet also in Obsidians eigenem Undo-Stack — **Cmd+Z macht sie in einem Schritt rückgängig**, genau wie jede andere Bearbeitung.
 - **Iteratives Nachschärfen.** Nicht ganz richtig? Tippe eine Anschluss-Anweisung wie „aber nicht in Codeblöcken" und klicke **„Nachschärfen"** — das Plugin schickt den Gesprächsverlauf *und* die bisher gefundenen echten Treffer zurück ans Modell, damit es sieht, was falsch lief.
 - **Bereichs-Kontrolle.** Läuft auf der ganzen Notiz oder auf der aktuellen Auswahl; der Standard ist in den Einstellungen konfigurierbar.
+
+<img src="https://git.jkaindl.de/jkaindl/obsidian-transmute/raw/branch/main/docs/images/vault-scope.png" width="512" alt="Bereich „Ganzer Vault“, nach Ordner gefiltert, mit den Treffern nach Datei gruppiert und einer aufgeklappten Datei">
+
 - **Modellagnostisch per Design.** Es ist nirgends ein Modellname hartkodiert. Die Modell-Liste wird live aus `GET /v1/models` des Endpunkts gelesen; leer gelassen entscheidet der Server, welches geladene Modell genutzt wird.
 - **Geordnete Endpunkt-Fallback-Liste.** Mehrere OpenAI-kompatible Server konfigurieren; das Plugin probiert sie der Reihe nach und nutzt den ersten erreichbaren, mit Ein-Klick-Presets für LM Studio und Ollama und einem Erreichbarkeits-Status pro Zeile.
 - **Reasoning-Modelle korrekt behandelt.** `<think>`-Blöcke werden abgetrennt, bevor die JSON-Antwort geparst wird, und wo der Server es unterstützt, wird Reasoning aktiv unterdrückt — Thinker-Modelle antworten dadurch schneller und die Gedankenkette landet nicht in der Notiz.
+- **Das Muster selbst bearbeiten.** Regex, Ersetzung und Flags sind direkt im Panel editierbar, und die Vorschau rechnet nach einer kurzen Tippause neu. Eine von Hand geänderte Regel wird ein eigener Verlaufseintrag („Bearbeitet"), die Fassung des Modells bleibt also erhalten und ist einen Klick entfernt. `g` wird angezeigt, aber nicht angeboten — es ist immer an, und ein Schalter, der nichts schaltet, wäre eine Lüge.
+
+<img src="https://git.jkaindl.de/jkaindl/obsidian-transmute/raw/branch/main/docs/images/rule-editor.png" width="512" alt="Muster, Ersetzung und Flags als editierbare Felder, darunter der aufgeklappte Regex-Spickzettel">
+
 - **Ein außer Kontrolle geratenes Muster kann den Editor nicht blockieren.** Jedes erzeugte Muster wird von einer statischen Heuristik geprüft (verschachtelte Quantoren, quantifizierte Alternation, unbegrenzte Rückreferenzen) — **bevor** es überhaupt läuft; die Ausführung selbst ist zusätzlich durch ein Zeitbudget pro Zeile begrenzt.
 - **Tolerant gegenüber unsauberer Modell-Ausgabe.** Die Antwort des Modells wird nachsichtig geparst — Code-Fences werden entfernt, das erste balancierte JSON-Objekt wird extrahiert — und bei einem Parse- oder Validierungsfehler geht genau ein Retry mit dem konkreten Fehler zurück ans Modell, bevor eine klare Fehlermeldung erscheint.
 - **Zweisprachige Oberfläche.** Englisch ist kanonisch; die Oberfläche folgt Obsidians Spracheinstellung und liefert eine vollständige deutsche Übersetzung.
@@ -37,6 +46,9 @@ Transmute schließt eine Lücke, die Obsidian offen lässt: Die eingebaute Suche
 ### Community-Plugins (empfohlen)
 
 **Transmute** in **Einstellungen → Community-Plugins → Durchsuchen** suchen, dann **Installieren** und **Aktivieren**.
+
+<img src="https://git.jkaindl.de/jkaindl/obsidian-transmute/raw/branch/main/docs/images/settings.png" width="600" alt="Die Plugin-Einstellungen: die Endpunkt-Liste mit Erreichbarkeits-Status je Zeile, Modellwahl und die Verhaltens-Optionen">
+
 
 ### Manuell
 

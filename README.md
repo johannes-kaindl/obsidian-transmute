@@ -9,6 +9,8 @@
 [![Release](https://img.shields.io/gitea/v/release/jkaindl/obsidian-transmute?gitea_url=https%3A%2F%2Fgit.jkaindl.de&label=release)](https://git.jkaindl.de/jkaindl/obsidian-transmute/releases)
 ![Platform](https://img.shields.io/badge/platform-Obsidian%201.8.7%2B%20·%20desktop%20%26%20mobile-7c3aed)
 
+<p align="center"><img src="https://git.jkaindl.de/jkaindl/obsidian-transmute/raw/branch/main/docs/images/preview.png" width="600" alt="The Transmute panel next to a note: the pattern, the replacement, and every match shown before and after, each with its own checkbox"></p>
+
 ## Features
 
 - **Natural-language search & replace.** Type what should change (e.g. "turn dates from DD.MM.YYYY into YYYY-MM-DD") and a local OpenAI-compatible LLM turns it into a JavaScript regular expression, a replacement pattern, and a one-sentence plain-language explanation of what the pattern matches.
@@ -16,11 +18,17 @@
 - **No separate undo system needed.** Applying writes through the editor, so the change lands in Obsidian's own undo stack — **Cmd+Z reverts it in one step**, exactly like any other edit.
 - **Iterative refinement.** Not quite right? Type a follow-up such as "but not inside code blocks" and click **"Refine"** — the plugin sends the conversation history *and* the actual matches found so far back to the model, so it can see what it got wrong.
 - **Scope control, up to the whole vault.** Run on the current note, on your selection, or across every note — filtered by folder, tag and a frontmatter property. The preview does not change with the scope: every affected file and every match is shown before anything is written, grouped by file and collapsed, so a rule touching 340 files is still 340 lines you can go through.
+
+<img src="https://git.jkaindl.de/jkaindl/obsidian-transmute/raw/branch/main/docs/images/vault-scope.png" width="512" alt="Scope set to the whole vault, filtered by folder, with the matches grouped per file and one file expanded">
+
 - **A snapshot before every vault-wide replacement.** The affected files are copied before the first change, and one button puts them back. If the snapshot cannot be written, nothing is written. A file you edited after the replacement is left alone and named, rather than silently overwritten.
 - **A history you can go back through.** Refining is trial and error, and the third attempt can be worse than the first. Every round is kept: from the second one on, the panel lists them with their instruction and match count, and one click returns to any earlier version — the later ones stay. Refining from an earlier version continues *that* one.
 - **The rule sticks to its note.** The note is pinned when the preview is generated, and the panel names it. Refining and applying go to that note no matter which tab has focus — and applying re-runs the rule first, so an edit elsewhere in the note (or a linter plugin rewriting your frontmatter on save) doesn't matter, while an edit to a matched span stops the write instead of silently replacing the wrong text.
 - **Model and thinking switchable from the panel.** Both also live in settings, but noticing mid-try that another model fits better shouldn't cost two dialogs. A model the endpoint no longer offers is reported rather than silently swapped, and a model that always thinks (gpt-oss, harmony) shows a locked toggle instead of pretending it can be turned off.
 - **Edit the pattern yourself.** Regex, replacement and flags are editable right in the panel, and the preview recomputes after a short typing pause. An edited rule becomes its own history entry ("Edited by hand"), so the model's version stays and remains one click away. `g` is shown but not offered — it is always on, and a switch that switches nothing would be a lie.
+
+<img src="https://git.jkaindl.de/jkaindl/obsidian-transmute/raw/branch/main/docs/images/rule-editor.png" width="512" alt="Pattern, replacement and flags as editable fields, with the built-in regex cheat sheet open below them">
+
 - **A way in without the model at all.** "or write the pattern yourself" opens the same preview with an empty pattern, for when you already know what you want and don't feel like waiting for a model. No separate mode, no second tab.
 - **A cheat sheet where you're typing.** A collapsible regex reference sits right under the fields — no model, no network — and stays open while you work.
 - **You decide about risky patterns you wrote yourself — with a measurement to back it up.** A hand-written pattern that trips the backtracking heuristic is a warning with a reason, not a refusal: "Run it anyway" releases it for exactly that pattern. Change one character and the warning is back — a release for `(a+)+b` says nothing about `(a+)+bc`. Before the release actually runs, the pattern is timed against a 20-character sample of the longest line: backtracking cost grows exponentially with input length, so a pattern that is already slow there would effectively never finish on a long line, and it is stopped with the measurement shown. This is a brake, not a guarantee — a pattern that passes the sample can still blow up on a much longer line.
@@ -80,6 +88,9 @@ Then copy `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/p
 ### Configuration
 
 Open **Settings → Community plugins → Transmute**. Settings are grouped under **"Connection"** and **"Behaviour"**.
+
+<img src="https://git.jkaindl.de/jkaindl/obsidian-transmute/raw/branch/main/docs/images/settings.png" width="600" alt="The plugin settings: the endpoint list with a reachability status per row, model selection, and the behaviour options">
+
 
 | Setting | Default | Effect |
 |---|---|---|
