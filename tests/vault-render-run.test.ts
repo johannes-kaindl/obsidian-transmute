@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { makeFakeEl } from "./__mocks__/obsidian";
-import { findByClass } from "./helpers/dom";
-import { renderRunState, renderVaultOutcome } from "../src/obsidian/vault-render";
+import { findAllByClass, findByClass } from "./helpers/dom";
+import { renderRunState, renderVaultBody, renderVaultOutcome } from "../src/obsidian/vault-render";
 import { runPhaseChanged, runProgressed, runStarted, RUN_IDLE } from "../src/core/vault/state";
+import type { FileHits } from "../src/core/vault/run";
 import "../src/core/i18n/strings";
+
+const handlers = {
+  onToggleFile: vi.fn(), onToggleHit: vi.fn(), onExpand: vi.fn(), onSetAll: vi.fn(), onUndo: vi.fn(), onAbort: vi.fn(),
+};
 
 describe("renderRunState", () => {
   it("zeichnet im Ruhezustand nichts", () => {
@@ -72,5 +77,44 @@ describe("renderVaultOutcome", () => {
     renderVaultOutcome(root, { ...leer, incomplete: ["gross.md"] }, vi.fn());
     expect(findByClass(root, "transmute-vault-outcome")).toBeNull();
     expect(findByClass(root, "transmute-skipped-incomplete")).not.toBeNull();
+  });
+});
+
+describe("Zeichnen waehrend eines laufenden Laufs", () => {
+  const file = (path: string): FileHits => ({
+    path,
+    hits: [{ line: 0, lineStart: 0, start: 0, end: 3, matched: "alt", replacement: "neu", before: "alt", after: "neu" }],
+    selected: [true], timedOutAtLine: null, complete: true,
+  });
+
+  it("zeichnet die Trefferliste erst, wenn der Lauf fertig ist", () => {
+    // Regression (GUI-Smoke 2026-08-16): waehrend des Laufs wurde bei JEDEM Fortschritt
+    // die komplette Liste neu gebaut. Bei 11.770 Dateien kostet das mehr als der Lauf
+    // selbst — und blockiert ausgerechnet die Oberflaeche, die der Fortschritt
+    // informieren soll. Der Abbrechen-Knopf wurde dadurch nie erreichbar.
+    const root = makeFakeEl();
+    renderVaultBody(root, {
+      files: [file("a.md"), file("b.md")],
+      expanded: new Set<string>(),
+      totalHits: 2,
+      run: runProgressed(runStarted(1000), 17, "a.md"),
+      outcome: { applied: null, skippedChanged: [], unreadable: [], incomplete: [] },
+    }, handlers);
+
+    expect(findByClass(root, "transmute-run")).not.toBeNull();
+    expect(findAllByClass(root, "transmute-file-row")).toHaveLength(0);
+  });
+
+  it("zeichnet die Trefferliste, sobald der Lauf steht", () => {
+    const root = makeFakeEl();
+    renderVaultBody(root, {
+      files: [file("a.md"), file("b.md")],
+      expanded: new Set<string>(),
+      totalHits: 2,
+      run: RUN_IDLE,
+      outcome: { applied: null, skippedChanged: [], unreadable: [], incomplete: [] },
+    }, handlers);
+
+    expect(findAllByClass(root, "transmute-file-row")).toHaveLength(2);
   });
 });

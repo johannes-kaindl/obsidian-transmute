@@ -18,6 +18,18 @@ All notable changes to this project are documented here. The format follows
 - **A confirmation above a configurable number of files** (50 by default), and a setting for
   how many snapshots to keep (5 by default).
 
+### Fixed
+
+- **The cancel button during a vault-wide run was decoration in exactly the case that
+  needs it.** The UI yield sat behind an early `continue` for files that hit the match
+  limit — a pattern like `[a-z]` hits it in every file, so the interface was never
+  released and the click never arrived. Found by the first GUI smoke run against a real
+  Obsidian with 12,002 notes; 403 green unit tests did not see it.
+- **Progress no longer redraws the whole match list.** With 11,770 affected files that
+  costs more than the run itself and blocks the very interface the progress is meant to
+  inform. While a run is going, only the progress line is drawn — there is no complete
+  result to show yet anyway.
+
 ### Changed
 
 - Scope "whole vault" does not recompute on every keystroke — it has a button. Reading a few

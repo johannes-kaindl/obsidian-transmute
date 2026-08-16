@@ -198,3 +198,36 @@ export function renderVaultOutcome(parent: El, outcome: VaultOutcome, onUndo: ()
     parent.createDiv({ cls, text: t(key, String(items.length)) });
   }
 }
+
+/** Alles, was unterhalb der Regel gezeichnet wird: Fortschritt, Liste, Ergebnis. */
+export type VaultBodyModel = VaultListModel & {
+  run: RunState;
+  outcome: VaultOutcome;
+};
+
+export type VaultBodyHandlers = VaultListHandlers & {
+  onAbort(): void;
+  onUndo(): void;
+};
+
+/**
+ * Der EINE Ort, an dem entschieden wird, was waehrend und was nach einem Lauf sichtbar
+ * ist.
+ *
+ * **Waehrend des Laufs wird die Trefferliste NICHT gezeichnet.** Der Fortschritt feuert
+ * im 250-ms-Takt, und jedes Zeichnen baute bisher die komplette Liste neu auf — bei
+ * 11.770 Dateien kostet das mehr als der Lauf selbst und blockiert ausgerechnet die
+ * Oberflaeche, die der Fortschritt informieren soll: der Abbrechen-Knopf wurde dadurch
+ * nie erreichbar (gemessen im GUI-Smoke 2026-08-16). Inhaltlich ist es ohnehin richtig —
+ * solange gesucht wird, gibt es kein vollstaendiges Ergebnis zu zeigen.
+ */
+export function renderVaultBody(
+  parent: El,
+  model: VaultBodyModel,
+  handlers: VaultBodyHandlers,
+): void {
+  renderRunState(parent, model.run, () => handlers.onAbort());
+  if (model.run.status === "running") return;
+  renderVaultList(parent, model, handlers);
+  renderVaultOutcome(parent, model.outcome, () => handlers.onUndo());
+}

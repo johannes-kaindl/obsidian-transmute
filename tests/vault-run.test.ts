@@ -89,6 +89,35 @@ describe("runOverFiles", () => {
     expect(yieldToUi).toHaveBeenCalled();
   });
 
+it("gibt die Oberflaeche auch frei, wenn Dateien die Obergrenze reissen", async () => {
+    // Regression (GUI-Smoke 2026-08-16): Fortschritt und Freigabe standen am Ende der
+    // Schleife, hinter dem `continue` fuer „zu viele Treffer". Ein Muster wie [a-z]
+    // reisst die Grenze in JEDER Datei — also wurde die Oberflaeche nie freigegeben,
+    // ausgerechnet im teuersten Fall. Der Abbrechen-Knopf war dort Dekoration.
+    let t = 0;
+    const yieldToUi = vi.fn(() => Promise.resolve());
+    const onProgress = vi.fn();
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 5; i++) files[`f${i}.md`] = "aaaa";
+    await runOverFiles(
+      Object.keys(files), { regex: "a", flags: "g", replacement: "b", explanation: "" }, false,
+      reader(files), { budgetMs: 2000, now: () => 0, maxHits: 2 },
+      { onProgress, yieldToUi, yieldEveryMs: 250, now: () => (t += 300) },
+    );
+    expect(yieldToUi).toHaveBeenCalled();
+    expect(onProgress).toHaveBeenCalled();
+  });
+
+  it("gibt die Oberflaeche auch bei unlesbaren Dateien frei", async () => {
+    let t = 0;
+    const yieldToUi = vi.fn(() => Promise.resolve());
+    await runOverFiles(
+      ["weg1.md", "weg2.md", "weg3.md"], RULE, false, reader({}), EVAL,
+      { yieldToUi, yieldEveryMs: 250, now: () => (t += 300) },
+    );
+    expect(yieldToUi).toHaveBeenCalled();
+  });
+
   it("gibt die Oberflaeche NICHT frei, solange das Zeitfenster nicht um ist", async () => {
     const yieldToUi = vi.fn(() => Promise.resolve());
     const files: Record<string, string> = {};

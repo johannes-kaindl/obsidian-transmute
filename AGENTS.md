@@ -228,6 +228,20 @@ die er abfangen sollte.)
   um `"vault"` zu erweitern ließ Typecheck und Tests grün — der Setter im Settings-Tab
   (`String(value) === "selection" ? … : "file"`) hätte die neue Variante still auf `file`
   zurückgesetzt. Derselbe Mechanismus wie beim `unauthorized`-Bug in 0.4.0.
+- **Fortschritt und UI-Freigabe gehören ans Ende JEDER Schleifeniteration** — nie hinter
+  ein `continue`. In `runOverFiles` lagen sie hinter dem Zweig für „zu viele Treffer", und
+  ein Muster wie `[a-z]` reißt die Obergrenze in *jeder* Datei: die Oberfläche wurde
+  ausgerechnet im teuersten Fall nie freigegeben (GUI-Smoke 2026-08-16, 403 grüne
+  Unit-Tests sahen es nicht). Zwei Regressionstests decken beide Ausprägungen ab.
+- **Während eines Laufs wird die Trefferliste nicht gezeichnet** (`renderVaultBody`). Der
+  Fortschritt feuert im 250-ms-Takt; jedes Zeichnen baute die komplette Liste neu — bei
+  11.770 Dateien teurer als der Lauf selbst.
+- **Der GUI-Smoke misst die UI-Freigabe direkt** (instrumentiertes `setTimeout`), nicht
+  über ihre Nebenwirkung. Drei Anläufe über „laufen fremde Makrotasks?" waren irreführend:
+  Chromium drosselt Timer in einem `hidden` Fenster auf 1 Hz — das ergibt exakt
+  „0 Runden in 998 ms" und sieht aus wie eine Arbeitslast. `document.hidden` allein taugt
+  nicht als Wächter (meldete false, während die Kette stand); der Prüfpunkt **eicht** die
+  Timer-Kette und meldet seine Bedingungen mit.
 - **`data.json`** ist git-ignored (Obsidian-persistierte Konfig), **`main.js`** ist Build-Artefakt.
 - **Release-CI ist GitHub-only** (`.github/` wird von Forgejo ignoriert).
 

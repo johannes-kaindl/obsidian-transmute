@@ -9,10 +9,9 @@ import type { Hit, RuleDraft, RuleProblem, Version } from "../core/types";
 import { t } from "../vendor/kit/i18n";
 import type { VaultFilter } from "../core/vault/scope";
 import {
-  renderRunState, renderScopeBlock, renderVaultList, renderVaultOutcome,
-  type VaultListModel, type VaultOutcome, type VaultScopeModel,
+  renderScopeBlock, renderVaultBody,
+  type VaultBodyModel, type VaultScopeModel,
 } from "./vault-render";
-import type { RunState } from "../core/vault/state";
 
 export type PanelModel = {
   state: SessionState;
@@ -36,10 +35,7 @@ export type PanelModel = {
 };
 
 /** Alles, was der vault-weite Lauf zum Zeichnen braucht. */
-export type VaultPanel = VaultScopeModel & VaultListModel & {
-  run: RunState;
-  outcome: VaultOutcome;
-};
+export type VaultPanel = VaultScopeModel & VaultBodyModel;
 
 export type PanelHandlers = {
   onScope(scope: ScopeKind): void;
@@ -466,14 +462,14 @@ export function renderOutcome(parts: PanelParts, model: PanelModel, handlers: Pa
   renderExplanation(parts.outcome, version);
   renderReasoning(parts.outcome, version, model, handlers);
   if (model.scope === "vault" && model.vault !== undefined) {
-    renderRunState(parts.outcome, model.vault.run, () => handlers.onAbort());
-    renderVaultList(parts.outcome, model.vault, {
+    renderVaultBody(parts.outcome, model.vault, {
       onToggleFile: (path) => handlers.onToggleFile(path),
       onToggleHit: (path, index) => handlers.onToggleHit(path, index),
       onExpand: (path) => handlers.onExpand(path),
       onSetAll: (value) => handlers.onSetAll(value),
+      onAbort: () => handlers.onAbort(),
+      onUndo: () => handlers.onUndo(),
     });
-    renderVaultOutcome(parts.outcome, model.vault.outcome, () => handlers.onUndo());
   } else {
     renderHits(parts.outcome, version, handlers);
   }

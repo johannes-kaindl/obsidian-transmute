@@ -68,30 +68,34 @@ export async function runOverFiles(
 
     const text = await readFile(path);
     scanned += 1;
-    if (text === null) { unreadable.push(path); continue; }
 
-    const res = evaluate(rule, text, allowRisky, evalOpts);
-    if (res.kind !== "ok") {
-      // syntax/flags/risky treffen jede Datei gleich — einmal melden statt N-mal.
-      // too-many ist dateibezogen: die Datei zaehlt als unvollstaendig gemessen.
+    // Bewusst OHNE `continue`: Fortschritt und UI-Freigabe stehen am Ende dieser
+    // Schleife und muessen in JEDEM Ausgang erreicht werden. Als sie hinter einem
+    // `continue` lagen, uebersprang ausgerechnet der teuerste Fall — eine Datei, die
+    // die Obergrenze reisst — die Freigabe, und der Abbrechen-Knopf war dort
+    // Dekoration (GUI-Smoke 2026-08-16).
+    if (text === null) {
+      unreadable.push(path);
+    } else {
+      const res = evaluate(rule, text, allowRisky, evalOpts);
       if (res.kind === "too-many") {
+        // Dateibezogen: die Trefferliste ist unvollstaendig, der Lauf geht weiter.
         files.push({ path, hits: [], selected: [], timedOutAtLine: null, complete: false });
-        continue;
+      } else if (res.kind !== "ok") {
+        // syntax/flags/risky treffen jede Datei gleich — einmal melden statt N-mal.
+        problem = res;
+        break;
+      } else if (res.hits.length > 0 || res.timedOutAtLine !== null) {
+        const complete = res.timedOutAtLine === null;
+        files.push({
+          path,
+          hits: res.hits,
+          selected: res.hits.map(() => complete),
+          timedOutAtLine: res.timedOutAtLine,
+          complete,
+        });
+        totalHits += res.hits.length;
       }
-      problem = res;
-      break;
-    }
-
-    if (res.hits.length > 0 || res.timedOutAtLine !== null) {
-      const complete = res.timedOutAtLine === null;
-      files.push({
-        path,
-        hits: res.hits,
-        selected: res.hits.map(() => complete),
-        timedOutAtLine: res.timedOutAtLine,
-        complete,
-      });
-      totalHits += res.hits.length;
     }
 
     const ts = now();

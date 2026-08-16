@@ -4,7 +4,7 @@
  * Bewusst KEIN echter Vault: dieses Feature schreibt in viele Dateien gleichzeitig, und
  * der erste Durchlauf gehoert an einen Ort, an dem ein Fehler nichts kostet.
  *
- *   npm run lab:vault -- --out ./.test-vault --notes 400
+ *   npm run lab:vault -- --out ./test-vault --notes 400
  *
  * Danach in Obsidian als Vault oeffnen und das Plugin hineinkopieren:
  *   OBSIDIAN_PLUGIN_DIR=<out>/.obsidian/plugins/transmute npm run deploy
@@ -19,15 +19,20 @@ const argOf = (name: string, fallback: string): string => {
   return value ?? fallback;
 };
 
-const out = argOf("out", "./.test-vault");
+const out = argOf("out", "./test-vault");
 const count = Number(argOf("notes", "400"));
 
 const ORDNER = ["10_Notizen", "10_Notizen/tief", "20_Projekte", "90_Archiv"];
 const TAGS = ["#projekt", "#projekt/aktiv", "#archiv", ""];
 const STATUS = ["aktiv", "ruht", ""];
 
-rmSync(out, { recursive: true, force: true });
-for (const dir of ORDNER) mkdirSync(join(out, dir), { recursive: true });
+// Nur die Notiz-Ordner neu aufbauen. `.obsidian` bleibt stehen: dort haengen die
+// Plugin-Installation und die Community-Plugin-Freigabe, und die jedes Mal neu zu
+// erteilen macht aus einem Werkzeug eine Handarbeit.
+for (const dir of ORDNER) {
+  rmSync(join(out, dir), { recursive: true, force: true });
+  mkdirSync(join(out, dir), { recursive: true });
+}
 mkdirSync(join(out, ".obsidian", "plugins"), { recursive: true });
 
 for (let i = 0; i < count; i++) {

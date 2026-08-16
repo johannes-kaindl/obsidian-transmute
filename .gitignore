@@ -5,4 +5,5 @@ data.json
 .DS_Store
 .lab-diagnose.mjs
 .lab-vault.mjs
-.test-vault/
+test-vault/
+.gui-smoke.mjs
