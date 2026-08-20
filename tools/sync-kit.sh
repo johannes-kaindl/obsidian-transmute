@@ -57,7 +57,7 @@ relayer() { # relayer <vendored-file>
 
 mkdir -p src/vendor/kit src/vendor/kit-obsidian
 
-for m in clipboard endpoint endpoint_config endpoint_diagnostics i18n reasoning settings think-splitter timeout; do
+for m in clipboard cooperative-yield endpoint endpoint_config endpoint_diagnostics error_body i18n reasoning run-state settings think-splitter timeout; do
   cp "$KIT/src/pure/$m.ts" "src/vendor/kit/$m.ts"
   stamp "src/vendor/kit/$m.ts" "src/pure/$m.ts"
   echo "vendored obsidian-kit@$VER/pure/$m.ts"
@@ -77,7 +77,7 @@ cat > src/vendor/kit/VENDOR.json <<JSON
   "source": "obsidian-kit",
   "version": "$VER",
   "sha": "$SHA",
-  "vendored": "clipboard.ts, endpoint.ts, endpoint_config.ts, endpoint_diagnostics.ts, i18n.ts, reasoning.ts, settings.ts, think-splitter.ts, timeout.ts",
+  "vendored": "clipboard.ts, cooperative-yield.ts, endpoint.ts, endpoint_config.ts, endpoint_diagnostics.ts, error_body.ts, i18n.ts, reasoning.ts, run-state.ts, settings.ts, think-splitter.ts, timeout.ts",
   "note": "Verbatim snapshot. Never hand-edit. Re-vendor via tools/sync-kit.sh. version/sha gelten AUSSCHLIESSLICH fuer die unter \"vendored\" gelisteten Dateien. kit-obsidian/ siehe dortige VENDOR.json."
 }
 JSON

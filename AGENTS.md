@@ -62,9 +62,9 @@ kam fertig aus dem Ökosystem, neu gebaut wurde im Wesentlichen die Regex-Domän
 
 - **Vendored aus `obsidian-kit`** (nie von Hand ändern — `tools/sync-kit.sh` schreibt beide
   Bäume; die Liste hier ist vollständig zu halten):
-  - `src/vendor/kit/` (pure): `clipboard.ts`, `endpoint.ts`, `endpoint_config.ts`,
-    `endpoint_diagnostics.ts`, `i18n.ts`, `reasoning.ts`, `settings.ts`, `think-splitter.ts`,
-    `timeout.ts`.
+  - `src/vendor/kit/` (pure): `clipboard.ts`, `cooperative-yield.ts`, `endpoint.ts`,
+    `endpoint_config.ts`, `endpoint_diagnostics.ts`, `error_body.ts`, `i18n.ts`,
+    `reasoning.ts`, `run-state.ts`, `settings.ts`, `think-splitter.ts`, `timeout.ts`.
   - `src/vendor/kit-obsidian/` (importiert `obsidian`): `clipboard.ts`, `folder-suggest.ts`,
     `settings_walker.ts`.
 - **Aus Nachbar-Plugins übernommen:** Endpoint-Zeilen-Editor + pure Editor-Model
