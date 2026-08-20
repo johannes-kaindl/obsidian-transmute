@@ -46,7 +46,7 @@ All user-facing strings (UI labels, settings, notices) go through the i18n modul
 
 ## Architecture in one paragraph
 
-`src/core/` is the pure kernel — prompt building, response parsing, regex compilation, the ReDoS guard, execution, and the session state machine — with no `obsidian` import anywhere in the tree (`npm run check:pure` enforces this). `src/obsidian/` is the thin adapter layer: the settings tab, the sidebar view and its DOM rendering, the `requestUrl`-based HTTP transport, and editor I/O. `src/vendor/kit/` holds verbatim snapshots from `obsidian-kit` (endpoint handling, i18n, reasoning suppression, settings merge) — never hand-edit those files; change the kit and re-run `tools/sync-kit.sh` instead. The full rationale lives in [`AGENTS.md`](AGENTS.md).
+`src/core/` is the pure kernel — prompt building, response parsing, regex compilation, the ReDoS guard, execution, and the session state machine — with no `obsidian` import anywhere in the tree (`npm run check:pure` enforces this). `src/obsidian/` is the thin adapter layer: the settings tab, the sidebar view and its DOM rendering, the `requestUrl`-based HTTP transport, and editor I/O. `src/vendor/kit/` and `src/vendor/kit-obsidian/` hold verbatim snapshots from `obsidian-kit` — the first for the pure modules (endpoint handling, clipboard, i18n, reasoning suppression, settings merge, timeout), the second for those that import `obsidian` (clipboard receipt, folder suggest, settings walker). Never hand-edit any file in either tree; change the kit and re-run `tools/sync-kit.sh` instead, which rewrites both. The full rationale lives in [`AGENTS.md`](AGENTS.md).
 
 ## Where to work
 
