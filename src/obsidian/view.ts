@@ -2,6 +2,7 @@ import { ItemView, MarkdownView, Notice, Scope, type WorkspaceLeaf } from "obsid
 import type { TransmuteSession } from "../core/session";
 import type { ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
+import { copyToClipboard } from "../vendor/kit-obsidian/clipboard";
 import { locateRegion } from "../core/anchor";
 import { activeMarkdownView, applyHitsToEditor, readScope, viewForPath } from "./editor-io";
 import { renderOutcome, renderPanel, type PanelHandlers, type PanelModel, type PanelParts } from "./view-render";
@@ -429,12 +430,13 @@ export class TransmuteView extends ItemView {
     if (active === null) return;
     // effectiveFlags, nicht rule.flags: kopiert wird, was wirklich laeuft.
     const text = `/${active.rule.regex}/${effectiveFlags(active.rule.flags)}`;
-    try {
-      await navigator.clipboard.writeText(text);
-      new Notice(t("view.copied"));
-    } catch (err) {
-      new Notice(t("view.copyFailed", err instanceof Error ? err.message : String(err)));
-    }
+    // Kein try/catch: copyToClipboard rejectet nie (kit-obsidian/clipboard.ts:89-90) — ein
+    // stehengelassenes catch feuerte nie und taeuschte den naechsten Leser ueber den Ort
+    // des Fehlerpfads. Der liegt jetzt in failedMessage.
+    await copyToClipboard(text, {
+      copiedMessage: t("view.copied"),
+      failedMessage: (_reason, err) => t("view.copyFailed", err instanceof Error ? err.message : String(err)),
+    });
   }
 
   // ---------------------------------------------------------------------------

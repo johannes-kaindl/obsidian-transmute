@@ -2,6 +2,7 @@ import { extractModelIds } from "../../vendor/kit/endpoint_diagnostics";
 import { normalizeEndpoint } from "../../vendor/kit/endpoint";
 import { authHeaders, type EndpointConfig } from "../../vendor/kit/endpoint_config";
 import { suppressParams } from "../../vendor/kit/reasoning";
+import { errorMessageFromText } from "../../vendor/kit/error_body";
 import { effectiveSuppress } from "../reasoning-toggle";
 import type { ChatMessage } from "../types";
 import { extractChatContent, extractReasoning } from "./response";
@@ -30,23 +31,6 @@ export type ClientConfig = {
   suppressReasoning: boolean;
 };
 
-function errorMessage(text: string): string {
-  try {
-    const body: unknown = JSON.parse(text);
-    if (typeof body === "object" && body !== null) {
-      const err = (body as { error?: unknown }).error;
-      if (typeof err === "string") return err;
-      if (typeof err === "object" && err !== null) {
-        const msg = (err as { message?: unknown }).message;
-        if (typeof msg === "string") return msg;
-      }
-    }
-  } catch {
-    // Kein JSON — der Rohtext ist die beste verfuegbare Meldung.
-  }
-  return text.slice(0, 300);
-}
-
 export class RuleClient {
   constructor(
     private readonly transport: JsonTransport,
@@ -72,7 +56,15 @@ export class RuleClient {
     const res = await this.transport.postJson(
       `${base}/v1/chat/completions`, body, cfg.timeoutMs, authHeaders(cfg.apiKey),
     );
-    if (res.status < 200 || res.status >= 300) return { ok: false, error: errorMessage(res.text) };
+    // errorMessageFromText liefert `null` statt zu kuerzen — das Kuerzungsmass kennt nur der
+    // Aufrufer (error_body.ts:79-80, :113). `bodyMayBeSuccess` bleibt hier und unten
+    // ungesetzt (Kit-Default `false`): der Waechter ist fuer Aufrufer gebaut, die noch nicht
+    // wissen, ob der Koerper ueberhaupt ein Fehler ist. Hier ist der Status != 2xx, unten hat
+    // die Content-Extraktion schon `null` geliefert — genau die beiden Situationen, fuer die
+    // das Kit den Default nennt (error_body.ts:56-57).
+    if (res.status < 200 || res.status >= 300) {
+      return { ok: false, error: errorMessageFromText(res.text) ?? res.text.slice(0, 300) };
+    }
 
     let parsed: unknown;
     try {
@@ -85,7 +77,7 @@ export class RuleClient {
     if (content === null || content.trim().length === 0) {
       const reasoning = extractReasoning(parsed, content ?? "");
       if (reasoning !== null) return { ok: false, error: reasoning.slice(0, 300), thoughtOnly: true };
-      return { ok: false, error: errorMessage(res.text) };
+      return { ok: false, error: errorMessageFromText(res.text) ?? res.text.slice(0, 300) };
     }
     return { ok: true, content, reasoning: extractReasoning(parsed, content) };
   }

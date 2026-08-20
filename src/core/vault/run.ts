@@ -1,4 +1,5 @@
 import { evaluate, type EvalOptions } from "../regex/evaluate";
+import { createCooperativeYield } from "../../vendor/kit/cooperative-yield";
 import type { Hit, RuleDraft, RuleProblem } from "../types";
 
 /** Die Treffer EINER Datei. `selected` ist die einzige Wahrheit ueber die Auswahl. */
@@ -58,10 +59,13 @@ export async function runOverFiles(
   let problem: RuleProblem | null = null;
   let aborted = false;
 
-  // onProgress und yieldToUi haben je eine eigene Zeitschranke — ein Aufrufer, der nur
-  // Fortschritt zeichnet, soll keine Makrotask-Pausen bezahlen.
-  let lastProgress = now();
-  let lastYield = now();
+  // Das Zeittor kommt aus dem Kit. onProgress und yieldToUi haben darin je eine eigene
+  // Zeitschranke — ein Aufrufer, der nur Fortschritt zeichnet, soll keine Makrotask-Pausen
+  // bezahlen —, aber beide starten aus EINER Uhr-Lesung und bleiben so synchron.
+  // `now` ist hier eine bare Funktion (oeffentliche Signatur, die Tests uebergeben sie);
+  // das Kit will einen Port, deshalb die Adaption `{ now }` an der Repo-Grenze
+  // (cooperative-yield.ts:60-65).
+  const pacer = createCooperativeYield({ yieldToUi, everyMs: yieldEveryMs, clock: { now } });
 
   for (const path of paths) {
     if (signal?.aborted === true) { aborted = true; break; }
@@ -98,15 +102,9 @@ export async function runOverFiles(
       }
     }
 
-    const ts = now();
-    if (onProgress !== undefined && ts - lastProgress >= yieldEveryMs) {
-      lastProgress = ts;
-      onProgress(scanned, paths.length, path);
-    }
-    if (yieldToUi !== undefined && ts - lastYield >= yieldEveryMs) {
-      lastYield = ts;
-      await yieldToUi();
-    }
+    await pacer.tick(
+      onProgress === undefined ? undefined : (): void => { onProgress(scanned, paths.length, path); },
+    );
   }
 
   return { files, totalHits, scanned, unreadable, problem, aborted };
