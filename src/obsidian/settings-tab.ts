@@ -2,7 +2,7 @@ import { App, PluginSettingTab, Setting, type SettingDefinitionItem } from "obsi
 import type TransmutePlugin from "../main";
 import type { ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
-import { renderSettingDefinitions, settingBodyHost, refreshSettingsTab } from "../vendor/kit/settings_walker";
+import { renderSettingDefinitions, settingBodyHost, refreshSettingsTab } from "../vendor/kit-obsidian/settings_walker";
 import { buildEndpointList } from "./settings/endpoint-list";
 import { probeEndpoint } from "./http";
 

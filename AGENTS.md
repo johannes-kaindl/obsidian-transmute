@@ -60,8 +60,13 @@ Vault-Hygiene-Suite · keine Chat-Oberfläche als Hauptinterface · kein „Appl
 Die Sondierung vom 2026-07-25 war ungewöhnlich ertragreich: fast der gesamte LLM-Unterbau
 kam fertig aus dem Ökosystem, neu gebaut wurde im Wesentlichen die Regex-Domäne. Übernommen:
 
-- **Vendored aus `obsidian-kit`** (`src/vendor/kit/`, nie von Hand ändern): `endpoint.ts`,
-  `endpoint_diagnostics.ts`, `i18n.ts`, `reasoning.ts`, `settings.ts`, `think-splitter.ts`.
+- **Vendored aus `obsidian-kit`** (nie von Hand ändern — `tools/sync-kit.sh` schreibt beide
+  Bäume; die Liste hier ist vollständig zu halten):
+  - `src/vendor/kit/` (pure): `clipboard.ts`, `endpoint.ts`, `endpoint_config.ts`,
+    `endpoint_diagnostics.ts`, `i18n.ts`, `reasoning.ts`, `settings.ts`, `think-splitter.ts`,
+    `timeout.ts`.
+  - `src/vendor/kit-obsidian/` (importiert `obsidian`): `clipboard.ts`, `folder-suggest.ts`,
+    `settings_walker.ts`.
 - **Aus Nachbar-Plugins übernommen:** Endpoint-Zeilen-Editor + pure Editor-Model
   (`yijing-oracle`), EndpointResolver/Probe/Modell-Liste (`vim-dojo`), Chat-Response-Auswertung
   (`vault-crews`), `raceTimeout` (`local-image-generator`), Inline-`eslint-disable`-Gate
@@ -93,7 +98,12 @@ src/
 │   └── settings.ts   Typ + defaults (mergeSettings aus dem Kit) · MAX_HITS
 ├── obsidian/         main · settings-tab · view · view-render · vault-render ·
 │                     http · editor-io · vault-io · snapshot-io · confirm-modal
-└── vendor/kit/       gevendorte Kit-Module (pure) — nie von Hand ändern
+├── vendor/kit/       gevendorte Kit-Module (pure) — nie von Hand ändern
+└── vendor/kit-obsidian/
+                      gevendorte Kit-Module, die `obsidian` importieren — nie von Hand
+                      ändern. Eigener Ordner, weil `obsidian/clipboard.ts` einen Querimport
+                      auf `pure/clipboard` trägt und beide Schichten eine `clipboard.ts`
+                      haben (Basenamen-Kollision). Beide Bäume schreibt `tools/sync-kit.sh`.
 ```
 
 **`evaluate()` ist der einzige Ort, an dem kompiliert und ausgeführt wird** — Modell-Pfad,

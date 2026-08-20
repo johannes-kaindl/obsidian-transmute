@@ -1,4 +1,4 @@
-// vendored from obsidian-kit, src/pure/endpoint_config.ts — nicht von Hand editieren.
+// vendored from obsidian-kit@0.27.0, src/pure/endpoint_config.ts — do not hand-edit; re-vendor via tools/sync-kit.sh
 /** Obsidian-freie Wahrheit für Endpunkt-Einträge: Struktur, Auth-Header, Modellwahl,
  *  Migration alter String-Listen und Listen-Bearbeitung.
  *
