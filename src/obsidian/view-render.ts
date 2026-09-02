@@ -31,11 +31,18 @@ export type PanelModel = {
    *  Live-Update neu gezeichnet und wuerde ein offenes <details> sonst zuklappen. */
   reasoningOpen: boolean;
   /** Nur bei scope === "vault" gesetzt. */
-  vault?: VaultPanel;
+  /** Zum Zeichnen: der gespeicherte Zustand PLUS dem abgeleiteten `hasRule`. */
+  vault?: VaultPanelModel;
 };
 
 /** Alles, was der vault-weite Lauf zum Zeichnen braucht. */
-export type VaultPanel = VaultScopeModel & VaultBodyModel;
+/** Der gespeicherte Panel-Zustand — alles aus `VaultScopeModel` AUSSER dem abgeleiteten
+ *  `hasRule`. Das setzt `panelModel()` bei jedem Zeichnen aus der Session; gespeichert
+ *  wuerde es genau so altern wie jede andere doppelt gehaltene Wahrheit. */
+export type VaultPanel = Omit<VaultScopeModel, "hasRule"> & VaultBodyModel;
+
+/** Was der Renderer bekommt: gespeicherter Zustand + abgeleitetes `hasRule`. */
+export type VaultPanelModel = VaultScopeModel & VaultBodyModel;
 
 export type PanelHandlers = {
   onScope(scope: ScopeKind): void;

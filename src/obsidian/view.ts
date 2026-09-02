@@ -631,7 +631,11 @@ export class TransmuteView extends ItemView {
       model: this.deps.getModel(),
       suppressReasoning: this.deps.getSuppressReasoning(),
       reasoningOpen: this.reasoningOpen,
-      vault: this.scopeKind === "vault" ? this.vault : undefined,
+      // `hasRule` kommt aus derselben Quelle, die `computeVaultPreview` prueft — nicht
+      // aus einer zweiten Bedingung, die dasselbe zu wissen glaubt.
+      vault: this.scopeKind === "vault"
+        ? { ...this.vault, hasRule: this.deps.session().activeVersion !== null }
+        : undefined,
     };
   }
 

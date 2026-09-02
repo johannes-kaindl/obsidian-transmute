@@ -13,6 +13,15 @@ export type VaultScopeModel = {
   /** Vorschlaege fuer die Vervollstaendigung — aus dem Vault, nicht geraten. */
   folders: string[];
   tags: string[];
+  /**
+   * Gibt es ueberhaupt eine Regel, die man anwenden koennte?
+   *
+   * Steht im Modell und nicht im Panel-Zustand, weil es **abgeleitet** ist: die Wahrheit
+   * liegt in der Session (`activeVersion`), und genau die prueft `computeVaultPreview`.
+   * Wer den Knopf an einer zweiten, eigenen Bedingung freigibt, baut die Divergenz ein,
+   * die dieses Feld beseitigt.
+   */
+  hasRule: boolean;
 };
 
 export type VaultScopeHandlers = {
@@ -81,7 +90,10 @@ export function renderScopeBlock(
   });
 
   const btn = block.createEl("button", { cls: "transmute-compute", text: t("view.computePreview") });
-  btn.disabled = empty;
+  // Zwei Bedingungen, nicht eine. Bis zum 2026-09-02 sperrte nur `empty` — der Knopf war
+  // damit im ganzen Vault ohne Regel aktiv, und `computeVaultPreview` kehrte still zurueck
+  // (`view.ts:512-513`): kein Lauf, keine Zeile, keine Meldung, kein Konsolenfehler.
+  btn.disabled = empty || !model.hasRule;
   btn.onclick = (): void => handlers.onComputePreview();
 }
 

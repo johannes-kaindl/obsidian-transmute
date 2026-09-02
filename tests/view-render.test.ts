@@ -350,6 +350,10 @@ describe("renderPanel — Verlauf ist als Verlauf erkennbar", () => {
 describe("Vault-Scope im Panel", () => {
   const vaultPanel = {
     filter: EMPTY_FILTER,
+    // Beide Faelle hier rendern mit `phase: "idle"` — dann gibt es keine aktive Regel,
+    // und das Modell muss das auch sagen. Ein Fixture, das hier `true` truege, waere
+    // genau die Unwahrheit, die der Fehler vom 2026-09-02 ausgenutzt hat.
+    hasRule: false,
     candidates: 412,
     total: 2140,
     folders: [],
@@ -377,6 +381,16 @@ describe("Vault-Scope im Panel", () => {
     const root = makeFakeEl();
     renderPanel(root, { ...base, scope: "vault", vault: vaultPanel, state: { phase: "idle" } }, handlers);
     expect(findByClass(root, "transmute-compute")).not.toBeNull();
+  });
+
+  // Regression 2026-09-02: der Knopf war ohne Regel aktiv und tat beim Klick nichts.
+  // Er DARF im Ruhezustand sichtbar sein (der Umfang wird vor der Regel gewaehlt) — aber
+  // nicht bedienbar.
+  it("sperrt den Vorschau-Knopf, solange keine Regel steht", () => {
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, scope: "vault", vault: vaultPanel, state: { phase: "idle" } }, handlers);
+    const btn = findByClass<{ disabled?: boolean }>(root, "transmute-compute");
+    expect(btn?.disabled).toBe(true);
   });
 
   it("zeigt den Umfangs-Block nicht bei Scope Datei", () => {

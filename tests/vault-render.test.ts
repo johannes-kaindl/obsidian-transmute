@@ -11,6 +11,7 @@ const model = (patch: Partial<VaultScopeModel> = {}): VaultScopeModel => ({
   total: 2140,
   folders: ["10_Notizen", "90_Archiv"],
   tags: ["#projekt", "#archiv"],
+  hasRule: true,
   ...patch,
 });
 
@@ -44,6 +45,26 @@ describe("renderScopeBlock", () => {
     renderScopeBlock(root, model({ candidates: 0 }), handlers);
     const btn = findByClass<{ disabled?: boolean }>(root, "transmute-compute");
     expect(btn?.disabled).toBe(true);
+  });
+
+  // Regression 2026-09-02: der Knopf war NUR an der Kandidatenzahl gesperrt, waehrend
+  // `computeVaultPreview` eine aktive Regelversion verlangt und ohne sie STILL zurueckkehrt
+  // (`view.ts:512-513`). Gemessen im Vault mit 12.002 Kandidaten und ohne Regel: Knopf
+  // aktiv, Klick ohne jede Wirkung — kein Lauf, keine Zeile, keine Meldung, kein
+  // Konsolenfehler. Die Freigabe-Bedingung und die Vorbedingung des Handlers wussten
+  // verschiedene Dinge; das Modell trug die Regel gar nicht.
+  it("sperrt den Vorschau-Knopf, wenn es keine Regel gibt", () => {
+    const root = makeFakeEl();
+    renderScopeBlock(root, model({ hasRule: false }), handlers);
+    const btn = findByClass<{ disabled?: boolean }>(root, "transmute-compute");
+    expect(btn?.disabled).toBe(true);
+  });
+
+  it("gibt den Vorschau-Knopf frei, sobald Umfang UND Regel da sind", () => {
+    const root = makeFakeEl();
+    renderScopeBlock(root, model({ hasRule: true }), handlers);
+    const btn = findByClass<{ disabled?: boolean }>(root, "transmute-compute");
+    expect(btn?.disabled).toBe(false);
   });
 
   it("meldet eine Ordner-Aenderung nach oben", () => {
