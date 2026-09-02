@@ -1,7 +1,8 @@
 {
   "source": "obsidian-kit",
-  "version": "0.27.0",
-  "sha": "548041b",
+  "version": "0.30.0",
+  "sha": "6e571a4",
+  "code_kit_version": "0.5.0",
   "vendored": "clipboard.ts, cooperative-yield.ts, endpoint.ts, endpoint_config.ts, endpoint_diagnostics.ts, error_body.ts, i18n.ts, reasoning.ts, run-state.ts, settings.ts, think-splitter.ts, timeout.ts",
-  "note": "Verbatim snapshot. Never hand-edit. Re-vendor via tools/sync-kit.sh. version/sha gelten AUSSCHLIESSLICH fuer die unter \"vendored\" gelisteten Dateien. kit-obsidian/ siehe dortige VENDOR.json."
+  "note": "Verbatim snapshot aus ZWEI Quellen (obsidian-kit + code-kit); welche Datei woher stammt, sagt ihr eigener Kopf. Never hand-edit. Re-vendor via tools/sync-kit.sh. version/sha gelten AUSSCHLIESSLICH fuer die unter \"vendored\" gelisteten Dateien. kit-obsidian/ siehe dortige VENDOR.json."
 }

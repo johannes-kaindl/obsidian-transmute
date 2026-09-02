@@ -3,12 +3,40 @@
 set -e
 
 KIT="${KIT_DIR:-../obsidian-kit}"
+# Zweite Quelle seit obsidian-kit 2ab1bb5 ("domaenenfreie pure-Teilmenge zieht nach code-kit"):
+# ALLE zwoelf hier vendorten pure-Module liegen dort, nicht mehr unter obsidian-kit/src/pure/.
+# Bis 2026-09-02 kopierte dieses Skript weiter von der alten Stelle und starb am ersten Modul
+# — mit einem Schaden, der groesser ist als der Abbruch: `set -e` beendet den Lauf, also
+# laufen die gekoppelten Module nicht mehr mit und BEIDE VENDOR.json werden nicht geschrieben.
+# Die eine Datei, in der man den Vendor-Stand nachschlaegt, behauptet danach den alten — leise.
+#
+# obsidian-kit traegt unter src/vendor/code-kit/ eigene Kopien einiger Module; die werden hier
+# bewusst NICHT genommen. Eine Zwischenkopie als Quelle zu nehmen erzeugt eine Kopier-Kette,
+# und die sieht bei der naechsten Zaehlung wie ein unabhaengiger Beleg aus.
+CODE_KIT="${CODE_KIT_DIR:-../../code-kit}"
 [ -d "$KIT/src/pure" ] || { echo "Kit nicht gefunden unter $KIT (KIT_DIR setzen)" >&2; exit 1; }
+[ -d "$CODE_KIT/src/ts" ] || { echo "code-kit nicht gefunden unter $CODE_KIT (CODE_KIT_DIR setzen)" >&2; exit 1; }
 VER=$(node -p "require('$KIT/package.json').version")
+CODE_VER=$(node -p "require('$CODE_KIT/package.json').version")
 SHA=$(git -C "$KIT" rev-parse --short HEAD)
 
-stamp() { # stamp <vendored-file> <kit-relative-path>
-  header="// vendored from obsidian-kit@$VER, $2 — do not hand-edit; re-vendor via tools/sync-kit.sh"
+# Ein pures Modul kann in drei Schichten liegen. Statt fester Zuordnung wird gesucht — die
+# naechste Umschichtung soll dieses Skript nicht wieder toeten, sondern nur einen anderen
+# Fundort ergeben. Ausgabe: <pfad>|<quelle>|<quell-relativer-pfad>|<version>
+quelle_fuer() {
+  for kandidat in \
+    "$KIT/src/pure/$1.ts|obsidian-kit|src/pure/$1.ts|$VER" \
+    "$CODE_KIT/src/ts/pure/$1.ts|code-kit|src/ts/pure/$1.ts|$CODE_VER" \
+    "$CODE_KIT/src/ts/web/$1.ts|code-kit|src/ts/web/$1.ts|$CODE_VER"; do
+    if [ -f "${kandidat%%|*}" ]; then printf '%s\n' "$kandidat"; return 0; fi
+  done
+  return 1
+}
+
+stamp() { # stamp <vendored-file> <quell-relativer-pfad> [<quelle> <version>]
+  quelle=${3:-obsidian-kit}
+  version=${4:-$VER}
+  header="// vendored from $quelle@$version, $2 — do not hand-edit; re-vendor via tools/sync-kit.sh"
   printf '%s\n' "$header" | cat - "$1" > "$1.tmp"
   mv "$1.tmp" "$1"
 }
@@ -34,13 +62,22 @@ relayer() { # relayer <vendored-file>
 
   # (1) Umschreiben, und feststellen OB umgeschrieben wurde. `cmp` statt md5: portabel,
   #     macOS (md5) und GitHub-CI (md5sum) heissen verschieden.
-  sed 's|\(["'"'"']\)\.\./pure/|\1../kit/|g' "$f" > "$f.tmp"
+  # ZWEI Muster, seit obsidian-kit 2ab1bb5: die gekoppelte Schicht importierte frueher
+  # `../pure/x`, seit dem code-kit-Umzug importiert sie `../vendor/code-kit/{pure,web}/x`.
+  # Beide muessen auf `../kit/` zeigen, denn hier liegt die pure Schicht flach unter
+  # src/vendor/kit/ — egal aus welcher Quelle das Modul stammt. Wer nur das alte Muster
+  # kennt, laesst den neuen Import stehen: er zeigt ins Leere, und der Fehler erscheint
+  # nicht hier, sondern als "Unsafe call of a type that could not be resolved" im Lint
+  # einer ganz anderen Datei (gemessen 2026-09-02 an kit-obsidian/clipboard.ts).
+  sed -e 's|\(["'"'"']\)\.\./pure/|\1../kit/|g' \
+      -e 's|\(["'"'"']\)\.\./vendor/code-kit/pure/|\1../kit/|g' \
+      -e 's|\(["'"'"']\)\.\./vendor/code-kit/web/|\1../kit/|g' "$f" > "$f.tmp"
   if cmp -s "$f" "$f.tmp"; then rm -f "$f.tmp"; return 0; fi   # nichts zu tun, KEINE Notiz
   mv "$f.tmp" "$f"
 
-  # (2) Gegenprobe: bleibt ein ../pure/ stehen, bricht der Build spaeter und woanders.
-  if grep -q '\.\./pure/' "$f"; then
-    echo "sync-kit: '../pure/' in $f nicht umgeschrieben — Muster pruefen" >&2; exit 1
+  # (2) Gegenprobe: bleibt eines der Muster stehen, bricht der Build spaeter und woanders.
+  if grep -qE '\.\./(pure|vendor/code-kit)/' "$f"; then
+    echo "sync-kit: unaufgeloester Kit-Querimport in $f — Muster pruefen" >&2; exit 1
   fi
 
   # (3) Mitvendorier-Gegenprobe: jedes umgeschriebene Ziel muss auch wirklich da sein.
@@ -50,17 +87,34 @@ relayer() { # relayer <vendored-file>
     }
   done
 
-  note="// ONE mechanical deviation from verbatim: kit-internal imports ../pure/ → ../kit/ (vendor layout); reproduce on every re-vendor, nothing else may differ."
+  note="// ONE mechanical deviation from verbatim: kit-internal imports (../pure/ and ../vendor/code-kit/{pure,web}/) → ../kit/ (vendor layout); reproduce on every re-vendor, nothing else may differ."
   printf '%s\n' "$note" | cat - "$f" > "$f.tmp"
   mv "$f.tmp" "$f"
 }
 
 mkdir -p src/vendor/kit src/vendor/kit-obsidian
 
-for m in clipboard cooperative-yield endpoint endpoint_config endpoint_diagnostics error_body i18n reasoning run-state settings think-splitter timeout; do
-  cp "$KIT/src/pure/$m.ts" "src/vendor/kit/$m.ts"
-  stamp "src/vendor/kit/$m.ts" "src/pure/$m.ts"
-  echo "vendored obsidian-kit@$VER/pure/$m.ts"
+PURE_MODULE="clipboard cooperative-yield endpoint endpoint_config endpoint_diagnostics error_body i18n reasoning run-state settings think-splitter timeout"
+
+# Erst ALLE Quellen aufloesen, dann kopieren: ein fehlendes Modul ist ein Aufbaufehler und
+# wird als solcher gemeldet, statt den Lauf auf halber Strecke abzubrechen.
+for m in $PURE_MODULE; do
+  quelle_fuer "$m" >/dev/null || {
+    echo "FEHLER: $m.ts liegt weder in $KIT/src/pure/ noch in $CODE_KIT/src/ts/{pure,web}/." >&2
+    echo "  Seit obsidian-kit 2ab1bb5 ist code-kit die Quelle der domaenenfreien Module." >&2
+    exit 2
+  }
+done
+
+for m in $PURE_MODULE; do
+  fund=$(quelle_fuer "$m")
+  pfad=$(printf '%s' "$fund" | cut -d'|' -f1)
+  quelle=$(printf '%s' "$fund" | cut -d'|' -f2)
+  rel=$(printf '%s' "$fund" | cut -d'|' -f3)
+  ver=$(printf '%s' "$fund" | cut -d'|' -f4)
+  cp "$pfad" "src/vendor/kit/$m.ts"
+  stamp "src/vendor/kit/$m.ts" "$rel" "$quelle" "$ver"
+  echo "vendored $quelle@$ver/$rel"
 done
 
 for m in clipboard folder-suggest settings_walker; do
@@ -77,8 +131,9 @@ cat > src/vendor/kit/VENDOR.json <<JSON
   "source": "obsidian-kit",
   "version": "$VER",
   "sha": "$SHA",
+  "code_kit_version": "$CODE_VER",
   "vendored": "clipboard.ts, cooperative-yield.ts, endpoint.ts, endpoint_config.ts, endpoint_diagnostics.ts, error_body.ts, i18n.ts, reasoning.ts, run-state.ts, settings.ts, think-splitter.ts, timeout.ts",
-  "note": "Verbatim snapshot. Never hand-edit. Re-vendor via tools/sync-kit.sh. version/sha gelten AUSSCHLIESSLICH fuer die unter \"vendored\" gelisteten Dateien. kit-obsidian/ siehe dortige VENDOR.json."
+  "note": "Verbatim snapshot aus ZWEI Quellen (obsidian-kit + code-kit); welche Datei woher stammt, sagt ihr eigener Kopf. Never hand-edit. Re-vendor via tools/sync-kit.sh. version/sha gelten AUSSCHLIESSLICH fuer die unter \"vendored\" gelisteten Dateien. kit-obsidian/ siehe dortige VENDOR.json."
 }
 JSON
 cat > src/vendor/kit-obsidian/VENDOR.json <<JSON
