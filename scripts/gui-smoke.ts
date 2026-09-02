@@ -552,31 +552,35 @@ async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
 
     let runden = 0;
     let abortSichtbar = false;
-    // Ein Lauf, der noch nicht ANGEFANGEN hat, sieht im DOM genauso aus wie einer, der
-    // schon FERTIG ist — in beiden Faellen fehlt .transmute-run. Die alte Schleife brach
-    // deshalb beim ersten Durchgang ab, 10 ms nach dem Klick, und meldete „Lauf war nach
-    // 11 ms durch" (gemessen 2026-09-02 ueber 12.010 Notizen, wo das unmoeglich ist).
-    // Deshalb zwei Phasen: erst auf das Anlaufen warten, dann auf das Ende.
     let gestartet = false;
+    // ERST BEOBACHTEN, DANN EINGREIFEN.
+    //
+    // Hier stand bis zum 2026-09-02 ein abbrechen.click() in derselben Schleife, und zwar
+    // beim ERSTEN Sichten des Knopfes. Gemessen ueber 12.010 Notizen war der nach 10 ms da —
+    // die Messung toetete den Lauf also, bevor er die erste UI-Freigabe erreichen konnte
+    // (die kommt fruehestens nach 250 ms), und meldete die selbst erzeugte Kuerze
+    // anschliessend als „Lauf war nach 11 ms durch". Sie hat ihre eigene Einwirkung
+    // gemessen. Der Abbruch-Klick gehoert deshalb NICHT hierher, sondern in den
+    // Pruefpunkt darunter, der ihn ohnehin von aussen setzt.
+    //
+    // Die alte Begruendung („ein Klick von aussen kommt immer zu spaet") stammt aus einer
+    // Zeit mit 1.057 Notizen und billigem Muster. Mit 12.010 Notizen und [a-z] laeuft der
+    // Lauf Sekunden — lange genug fuer eine CDP-Runde.
+    let laeuft = false;
     while (performance.now() - t0 < 20000) {
       // Der eigene Warte-Timer laeuft ueber die UNINSTRUMENTIERTE Fassung, sonst zaehlt
       // sich die Messung selbst mit.
       await new Promise((r) => orig.call(window, r, 10));
-      const abbrechen = document.querySelector(".transmute-abort");
-      if (abbrechen) {
-        abortSichtbar = true;
-        // Sofort klicken, SOLANGE der Lauf laeuft — ein Klick von aussen kommt bei
-        // diesen Laufzeiten immer zu spaet.
-        abbrechen.click();
-        break;
-      }
-      if (document.querySelector(".transmute-run")) {
-        gestartet = true;
-      } else if (gestartet) {
-        break;                                    // lief und ist durch
-      } else if (performance.now() - t0 > 2000) {
-        break;                                    // ist in 2 s nie angelaufen
-      }
+      laeuft = !!document.querySelector(".transmute-run");
+      if (laeuft) gestartet = true;
+      if (document.querySelector(".transmute-abort")) abortSichtbar = true;
+
+      // Genug gesehen: der Mechanismus hat mindestens einmal freigegeben.
+      if (gestartet && yields > 0 && performance.now() - t0 > 400) break;
+      // Durch, bevor eine Freigabe noetig war — dann ist der Lauf zu kurz zum Messen.
+      if (gestartet && !laeuft) break;
+      // Nie angelaufen.
+      if (!gestartet && performance.now() - t0 > 2000) break;
       runden++;
     }
     const dauer = performance.now() - t0;
@@ -602,7 +606,8 @@ async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
   // genau diese Verwechslung hat den Punkt am 2026-09-02 stillgelegt.
   const lage = `vor dem Klick: „${mess.vorher}", Muster „${mess.muster}" — danach ${mess.zeilen} Dateizeilen,`
     + ` „${mess.kopf}"; ${mess.yields} UI-Freigaben in ${Math.round(mess.dauer)} ms,`
-    + ` Fremdrunden ${mess.runden}, Eichung ${Math.round(mess.refMs)} ms`;
+    + ` Fremdrunden ${mess.runden}, gestartet=${mess.gestartet}, abortSichtbar=${mess.abortSichtbar},`
+    + ` Eichung ${Math.round(mess.refMs)} ms`;
   if (!mess.gestartet) {
     skipped(
       "Renderer atmet waehrend des Laufs",
