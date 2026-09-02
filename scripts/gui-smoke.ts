@@ -43,7 +43,11 @@
  * ```
  */
 
-import { attachTo, Cdp, closeExtraLeaves, notices, pollUntil, setPluginSetting } from "../../tools/obsidian-cdp/cdp.js";
+import { join } from "node:path";
+
+import { attachTo, Cdp, closeExtraLeaves, notices, pollUntil, releaseAlwaysOnTop, requireVisible, setPluginSetting }
+  from "../../tools/obsidian-cdp/cdp.js";
+import { requireEigenerBuild } from "../../tools/obsidian-cdp/vault.js";
 
 const PLUGIN_ID = "transmute";
 const VIEW_TYPE = "transmute-panel";
@@ -72,20 +76,34 @@ const KEEP = args.includes("--keep");
 
 // --- Pruefpunkte -------------------------------------------------------------
 
+/** Drei Zustaende, nicht zwei — und das ist der ganze Punkt.
+ *
+ * Bis zum 2026-09-02 schrieb `skipped()` `passed: true`, und die Schlusszeile zaehlte
+ * `checks.length - rot.length`. Ein uebersprungener Pruefpunkt erschien damit in der
+ * **Bilanz als gruener**: der Lauf an diesem Tag meldete „25/25 gruen", obwohl 23 gemessen
+ * und 2 uebersprungen waren — ausgerechnet die zwei, wegen derer der Lauf gefahren wurde.
+ * Auch der Exit-Code blieb 0.
+ *
+ * Das ist dieselbe Gattung wie die Fehler, die dieser Pruefpunkt schon dreimal hatte, nur
+ * andersherum: dort wurde *Abwesenheit von Bedarf* als Defekt gemeldet, hier wird
+ * *Abwesenheit von Messung* als Erfolg gemeldet. Ein Zaehler, der beides in einen Topf
+ * wirft, ist genau dann falsch, wenn man ihn braucht. */
+type Zustand = "gruen" | "rot" | "uebersprungen";
+
 interface Check {
   name: string;
-  passed: boolean;
+  zustand: Zustand;
   detail: string;
 }
 const checks: Check[] = [];
 
 function record(name: string, passed: boolean, detail: string): void {
-  checks.push({ name, passed, detail });
+  checks.push({ name, zustand: passed ? "gruen" : "rot", detail });
   console.log(`${passed ? "✓" : "✗"} ${name} — ${detail}`);
 }
 
 function skipped(name: string, reason: string): void {
-  checks.push({ name, passed: true, detail: `übersprungen: ${reason}` });
+  checks.push({ name, zustand: "uebersprungen", detail: `übersprungen: ${reason}` });
   console.log(`· ${name} — übersprungen: ${reason}`);
 }
 
@@ -160,30 +178,6 @@ async function clickByText(cdp: Cdp, root: string, label: string): Promise<boole
   `);
 }
 
-/**
- * Das Fenster nach vorn holen — und **nachsehen, ob es geklappt hat**.
- *
- * Chromium drosselt verkettete Timer in einer `hidden` Seite auf **1 Hz**. Ein
- * Pruefpunkt, der Makrotask-Runden zaehlt, misst dann nicht den Pruefling, sondern die
- * Drosselung: gemessen am 2026-08-16 zweimal exakt „0 Runden in 998 ms" — eine Zahl, die
- * wie eine Arbeitslast aussieht und keine war. `Page.bringToFront` allein reicht auf
- * macOS nicht, und ein `activate` braucht sichtbar Zeit (1,5 s waren zu wenig).
- *
- * Deshalb wird der Erfolg geprueft und nicht angenommen.
- */
-async function fensterNachVorn(cdp: Cdp): Promise<boolean> {
-  const { execFileSync } = await import("node:child_process");
-  // Mehrere Anlaeufe: der Fokuswechsel ist ein Wettlauf mit dem Terminal, aus dem der
-  // Treiber gestartet wurde — ein einzelner Versuch gewinnt ihn nicht zuverlaessig.
-  for (let versuch = 0; versuch < 3; versuch++) {
-    await cdp.send("Page.bringToFront");
-    execFileSync("osascript", ["-e", 'tell application "Obsidian" to activate']);
-    await new Promise((r) => setTimeout(r, 2000));
-    const vorn = await cdp.evaluate<boolean>("return !document.hidden && document.hasFocus();");
-    if (vorn) return true;
-  }
-  return false;
-}
 
 // --- Szene -------------------------------------------------------------------
 
@@ -503,8 +497,16 @@ async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
   // Fokus ZULETZT holen, unmittelbar vor der Messung: die beiden fill()-Aufrufe darueber
   // dauern zusammen ueber eine Sekunde, und in dieser Zeit holt sich das Terminal, aus
   // dem der Treiber laeuft, den Fokus zurueck.
-  if (!(await fensterNachVorn(cdp))) {
-    skipped("Renderer atmet waehrend des Laufs", "Fenster im Hintergrund — Timer gedrosselt");
+  // `requireVisible` WIRFT, wenn das Fenster nicht nach vorn kommt — hier ist Abbruch
+  // aber die falsche Reaktion: ein nicht messbarer Punkt wird uebersprungen, nicht rot
+  // gemeldet. Ein Fehlschlag heisst „konnte nicht messen", nicht „Pruefling defekt".
+  // Die dritte Stufe (`setAlwaysOnTop`) hilft hier sogar besonders: sie HAELT den
+  // Vordergrund, statt ihn einmal herzustellen — und genau den verliert der Treiber
+  // sonst ans Terminal, aus dem er laeuft.
+  try {
+    await requireVisible(cdp);
+  } catch (fehler) {
+    skipped("Renderer atmet waehrend des Laufs", `Fenster nicht nach vorn zu holen: ${(fehler as Error).message.split("\n")[0]}`);
     await fill(cdp, ".transmute-regex", ALT);
     await fill(cdp, ".transmute-folder", SMOKE_DIR);
     return;
@@ -512,7 +514,7 @@ async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
 
   const mess = await cdp.evaluate<{
     yields: number; runden: number; abortSichtbar: boolean; dauer: number; refMs: number;
-    hidden: boolean; zeilen: number; kopf: string;
+    gestartet: boolean; hidden: boolean; zeilen: number; kopf: string; vorher: string; muster: string;
   }>(`
     // Eichmessung: laeuft die Timer-Kette in diesem Fenster normal? document.hidden
     // allein reicht als Kriterium nicht — es meldete false, waehrend die Kette
@@ -531,10 +533,18 @@ async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
       return orig.call(this, fn, ms, ...rest);
     };
 
+    // Lage VOR dem Klick festhalten. Ohne sie ist „kein Lauf" nicht von „nichts zu tun"
+    // zu unterscheiden — und das ist genau die Verwechslung, an der dieser Pruefpunkt
+    // schon dreimal gescheitert ist.
+    const kandEl = document.querySelector(".transmute-candidates");
+    const vorher = kandEl ? kandEl.textContent.trim() : "(keine Kandidatenzeile)";
+    const musterEl = document.querySelector(".transmute-regex");
+    const muster = musterEl ? musterEl.value : "(kein Musterfeld)";
+
     const compute = document.querySelector(".transmute-compute");
     if (!compute || compute.disabled) {
       window.setTimeout = orig;
-      return { yields: -1, runden: -1, abortSichtbar: false, dauer: 0, refMs, hidden: document.hidden };
+      return { yields: -1, runden: -1, abortSichtbar: false, dauer: 0, refMs, gestartet: false, hidden: document.hidden, vorher, muster };
     }
 
     const t0 = performance.now();
@@ -542,6 +552,12 @@ async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
 
     let runden = 0;
     let abortSichtbar = false;
+    // Ein Lauf, der noch nicht ANGEFANGEN hat, sieht im DOM genauso aus wie einer, der
+    // schon FERTIG ist — in beiden Faellen fehlt .transmute-run. Die alte Schleife brach
+    // deshalb beim ersten Durchgang ab, 10 ms nach dem Klick, und meldete „Lauf war nach
+    // 11 ms durch" (gemessen 2026-09-02 ueber 12.010 Notizen, wo das unmoeglich ist).
+    // Deshalb zwei Phasen: erst auf das Anlaufen warten, dann auf das Ende.
+    let gestartet = false;
     while (performance.now() - t0 < 20000) {
       // Der eigene Warte-Timer laeuft ueber die UNINSTRUMENTIERTE Fassung, sonst zaehlt
       // sich die Messung selbst mit.
@@ -554,7 +570,13 @@ async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
         abbrechen.click();
         break;
       }
-      if (!document.querySelector(".transmute-run")) break;
+      if (document.querySelector(".transmute-run")) {
+        gestartet = true;
+      } else if (gestartet) {
+        break;                                    // lief und ist durch
+      } else if (performance.now() - t0 > 2000) {
+        break;                                    // ist in 2 s nie angelaufen
+      }
       runden++;
     }
     const dauer = performance.now() - t0;
@@ -563,7 +585,7 @@ async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
     // Lauf" zu unterscheiden.
     const kopfEl = document.querySelector(".transmute-affected");
     return {
-      yields, runden, abortSichtbar, dauer, refMs, hidden: document.hidden,
+      yields, runden, abortSichtbar, dauer, refMs, gestartet, vorher, muster, hidden: document.hidden,
       zeilen: document.querySelectorAll(".transmute-file-row").length,
       kopf: kopfEl ? kopfEl.textContent.trim() : "(keine Zusammenfassung)",
     };
@@ -575,10 +597,21 @@ async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
     await fill(cdp, ".transmute-folder", SMOKE_DIR);
     return;
   }
-  if (mess.dauer < 250) {
+  // Was gelaufen ist, gehoert IN die Uebersprungen-Meldung. Ohne Zeilen und
+  // Zusammenfassung ist „zu kurz" nicht von „hat nichts getan" zu unterscheiden — und
+  // genau diese Verwechslung hat den Punkt am 2026-09-02 stillgelegt.
+  const lage = `vor dem Klick: „${mess.vorher}", Muster „${mess.muster}" — danach ${mess.zeilen} Dateizeilen,`
+    + ` „${mess.kopf}"; ${mess.yields} UI-Freigaben in ${Math.round(mess.dauer)} ms,`
+    + ` Fremdrunden ${mess.runden}, Eichung ${Math.round(mess.refMs)} ms`;
+  if (!mess.gestartet) {
     skipped(
       "Renderer atmet waehrend des Laufs",
-      `Lauf war nach ${Math.round(mess.dauer)} ms durch — unter dem Freigabe-Takt von 250 ms`,
+      `Lauf ist in 2 s nicht angelaufen — der Vorschau-Klick hat keinen Lauf ausgeloest (${lage})`,
+    );
+  } else if (mess.dauer < 250) {
+    skipped(
+      "Renderer atmet waehrend des Laufs",
+      `Lauf war nach ${Math.round(mess.dauer)} ms durch — unter dem Freigabe-Takt von 250 ms (${lage})`,
     );
   } else {
     // Bewertet wird der MECHANISMUS (gibt der Lauf die Oberflaeche frei?), nicht ob der
@@ -691,18 +724,44 @@ async function main(): Promise<void> {
   let vorwerte: { budgetMs: number; confirmThreshold: number; defaultScope: string } | null = null;
 
   try {
-    if (!(await fensterNachVorn(cdp))) {
-      throw new Error(
-        "Fenster bleibt im Hintergrund (document.hidden). Timer werden dort auf 1 Hz "
-        + "gedrosselt — jede Zeitmessung waere Unsinn. Andere Obsidian-Fenster schliessen "
-        + "und erneut fahren.",
-      );
-    }
+    // Fenster nach vorn — ueber die ZENTRALE Fassung, nicht ueber eine eigene.
+    //
+    // Hier stand bis zum 2026-09-02 ein lokales `fensterNachVorn`: `bringToFront` plus
+    // `osascript activate`, dreimal, danach Abbruch. Das ist die aeltere Linie, die
+    // niemand nachgezogen hat — `requireVisible` eskaliert seit dem 2026-08-24 ueber
+    // `show()/moveTop()/focus()` bis `setAlwaysOnTop`, und genau die zweite Stufe traegt
+    // den haeufigsten Alltagsfall: ein Fenster, das ein anderes VOLLSTAENDIG verdeckt.
+    // Gemessen an diesem Repo am 2026-09-02: bei vier offenen Obsidian-Fenstern brach die
+    // lokale Fassung ab („Fenster bleibt im Hintergrund"), waehrend nichts kaputt war.
+    //
+    // Zweiter Unterschied, der denselben Lauf killt: die lokale Fassung verlangte
+    // `document.hasFocus()`. Das ist strenger als noetig — laeuft der Treiber aus einem
+    // Terminal, hat das Fenster den Tastaturfokus nicht, obwohl es sichtbar ist und der
+    // DOM einwandfrei misst. `requireVisible` prueft `visibilityState`, und das ist die
+    // Bedingung, an der die Timer-Drosselung tatsaechlich haengt.
+    await requireVisible(cdp);
 
     const aktiv = await cdp.evaluate<boolean>(
       `return !!app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];`,
     );
     if (!aktiv) throw new Error(`Plugin „${PLUGIN_ID}" ist in diesem Vault nicht aktiv.`);
+
+    // Laeuft dieser Lauf gegen den eigenen Stand? `manifest.version` ist dafuer strukturell
+    // blind — Store-Build und Repo-Build tragen dieselbe Nummer. Am 2026-08-30 standen
+    // deshalb 69 von 150 gruenen Pruefpunkten einer ganzen Runde auf unbelegtem Code, und
+    // der 25/25-Lauf dieses Repos vom 28.08. war einer davon.
+    //
+    // Der Pfad kommt aus der LAUFENDEN Instanz, nicht aus einer Konvention: der Treiber
+    // dockt per --vault an ein beliebiges Fenster an, ein konfigurierter Pfad pruefte
+    // sonst eine Datei, die mit dem Lauf nichts zu tun hat (Lesson 2026-09-02).
+    const ort = await cdp.evaluate<{ basePath: string; configDir: string }>(`
+      return { basePath: app.vault.adapter.basePath, configDir: app.vault.configDir };
+    `);
+    const herkunft = requireEigenerBuild(
+      join(ort.basePath, ort.configDir, "plugins", PLUGIN_ID, "main.js"),
+      join(process.cwd(), "main.js"),
+    );
+    console.log(`Build im Vault: ${herkunft.art} (sha1 ${"sha1" in herkunft ? herkunft.sha1.slice(0, 12) : "?"}…)`);
 
     vorwerte = await cdp.evaluate(`
       const s = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings;
@@ -745,6 +804,9 @@ async function main(): Promise<void> {
     await abschnittSetter(cdp);
     await abschnittI18n(cdp);
   } finally {
+    // Nimmt zurueck, was `requireVisible` in seiner letzten Stufe gesetzt haben kann —
+    // ohne den Aufruf klebt das Fenster nach dem Lauf weiter ueber allem anderen.
+    await releaseAlwaysOnTop(cdp);
     if (vorwerte) {
       await setPluginSetting(cdp, PLUGIN_ID, "budgetMs", vorwerte.budgetMs);
       await setPluginSetting(cdp, PLUGIN_ID, "confirmThreshold", vorwerte.confirmThreshold);
@@ -760,9 +822,17 @@ async function main(): Promise<void> {
       `);
     }
 
-    const rot = checks.filter((c) => !c.passed);
-    console.log(`\n${checks.length - rot.length}/${checks.length} Prüfpunkte grün`);
+    const rot = checks.filter((c) => c.zustand === "rot");
+    const uebersprungen = checks.filter((c) => c.zustand === "uebersprungen");
+    const gruen = checks.filter((c) => c.zustand === "gruen");
+    console.log(
+      `\n${gruen.length} grün · ${uebersprungen.length} übersprungen · ${rot.length} rot`
+      + ` (von ${checks.length} Prüfpunkten)`,
+    );
     for (const c of rot) console.log(`  ✗ ${c.name} — ${c.detail}`);
+    // Uebersprungene mit ausgeben: ein Punkt, der nicht gemessen wurde, ist eine offene
+    // Frage — und offene Fragen gehoeren in die Schlusszeile, nicht nur ins Protokoll.
+    for (const c of uebersprungen) console.log(`  · ${c.name} — ${c.detail}`);
     cdp.close();
     if (rot.length > 0) process.exitCode = 1;
   }

@@ -43,6 +43,19 @@ Der Wegwerf-Vault ist git-ignoriert und jederzeit neu erzeugbar. **12.000 Notize
 kein Übermut:** darunter ist der vault-weite Lauf schneller als der 250-ms-Freigabe-Takt,
 und der wichtigste Prüfpunkt (unten) hat dann nichts zu messen.
 
+**Der Deploy-Schritt ist nicht optional, und der Treiber verlässt sich nicht darauf.** Vor
+dem ersten Prüfpunkt vergleicht er die `main.js` im Vault per sha1 mit der frisch gebauten
+im Repo (`requireEigenerBuild` aus der zentralen Brücke) und bricht ab, wenn sie
+auseinanderfallen — bei einer Store-Installation ebenso wie bei einem alten Deploy.
+
+Der Grund ist ein gemessener Fehlschlag, kein Vorsichtsprinzip: `manifest.version` ist für
+diese Frage **strukturell blind**, weil Store-Build und Repo-Build dieselbe Nummer tragen.
+Am 2026-08-30 standen deshalb workspace-weit 69 von 150 grünen Prüfpunkten auf unbelegtem
+Code — der 25/25-Lauf dieses Repos vom 28.08. war einer davon. Den Pfad holt der Treiber
+aus der **laufenden** Instanz (`app.vault.adapter.basePath`), nicht aus einer Konvention:
+er dockt per `--vault` an ein beliebiges Fenster an, und ein konfigurierter Pfad prüfte
+sonst eine Datei, die mit dem Lauf nichts zu tun hat.
+
 ## Prüfpunkte (25)
 
 | Bereich | Was gemessen wird |
