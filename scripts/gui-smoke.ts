@@ -741,6 +741,29 @@ async function abschnittI18n(cdp: Cdp): Promise<void> {
 
 // --- Ablauf ------------------------------------------------------------------
 
+/**
+ * Ein Abschnitt, der mittendrin wirft, hinterlaesst eine **vierte** Kategorie: seine
+ * restlichen Pruefpunkte sind weder gruen noch rot noch uebersprungen — sie werden nie
+ * angelegt. Eine Bilanz, die ueber `checks` summiert, zaehlt sie folglich gar nicht und
+ * meldet „N/N gruen"; gemeint ist „alles, was ich geschafft habe, war gruen".
+ *
+ * Der Absturz ist dabei laut (Stacktrace, Exit-Code), steht aber UNTER der Bilanzzeile —
+ * und gelesen wird die Bilanz. Deshalb faengt jeder Abschnitt seine eigenen Ausnahmen und
+ * macht daraus einen ROTEN Pruefpunkt, statt sie nach oben durchzureichen.
+ *
+ * Uebernommen aus vault-crews (Lesson 2026-09-02, `f174737`): dort meldete der Treiber
+ * „20/20 gemessene Pruefpunkte gruen", waehrend die drei Punkte, wegen derer der Abschnitt
+ * existierte, nie liefen. Dieses Repo war eines der neun ohne solchen Fang.
+ */
+async function abschnitt(name: string, lauf: () => Promise<void>): Promise<void> {
+  try {
+    await lauf();
+  } catch (fehler) {
+    const grund = fehler instanceof Error ? fehler.message.split("\n")[0] : String(fehler);
+    record(`Abschnitt „${name}" laeuft durch`, false, `abgebrochen: ${grund}`);
+  }
+}
+
 async function main(): Promise<void> {
   // attachTo statt Cdp.attach: Obsidian gibt dem Einstellungen-Fenster denselben
   // Vault-Namen im Titel, ein Titel-Filter waere also mehrdeutig (und sprachabhaengig).
@@ -822,16 +845,20 @@ async function main(): Promise<void> {
     }
     console.log(`Vault: ${kandidaten} Notizen`);
 
-    await abschnittUmfang(cdp);
-    const vorschau = await abschnittVorschau(cdp);
+    await abschnitt("Umfang", () => abschnittUmfang(cdp));
+    // Die Vorschau ist das Tor zu drei weiteren Abschnitten — ihr Ergebnis wird gebraucht,
+    // ein Absturz darf es aber nicht zu `true` machen.
+    let vorschau = false;
+    await abschnitt("Vorschau", async () => { vorschau = await abschnittVorschau(cdp); });
     if (vorschau) {
-      const undo = await abschnittAnwenden(cdp);
-      if (undo) await abschnittRueckgaengig(cdp);
-      await abschnittUnvollstaendig(cdp);
+      let undo = false;
+      await abschnitt("Anwenden", async () => { undo = await abschnittAnwenden(cdp); });
+      if (undo) await abschnitt("Rueckgaengig", () => abschnittRueckgaengig(cdp));
+      await abschnitt("Unvollstaendig", () => abschnittUnvollstaendig(cdp));
     }
-    await abschnittAbbruch(cdp, kandidaten);
-    await abschnittSetter(cdp);
-    await abschnittI18n(cdp);
+    await abschnitt("Abbruch", () => abschnittAbbruch(cdp, kandidaten));
+    await abschnitt("Setter", () => abschnittSetter(cdp));
+    await abschnitt("i18n", () => abschnittI18n(cdp));
   } finally {
     // Nimmt zurueck, was `requireVisible` in seiner letzten Stufe gesetzt haben kann —
     // ohne den Aufruf klebt das Fenster nach dem Lauf weiter ueber allem anderen.
