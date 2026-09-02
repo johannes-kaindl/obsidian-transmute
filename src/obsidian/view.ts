@@ -124,6 +124,14 @@ export class TransmuteView extends ItemView {
       else this.draw();
     });
     this.draw();
+    // Der Bereich kommt beim Start aus den Einstellungen, nicht aus einem Klick — es findet
+    // also kein `onScope` statt, und `onFilter` erst recht nicht. Ohne diesen Aufruf bleibt
+    // `vaultPaths` leer, und das Panel behauptet „Keine Notiz passt zu diesem Bereich" fuer
+    // einen vollen Vault (gemessen 2026-09-02: 12.002 Notizen, `vaultPaths: 0`).
+    //
+    // NACH `draw()`, nicht statt: `refreshCandidates` liest fuer den Beispieltext Dateien
+    // und zeichnet erst am Ende — sonst bliebe das Panel bis dahin leer.
+    if (this.scopeKind === "vault") void this.refreshCandidates();
     void this.refreshModels();
     return Promise.resolve();
   }

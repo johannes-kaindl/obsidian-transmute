@@ -692,6 +692,30 @@ async function abschnittSetter(cdp: Cdp): Promise<void> {
     nachReload === "vault",
     `nach Reload: „${nachReload}"`,
   );
+
+  // Die Einstellung zu pruefen ist die STRUKTURELLE Haelfte — sie kann gruen sein, waehrend
+  // die Sache falsch ist. Genau das war sie: `onOpen` rief `refreshCandidates()` nicht, der
+  // gespeicherte Bereich „Vault" wurde also korrekt geladen und das Panel behauptete
+  // trotzdem „Keine Notiz passt zu diesem Bereich" fuer den ganzen Vault (2026-09-02).
+  // Deshalb hier die WIRKUNG: nach dem Reload muss eine Zahl dastehen, kein Leer-Text.
+  const kandidatenzeile = await pollUntil<string>(
+    cdp,
+    `
+      for (const l of app.workspace.getLeavesOfType(${JSON.stringify(VIEW_TYPE)})) l.detach();
+      await app.workspace.getRightLeaf(false).setViewState({ type: ${JSON.stringify(VIEW_TYPE)}, active: true });
+      await new Promise((r) => setTimeout(r, 600));
+      const el = document.querySelector(".transmute-candidates");
+      return el ? el.textContent.trim() : null;
+    `,
+    15_000,
+    1_000,
+  );
+  const zahl = /\d/.test(kandidatenzeile ?? "");
+  record(
+    "Frisch geoeffnetes Panel kennt die Kandidaten sofort",
+    zahl,
+    `Kandidatenzeile: „${kandidatenzeile ?? "(keine)"}"`,
+  );
 }
 
 // --- Abschnitt: i18n ---------------------------------------------------------
