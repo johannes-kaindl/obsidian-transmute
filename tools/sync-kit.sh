@@ -16,21 +16,48 @@ KIT="${KIT_DIR:-../obsidian-kit}"
 CODE_KIT="${CODE_KIT_DIR:-../../code-kit}"
 [ -d "$KIT/src/pure" ] || { echo "Kit nicht gefunden unter $KIT (KIT_DIR setzen)" >&2; exit 1; }
 [ -d "$CODE_KIT/src/ts" ] || { echo "code-kit nicht gefunden unter $CODE_KIT (CODE_KIT_DIR setzen)" >&2; exit 1; }
-VER=$(node -p "require('$KIT/package.json').version")
-CODE_VER=$(node -p "require('$CODE_KIT/package.json').version")
-SHA=$(git -C "$KIT" rev-parse --short HEAD)
+# CORE-META-22: gelesen wird aus einer FESTEN REF, nicht aus dem Arbeitsstand des
+# Nachbar-Repos. Ein `cp` aus dessen Worktree koppelt dieses Repo an einen fremden HEAD.
+# Default ist die package.json-Version der Quelle; ein Upgrade ist eine BEWUSSTE Handlung.
+VER="${KIT_REF:-$(node -p "require('$KIT/package.json').version")}"
+CODE_VER="${CODE_KIT_REF:-$(node -p "require('$CODE_KIT/package.json').version")}"
+for paar in "$KIT|$VER" "$CODE_KIT|$CODE_VER"; do
+  repo=${paar%%|*}; ref=${paar##*|}
+  git -C "$repo" rev-parse --verify --quiet "$ref^{commit}" >/dev/null || {
+    echo "FEHLER: Ref '$ref' existiert nicht in $repo." >&2
+    echo "  Entweder ist die Version dort ungetaggt, oder KIT_REF/CODE_KIT_REF setzen." >&2
+    exit 2
+  }
+done
+SHA=$(git -C "$KIT" rev-parse --short "$VER^{commit}")
 
 # Ein pures Modul kann in drei Schichten liegen. Statt fester Zuordnung wird gesucht — die
 # naechste Umschichtung soll dieses Skript nicht wieder toeten, sondern nur einen anderen
 # Fundort ergeben. Ausgabe: <pfad>|<quelle>|<quell-relativer-pfad>|<version>
+# Ausgabe: <repo>|<ref>|<quelle>|<quell-relativer-pfad>|<version>
 quelle_fuer() {
   for kandidat in \
-    "$KIT/src/pure/$1.ts|obsidian-kit|src/pure/$1.ts|$VER" \
-    "$CODE_KIT/src/ts/pure/$1.ts|code-kit|src/ts/pure/$1.ts|$CODE_VER" \
-    "$CODE_KIT/src/ts/web/$1.ts|code-kit|src/ts/web/$1.ts|$CODE_VER"; do
-    if [ -f "${kandidat%%|*}" ]; then printf '%s\n' "$kandidat"; return 0; fi
+    "$KIT|$VER|obsidian-kit|src/pure/$1.ts|$VER" \
+    "$CODE_KIT|$CODE_VER|code-kit|src/ts/pure/$1.ts|$CODE_VER" \
+    "$CODE_KIT|$CODE_VER|code-kit|src/ts/web/$1.ts|$CODE_VER"; do
+    repo=$(printf '%s' "$kandidat" | cut -d'|' -f1)
+    ref=$(printf '%s' "$kandidat" | cut -d'|' -f2)
+    rel=$(printf '%s' "$kandidat" | cut -d'|' -f4)
+    # In der REF nachsehen, nicht im Worktree — sonst faende die Suche eine Datei, die der
+    # Lesevorgang danach nicht bekommt.
+    if git -C "$repo" cat-file -e "$ref:$rel" 2>/dev/null; then
+      printf '%s\n' "$kandidat"; return 0
+    fi
   done
   return 1
+}
+
+# In eine .tmp lesen und erst bei Erfolg verschieben — eine Ausgabe-Umleitung legt die
+# Zieldatei an, BEVOR der Lesebefehl laeuft, und hinterlaesst sonst einen Torso, der mit
+# Stempelzeile wie ein gueltiges Vendoring aussieht.
+hole() { # hole <repo> <ref> <quell-pfad> <ziel>
+  git -C "$1" show "$2:$3" > "$4.tmp" || { rm -f "$4.tmp"; return 1; }
+  mv "$4.tmp" "$4"
 }
 
 stamp() { # stamp <vendored-file> <quell-relativer-pfad> [<quelle> <version>]
@@ -108,17 +135,20 @@ done
 
 for m in $PURE_MODULE; do
   fund=$(quelle_fuer "$m")
-  pfad=$(printf '%s' "$fund" | cut -d'|' -f1)
-  quelle=$(printf '%s' "$fund" | cut -d'|' -f2)
-  rel=$(printf '%s' "$fund" | cut -d'|' -f3)
-  ver=$(printf '%s' "$fund" | cut -d'|' -f4)
-  cp "$pfad" "src/vendor/kit/$m.ts"
+  repo=$(printf '%s' "$fund" | cut -d'|' -f1)
+  ref=$(printf '%s' "$fund" | cut -d'|' -f2)
+  quelle=$(printf '%s' "$fund" | cut -d'|' -f3)
+  rel=$(printf '%s' "$fund" | cut -d'|' -f4)
+  ver=$(printf '%s' "$fund" | cut -d'|' -f5)
+  hole "$repo" "$ref" "$rel" "src/vendor/kit/$m.ts" || {
+    echo "FEHLER: $ref:$rel nicht lesbar in $repo" >&2; exit 2; }
   stamp "src/vendor/kit/$m.ts" "$rel" "$quelle" "$ver"
   echo "vendored $quelle@$ver/$rel"
 done
 
 for m in clipboard folder-suggest settings_walker; do
-  cp "$KIT/src/obsidian/$m.ts" "src/vendor/kit-obsidian/$m.ts"
+  hole "$KIT" "$VER" "src/obsidian/$m.ts" "src/vendor/kit-obsidian/$m.ts" || {
+    echo "FEHLER: $VER:src/obsidian/$m.ts nicht lesbar" >&2; exit 2; }
   # Nur clipboard.ts traegt einen Querimport (../pure/clipboard). Ein pauschaler Aufruf waere
   # wirkungslos, aber irrefuehrend — deshalb gezielt.
   if [ "$m" = clipboard ]; then relayer "src/vendor/kit-obsidian/$m.ts"; fi
