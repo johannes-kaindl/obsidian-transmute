@@ -97,6 +97,9 @@ export type Version = {
   problem: RuleProblem | null;
   /** Gedankengang des Modells, falls es einen geliefert hat. */
   reasoning: string | null;
+  /** finish_reason war "length" — der Text ist verwertbar, aber am Token-Limit
+   *  abgeschnitten. Nur im Modellpfad je true; Hand- und Fix-Staende laufen nie ans Limit. */
+  truncated: boolean;
   /** Die angeforderte Diagnose zu diesem Muster, oder null. */
   diagnosis: Diagnosis | null;
 };

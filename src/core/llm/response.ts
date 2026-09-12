@@ -16,6 +16,20 @@ export function extractChatContent(res: unknown): string | null {
   return typeof content === "string" ? content : null;
 }
 
+/**
+ * `finish_reason` des ersten Choices, oder null.
+ *
+ * "length" heisst: am Token-Limit abgeschnitten, noch im selben JSON, das ohnehin geparst
+ * wird (Vorlage: image-to-markdown/src/vision_client.ts::transcribe, 2026-08-30).
+ */
+export function extractFinishReason(res: unknown): string | null {
+  if (typeof res !== "object" || res === null) return null;
+  const choices = (res as { choices?: unknown }).choices;
+  if (!Array.isArray(choices) || choices.length === 0) return null;
+  const reason = (choices[0] as { finish_reason?: unknown }).finish_reason;
+  return typeof reason === "string" ? reason : null;
+}
+
 /** Der Gedankengang aus dem Nachrichtenobjekt, wo der Server ihn getrennt liefert. */
 function reasoningField(res: unknown): string | null {
   if (typeof res !== "object" || res === null) return null;

@@ -5,7 +5,7 @@ import { suppressParams } from "../../vendor/kit/reasoning";
 import { errorMessageFromText } from "../../vendor/kit/error_body";
 import { effectiveSuppress } from "../reasoning-toggle";
 import type { ChatMessage } from "../types";
-import { extractChatContent, extractReasoning } from "./response";
+import { extractChatContent, extractFinishReason, extractReasoning } from "./response";
 
 /** Netz-Port. Die Implementierung lebt in der obsidian-Schicht (requestUrl) —
  *  hier bleibt der Kern obsidian-frei und in Node testbar (PROF-OBS-12). */
@@ -15,12 +15,17 @@ export interface JsonTransport {
 }
 
 export type CompleteResult =
-  | { ok: true; content: string; reasoning: string | null }
+  /** truncated: finish_reason === "length" — am Token-Limit abgeschnitten. Kein Fehler,
+   *  der Teiltext bleibt verwertbar; nur wer ihn zeigt, muss es sagen koennen (sonst sieht
+   *  ein abgeschnittenes Ergebnis wie ein vollstaendiges aus). */
+  | { ok: true; content: string; reasoning: string | null; truncated: boolean }
   /** thoughtOnly: Der Aufruf gelang, aber das Modell hat sein Token-Budget vollstaendig
    *  ins Denken gesteckt — gemessen bei qwen3.6 unter LM Studio (512 von 551 Tokens).
    *  Das ist die tueckischere Fehlerklasse als ein toter Port: kein Fehlerstatus, nur
-   *  ein leerer String, der sich als leere Modellantwort tarnt. */
-  | { ok: false; error: string; thoughtOnly?: boolean };
+   *  ein leerer String, der sich als leere Modellantwort tarnt.
+   *  truncatedEmpty: abgeschnitten UND ohne verwertbaren Text — die Meldung muss das
+   *  Limit nennen, nicht "leere Antwort" (REGISTRY "Abgeschnittene LLM-Antwort …"). */
+  | { ok: false; error: string; thoughtOnly?: boolean; truncatedEmpty?: boolean };
 
 export type ClientConfig = {
   endpoint: string;
@@ -73,13 +78,15 @@ export class RuleClient {
       return { ok: false, error: res.text.slice(0, 300) };
     }
 
+    const truncated = extractFinishReason(parsed) === "length";
     const content = extractChatContent(parsed);
     if (content === null || content.trim().length === 0) {
+      if (truncated) return { ok: false, error: "length", truncatedEmpty: true };
       const reasoning = extractReasoning(parsed, content ?? "");
       if (reasoning !== null) return { ok: false, error: reasoning.slice(0, 300), thoughtOnly: true };
       return { ok: false, error: errorMessageFromText(res.text) ?? res.text.slice(0, 300) };
     }
-    return { ok: true, content, reasoning: extractReasoning(parsed, content) };
+    return { ok: true, content, reasoning: extractReasoning(parsed, content), truncated };
   }
 
   async listModels(ep: EndpointConfig): Promise<string[]> {

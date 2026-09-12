@@ -80,6 +80,14 @@ describe("TransmuteSession", () => {
     }
   });
 
+  it("nennt bei abgeschnitten UND leer das Tokenlimit, nicht 'leere Antwort'", async () => {
+    const complete = vi.fn().mockResolvedValue({ ok: false, error: "length", truncatedEmpty: true });
+    const session = new TransmuteSession({ complete, now: () => 0 }, options);
+    await session.generate("x", "foo");
+    expect(session.state.phase).toBe("error");
+    if (session.state.phase === "error") expect(session.state.messageKey).toBe("error.truncatedEmpty");
+  });
+
   it("schickt beim Nachschaerfen echte Treffer mit", async () => {
     const complete = vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: answer("foo") });
     const session = new TransmuteSession({ complete, now: () => 0 }, options);

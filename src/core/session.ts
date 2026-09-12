@@ -62,7 +62,7 @@ export type SessionDeps = {
 export type SessionOptions = { sampleChars: number; budgetMs: number; maxHits: number };
 
 type Attempt =
-  | { ok: true; draft: RuleDraft; reasoning: string | null }
+  | { ok: true; draft: RuleDraft; reasoning: string | null; truncated: boolean }
   | { ok: false; messageKey: string; args: string[]; raw: string | null; problem: string };
 
 /**
@@ -128,6 +128,7 @@ export class TransmuteSession {
         riskAccepted: null,
         problem: null,
         reasoning: null,
+        truncated: false,
         diagnosis: null,
       },
     ];
@@ -161,7 +162,7 @@ export class TransmuteSession {
 
     // Die Beschriftung im Verlauf kommt aus source, nicht aus instruction — deshalb
     // bleibt die Anweisung leer, statt einen erfundenen Text zu tragen.
-    this.versions = [...state.versions, { ...next, instruction: "", source: "manual", reasoning: null, diagnosis: null }];
+    this.versions = [...state.versions, { ...next, instruction: "", source: "manual", reasoning: null, truncated: false, diagnosis: null }];
     this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 }, "edit");
   }
 
@@ -335,6 +336,7 @@ export class TransmuteSession {
         riskAccepted: null,
         problem: null,
         reasoning: attempt.reasoning,
+        truncated: attempt.truncated,
         diagnosis: null,
       },
     ];
@@ -344,6 +346,9 @@ export class TransmuteSession {
   private async ask(messages: ChatMessage[]): Promise<Attempt> {
     const res = await this.deps.complete(messages);
     if (!res.ok) {
+      if (res.truncatedEmpty === true) {
+        return { ok: false, messageKey: "error.truncatedEmpty", args: [], raw: null, problem: "truncated, no usable text" };
+      }
       return { ok: false, messageKey: "error.endpoint", args: [res.error], raw: null, problem: res.error };
     }
 
@@ -382,7 +387,7 @@ export class TransmuteSession {
       };
     }
 
-    return { ok: true, draft: parsed.draft, reasoning: res.reasoning };
+    return { ok: true, draft: parsed.draft, reasoning: res.reasoning, truncated: res.truncated };
   }
 
   /**
@@ -468,6 +473,7 @@ export class TransmuteSession {
         riskAccepted: null,
         problem: null,
         reasoning: null,
+        truncated: false,
         diagnosis: null,
       },
       text,

@@ -29,7 +29,7 @@ function deps(scope: "file" | "selection" | "vault"): TransmuteViewDeps {
   // EINE Sitzung fuer die Lebensdauer der View: `onOpen` haengt einen `onChange`-Horcher
   // an, und eine je Aufruf neu gebaute Sitzung wuerde ihn ins Leere haengen.
   const session = new TransmuteSession(
-    { complete: () => Promise.resolve({ ok: true as const, content: "", reasoning: null }), now: () => 0 },
+    { complete: () => Promise.resolve({ ok: true as const, content: "", reasoning: null, truncated: false }), now: () => 0 },
     () => ({ sampleChars: 400, budgetMs: 2000, maxHits: 500 }),
   );
   return {

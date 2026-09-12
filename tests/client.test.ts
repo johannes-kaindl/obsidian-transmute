@@ -17,6 +17,7 @@ describe("RuleClient.complete", () => {
       ok: true,
       content: "hi",
       reasoning: null,
+      truncated: false,
     });
   });
 
@@ -68,5 +69,40 @@ describe("leerer Content", () => {
     const res = await client.complete([{ role: "user", content: "x" }]);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.thoughtOnly).toBeUndefined();
+  });
+});
+
+// Bug (gemessen image-to-markdown, 2026-08-30): non-streaming setzt kein max_tokens und
+// liest kein finish_reason — eine am Server-Default abgeschnittene Antwort sah bislang wie
+// eine vollstaendige aus. finish_reason steht im selben JSON, das ohnehin geparst wird.
+describe("abgeschnittene Antwort (finish_reason)", () => {
+  const body = (choice: Record<string, unknown>) => JSON.stringify({ choices: [choice] });
+
+  it("meldet einen verwertbaren Teiltext weiter als Erfolg, markiert ihn aber als abgeschnitten", async () => {
+    const client = new RuleClient(
+      transportWith(body({ message: { content: "{\"regex\":" }, finish_reason: "length" })),
+      config,
+    );
+    const res = await client.complete([{ role: "user", content: "x" }]);
+    expect(res).toMatchObject({ ok: true, content: "{\"regex\":", truncated: true });
+  });
+
+  it("markiert eine VOLLSTAENDIGE Antwort nicht als abgeschnitten", async () => {
+    const client = new RuleClient(
+      transportWith(body({ message: { content: "hi" }, finish_reason: "stop" })),
+      config,
+    );
+    const res = await client.complete([{ role: "user", content: "x" }]);
+    expect(res).toMatchObject({ ok: true, truncated: false });
+  });
+
+  it("markiert abgeschnitten UND leer gesondert, statt als 'leere Antwort' durchzufallen", async () => {
+    const client = new RuleClient(
+      transportWith(body({ message: { content: "" }, finish_reason: "length" })),
+      config,
+    );
+    const res = await client.complete([{ role: "user", content: "x" }]);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.truncatedEmpty).toBe(true);
   });
 });

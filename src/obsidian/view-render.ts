@@ -343,6 +343,11 @@ function renderExplanation(parent: El, version: Version): void {
   if (version.rule.explanation.length > 0) {
     parent.createDiv({ text: version.rule.explanation, cls: "transmute-explanation" });
   }
+  if (version.truncated) {
+    // Ein abgeschnittener Teiltext bleibt verwertbar (REGISTRY "Abgeschnittene
+    // LLM-Antwort …") — der Hinweis warnt, blockiert aber nichts.
+    parent.createDiv({ text: t("view.truncated"), cls: "transmute-warning" });
+  }
   if (version.timedOutAtLine !== null) {
     parent.createDiv({ text: t("view.timedOut", version.timedOutAtLine + 1), cls: "transmute-warning" });
   }
