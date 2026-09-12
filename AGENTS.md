@@ -261,6 +261,16 @@ die er abfangen sollte.)
 - **`data.json`** ist git-ignored (Obsidian-persistierte Konfig), **`main.js`** ist Build-Artefakt.
 - **Release-CI ist GitHub-only** (`.github/` wird von Forgejo ignoriert).
 
+## UI-Abweichungen
+
+- **endpoint-list** — Grund: `src/obsidian/settings/endpoint-list.ts` ist die eigene
+  "guter Schnitt"-Fassung (Vorbild `yijing-oracle`, vor der Kit-Extraktion 0.26.0
+  entstanden), nicht die konsolidierte Kit-Komponente aus `src/vendor/kit-obsidian/` —
+  die Migration ist eine eigene Consumer-Umstellung mit mehreren dokumentierten Fallen
+  (hide()/cache.clear(), Render-Index darf Handler nicht ueberleben, zwei getrennte
+  i18n-`strings`-Objekte bei zwei Aufrufstellen) und kein Nebenschritt.
+  — gilt-solange: `src/obsidian/settings/endpoint-list.ts` enthaelt-nicht `kit-obsidian/endpoint-list`
+
 ## Offene Entscheidungen
 
 Aus `docs/transmute-repo-spec.md` §9 — nach Workspace-Standard bereits **entschieden**:
