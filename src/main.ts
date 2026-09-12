@@ -85,6 +85,7 @@ export default class TransmutePlugin extends Plugin {
           }),
           confirmThreshold: () => this.settings.confirmThreshold,
           snapshotKeep: () => this.settings.snapshotKeep,
+          getPresets: () => this.settings.presets,
         }),
     );
 

@@ -3,6 +3,15 @@ import { migrateEndpointList, type EndpointConfig } from "../vendor/kit/endpoint
 
 export type ScopeKind = "file" | "selection" | "vault";
 
+/** Eine gespeicherte, per Klick abfeuerbare Regel — ohne erneuten Modell-Umweg. */
+export type PresetDef = {
+  id: string;
+  name: string;
+  regex: string;
+  flags: string;
+  replacement: string;
+};
+
 export type TransmuteSettings = {
   /** Geordnete Fallback-Kette; der erste erreichbare gewinnt. Jede Zeile trägt ihren
    *  eigenen API-Schlüssel, damit lokale und gehostete Anbieter in EINER Liste stehen können. */
@@ -20,6 +29,8 @@ export type TransmuteSettings = {
   confirmThreshold: number;
   /** Wie viele Snapshot-Ordner aufgehoben werden. */
   snapshotKeep: number;
+  /** In den Einstellungen angelegt, in der Sidebar per Klick abfeuerbar. */
+  presets: PresetDef[];
 };
 
 /**
@@ -43,6 +54,7 @@ export const DEFAULT_SETTINGS: TransmuteSettings = {
   showTargetField: false,
   confirmThreshold: 50,
   snapshotKeep: 5,
+  presets: [],
 };
 
 export function loadSettings(raw: unknown): TransmuteSettings {

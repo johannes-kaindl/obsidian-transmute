@@ -44,6 +44,7 @@ function deps(scope: "file" | "selection" | "vault"): TransmuteViewDeps {
     runOptions: () => ({ sampleChars: 400, budgetMs: 2000, maxHits: 500 }),
     confirmThreshold: () => 50,
     snapshotKeep: () => 5,
+    getPresets: () => [],
   };
 }
 

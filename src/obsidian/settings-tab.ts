@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting, type SettingDefinitionItem } from "obsidian";
 import type TransmutePlugin from "../main";
-import type { ScopeKind } from "../core/settings";
+import type { PresetDef, ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
 import { renderSettingDefinitions, settingBodyHost, refreshSettingsTab } from "../vendor/kit-obsidian/settings_walker";
 import { buildEndpointList } from "./settings/endpoint-list";
@@ -81,8 +81,96 @@ export class TransmuteSettingTab extends PluginSettingTab {
           { name: t("set.showTargetField"), desc: t("set.showTargetFieldDesc"), control: { type: "toggle", key: "showTargetField" } },
         ],
       },
+      {
+        type: "group",
+        heading: t("set.groupPresets"),
+        items: [
+          {
+            name: t("set.presets"),
+            desc: t("set.presetsDesc"),
+            render: (setting) => {
+              this.renderPresets(setting);
+            },
+          },
+        ],
+      },
     ];
     return defs as unknown as SettingDefinitionItem[];
+  }
+
+  /**
+   * Presets-Liste: Name + Muster + Flags + Ersetzung, eine Zeile je Preset.
+   *
+   * Commit bei Aenderung direkt ins Array (kein eigener Zwischenzustand) — ein
+   * vollstaendiger Redraw passiert nur bei Hinzufuegen/Loeschen, nicht bei jedem
+   * Tastendruck (sonst verliert das Feld unter dem Cursor Fokus und Undo-Stack).
+   */
+  private renderPresets(setting: Setting): void {
+    const host = settingBodyHost(setting);
+    const list = host.createDiv({ cls: "transmute-preset-list" });
+
+    const renderRow = (preset: PresetDef): void => {
+      const row = new Setting(list).setName(preset.name.length > 0 ? preset.name : t("set.presetUnnamed"));
+      row.addText((c) =>
+        c
+          .setPlaceholder(t("set.presetName"))
+          .setValue(preset.name)
+          .onChange((value) => {
+            preset.name = value;
+            void this.plugin.saveSettings();
+          }),
+      );
+      row.addText((c) =>
+        c
+          .setPlaceholder(t("set.presetPattern"))
+          .setValue(preset.regex)
+          .onChange((value) => {
+            preset.regex = value;
+            void this.plugin.saveSettings();
+          }),
+      );
+      row.addText((c) =>
+        c
+          .setPlaceholder(t("set.presetFlags"))
+          .setValue(preset.flags)
+          .onChange((value) => {
+            preset.flags = value;
+            void this.plugin.saveSettings();
+          }),
+      );
+      row.addText((c) =>
+        c
+          .setPlaceholder(t("set.presetReplacement"))
+          .setValue(preset.replacement)
+          .onChange((value) => {
+            preset.replacement = value;
+            void this.plugin.saveSettings();
+          }),
+      );
+      row.addExtraButton((b) =>
+        b
+          .setIcon("trash-2")
+          .setTooltip(t("set.presetDelete"))
+          .onClick(() => {
+            this.plugin.settings.presets = this.plugin.settings.presets.filter((p) => p.id !== preset.id);
+            void this.plugin.saveSettings().then(() => this.refreshUi());
+          }),
+      );
+    };
+
+    for (const preset of this.plugin.settings.presets) renderRow(preset);
+
+    new Setting(host).addButton((b) =>
+      b
+        .setButtonText(t("set.presetAdd"))
+        .onClick(() => {
+          this.plugin.settings.presets = [
+            ...this.plugin.settings.presets,
+            { id: `preset-${Date.now()}-${this.plugin.settings.presets.length}`, name: "", regex: "", flags: "", replacement: "" },
+          ];
+          void this.plugin.saveSettings().then(() => this.refreshUi());
+        }),
+    );
   }
 
   private renderEndpoints(setting: Setting): void {

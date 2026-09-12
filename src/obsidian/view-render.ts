@@ -1,6 +1,6 @@
 import { setIcon } from "obsidian";
 import type { SessionState } from "../core/session";
-import type { ScopeKind } from "../core/settings";
+import type { PresetDef, ScopeKind } from "../core/settings";
 import { effectiveFlags } from "../core/regex/compile";
 import { CHEATSHEET } from "../core/cheatsheet";
 import { modelChoices, thinkToggleView } from "../core/reasoning-toggle";
@@ -30,6 +30,8 @@ export type PanelModel = {
   /** Gehoert ins Modell, nicht ins DOM: der Ergebnis-Container wird bei jedem
    *  Live-Update neu gezeichnet und wuerde ein offenes <details> sonst zuklappen. */
   reasoningOpen: boolean;
+  /** In den Einstellungen angelegt — per Klick abfeuerbar, auch ohne bestehende Regel. */
+  presets: PresetDef[];
   /** Nur bei scope === "vault" gesetzt. */
   /** Zum Zeichnen: der gespeicherte Zustand PLUS dem abgeleiteten `hasRule`. */
   vault?: VaultPanelModel;
@@ -73,6 +75,7 @@ export type PanelHandlers = {
   onExpand(path: string): void;
   onAbort(): void;
   onUndo(): void;
+  onLoadPreset(preset: PresetDef): void;
 };
 
 type El = HTMLElement;
@@ -485,6 +488,21 @@ export function renderOutcome(parts: PanelParts, model: PanelModel, handlers: Pa
   renderActions(parts.outcome, version, handlers);
 }
 
+/**
+ * Gespeicherte Regeln per Klick abfeuern — ohne erneuten Modell-Umweg.
+ *
+ * Steht auf Panel-Ebene, nicht im Regel-Container: auch im Ruhezustand sichtbar, denn
+ * ein Preset ERSETZT genau den Schritt, der sonst eine Regel erst entstehen laesst.
+ */
+function renderPresets(parent: El, model: PanelModel, handlers: PanelHandlers): void {
+  if (model.presets.length === 0) return;
+  const row = parent.createDiv({ cls: "transmute-presets" });
+  for (const preset of model.presets) {
+    const btn = row.createEl("button", { cls: "transmute-preset-btn", text: preset.name });
+    btn.addEventListener("click", () => handlers.onLoadPreset(preset));
+  }
+}
+
 function renderPreview(
   parent: El,
   state: Extract<SessionState, { phase: "preview" }>,
@@ -552,6 +570,8 @@ export function renderPanel(root: El, model: PanelModel, handlers: PanelHandlers
   // Kein Tab und kein Modus: der Link oeffnet dieselbe Vorschau, nur mit leerem Muster.
   const manual = root.createEl("button", { text: t("view.startManual"), cls: "transmute-manual-link transmute-link" });
   manual.addEventListener("click", () => handlers.onStartManual());
+
+  renderPresets(root, model, handlers);
 
   const body = root.createDiv({ cls: "transmute-body" });
 

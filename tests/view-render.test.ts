@@ -36,6 +36,7 @@ const handlers: PanelHandlers = {
   onExpand: vi.fn(),
   onAbort: vi.fn(),
   onUndo: vi.fn(),
+  onLoadPreset: vi.fn(),
 };
 
 const base: Omit<PanelModel, "state"> = {
@@ -49,6 +50,7 @@ const base: Omit<PanelModel, "state"> = {
   model: "",
   suppressReasoning: true,
   reasoningOpen: false,
+  presets: [],
 };
 
 const hit = (over: Partial<Hit> = {}): Hit => ({
@@ -397,5 +399,30 @@ describe("Vault-Scope im Panel", () => {
     const root = makeFakeEl();
     renderPanel(root, { ...base, state: { phase: "idle" } }, handlers);
     expect(findByClass(root, "transmute-scope-block")).toBeNull();
+  });
+});
+
+describe("renderPanel — Presets", () => {
+  const preset = { id: "p1", name: "Leerzeilen trimmen", regex: " +$", flags: "gm", replacement: "" };
+
+  it("zeigt keinen Presets-Block, solange keine Presets angelegt sind", () => {
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, presets: [], state: { phase: "idle" } }, handlers);
+    expect(findByClass(root, "transmute-presets")).toBeNull();
+  });
+
+  it("zeigt einen Knopf pro angelegtem Preset, auch im Ruhezustand", () => {
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, presets: [preset], state: { phase: "idle" } }, handlers);
+    expect(root.textContent).toContain("Leerzeilen trimmen");
+  });
+
+  it("feuert den Preset beim Klick ab", () => {
+    const onLoadPreset = vi.fn();
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, presets: [preset], state: { phase: "idle" } }, { ...handlers, onLoadPreset });
+    const btn = findByClass<{ click(): void }>(root, "transmute-preset-btn");
+    btn?.click();
+    expect(onLoadPreset).toHaveBeenCalledWith(preset);
   });
 });

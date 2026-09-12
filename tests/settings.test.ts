@@ -22,6 +22,17 @@ describe("loadSettings", () => {
     expect(geladen.confirmThreshold).toBe(50);
     expect(geladen.snapshotKeep).toBe(5);
   });
+
+  it("startet ohne Presets", () => {
+    expect(DEFAULT_SETTINGS.presets).toEqual([]);
+  });
+
+  it("uebernimmt gespeicherte Presets aus einer alten data.json", () => {
+    const geladen = loadSettings({
+      presets: [{ id: "p1", name: "Trim", regex: " +$", flags: "gm", replacement: "" }],
+    });
+    expect(geladen.presets).toEqual([{ id: "p1", name: "Trim", regex: " +$", flags: "gm", replacement: "" }]);
+  });
 });
 
 describe("i18n", () => {

@@ -34,6 +34,7 @@ const handlers: PanelHandlers = {
   onExpand: vi.fn(),
   onAbort: vi.fn(),
   onUndo: vi.fn(),
+  onLoadPreset: vi.fn(),
 };
 
 const hit = (): Hit => ({
@@ -73,6 +74,7 @@ const model = (...versions: Version[]): PanelModel => ({
   model: "",
   suppressReasoning: true,
   reasoningOpen: false,
+  presets: [],
 });
 
 describe("Dreiteilung", () => {

@@ -1,6 +1,6 @@
 import { ItemView, MarkdownView, Notice, Scope, type WorkspaceLeaf } from "obsidian";
 import type { TransmuteSession } from "../core/session";
-import type { ScopeKind } from "../core/settings";
+import type { PresetDef, ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
 import { copyToClipboard } from "../vendor/kit-obsidian/clipboard";
 import { locateRegion } from "../core/anchor";
@@ -47,6 +47,7 @@ export type TransmuteViewDeps = {
   runOptions(): { sampleChars: number; budgetMs: number; maxHits: number };
   confirmThreshold(): number;
   snapshotKeep(): number;
+  getPresets(): PresetDef[];
 };
 
 const EMPTY_VAULT_OUTCOME = {
@@ -231,6 +232,19 @@ export class TransmuteView extends ItemView {
       },
       onEditRule: (patch) => {
         this.scheduleEdit(patch);
+      },
+      onLoadPreset: (preset) => {
+        // Derselbe Weg wie "Von Hand" — nur mit den Feldern schon befuellt. Ein Preset
+        // ERSETZT den Schritt, der sonst eine Regel erst entstehen laesst, nicht die
+        // Evaluierung danach: editRule rechnet wie jede andere Handaenderung neu.
+        const pinned = this.pinScope();
+        if (pinned === null) return;
+        this.pinned = pinned;
+        this.deps.session().startManual();
+        this.deps.session().editRule(
+          { regex: preset.regex, flags: preset.flags, replacement: preset.replacement },
+          pinned.text,
+        );
       },
       onAcceptRisk: () => {
         if (this.pinned === null) return;
@@ -639,6 +653,7 @@ export class TransmuteView extends ItemView {
       model: this.deps.getModel(),
       suppressReasoning: this.deps.getSuppressReasoning(),
       reasoningOpen: this.reasoningOpen,
+      presets: this.deps.getPresets(),
       // `hasRule` kommt aus derselben Quelle, die `computeVaultPreview` prueft — nicht
       // aus einer zweiten Bedingung, die dasselbe zu wissen glaubt.
       vault: this.scopeKind === "vault"
