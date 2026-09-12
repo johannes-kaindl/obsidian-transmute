@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Presets** — a saved rule (pattern, flags, replacement) can be fired from the sidebar
+  with one click, no model round-trip needed. Managed in Settings.
+- **A built-in "Remove line breaks in paragraphs" preset**, seeded for new installs —
+  joins soft-wrapped lines of a paragraph while leaving blank lines, headings, lists,
+  blockquotes, tables and code-fence lines untouched. (Known limitation: lines strictly
+  *inside* a fenced code block are still joined — only the fence lines themselves are
+  protected, since a stateless pattern cannot track "inside a fence" across lines.)
+
+### Fixed
+
+- `\n` and `\t` in a replacement pattern are now interpreted as a line break / tab,
+  instead of being inserted as the literal two-character string (JavaScript's
+  `String.replace` only understands `$`-tokens, not backslash escapes).
+- A model answer cut off at the token limit is now detected via `finish_reason` instead of
+  silently passing as complete. A usable partial answer is shown with a warning, not
+  blocked; an answer cut off with nothing usable gets its own error naming the limit.
+
 ## [0.5.0] — 2026-08-16
 
 ### Added
