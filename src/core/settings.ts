@@ -1,5 +1,6 @@
 import { mergeSettings } from "../vendor/kit/settings";
 import { migrateEndpointList, type EndpointConfig } from "../vendor/kit/endpoint_config";
+import { removeNewlinesPreset } from "./presets/remove-newlines";
 
 export type ScopeKind = "file" | "selection" | "vault";
 
@@ -63,5 +64,11 @@ export function loadSettings(raw: unknown): TransmuteSettings {
   // von vor 0.5.0 noch string[] sein. migrateEndpointList ist die einzige Stelle, die das
   // geradezieht — danach ist der Typ im ganzen Repo verlässlich.
   const rawList = merged.endpoints as unknown as (string | EndpointConfig)[] | undefined;
-  return { ...merged, endpoints: migrateEndpointList(undefined, rawList) };
+  // Geseedet wird nur, wenn `raw` den Schluessel `presets` GAR NICHT traegt (Erstinstallation
+  // oder Upgrade von vor 0.6.0) — ein leeres Array ist eine bewusste Nutzerentscheidung
+  // (alle Presets geloescht) und wird nicht resurrektiert. Ein Wertevergleich koennte beide
+  // Faelle nicht unterscheiden, der Schluessel-Check kann es.
+  const hadPresetsKey = typeof raw === "object" && raw !== null && "presets" in raw;
+  const presets = hadPresetsKey ? merged.presets : [removeNewlinesPreset()];
+  return { ...merged, endpoints: migrateEndpointList(undefined, rawList), presets };
 }

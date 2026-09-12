@@ -164,6 +164,12 @@ die er abfangen sollte.)
 
 ## Gotchas (antizipiert — aus Nachbar-Plugins geerbt, bevor sie hier weh tun)
 
+- **Das eingebaute Preset „Zeilenumbrueche in Absaetzen entfernen" (`src/core/presets/remove-newlines.ts`)
+  erkennt nur ZWEI benachbarte Zeilen, kein „bin ich innerhalb eines Codeblocks" ueber mehrere
+  Zeilen hinweg.** Die Fence-Zeilen selbst (` ``` `) bleiben stehen, Zeilen DAZWISCHEN wuerden
+  trotzdem zusammengezogen, weil eine zustandslose Regex das nicht unterscheiden kann. Bewusst
+  in Kauf genommen — die Pflicht-Vorschau vor jeder Anwendung (Differenzierungspunkt 1) faengt
+  genau diesen Fall auf, bevor geschrieben wird.
 - **Endpoint mit `/v1`-Suffix:** `normalizeEndpoint()` strippt ein trailing `/v1`, sonst baut der
   Client `…/v1/v1/chat/completions`. **LM Studio antwortet auf falsche Pfade mit HTTP 200 + Fehler-Body**
   → `res.ok` true, Antwort leer, stiller Fehlschlag.

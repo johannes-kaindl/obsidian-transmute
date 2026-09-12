@@ -23,15 +23,28 @@ describe("loadSettings", () => {
     expect(geladen.snapshotKeep).toBe(5);
   });
 
-  it("startet ohne Presets", () => {
+  it("startet ohne Presets (Default-Objekt selbst, ohne Seeding)", () => {
     expect(DEFAULT_SETTINGS.presets).toEqual([]);
   });
 
-  it("uebernimmt gespeicherte Presets aus einer alten data.json", () => {
+  it("uebernimmt gespeicherte Presets aus einer alten data.json unveraendert", () => {
     const geladen = loadSettings({
       presets: [{ id: "p1", name: "Trim", regex: " +$", flags: "gm", replacement: "" }],
     });
     expect(geladen.presets).toEqual([{ id: "p1", name: "Trim", regex: " +$", flags: "gm", replacement: "" }]);
+  });
+
+  it("sät das eingebaute 'Zeilenumbrueche entfernen'-Preset bei Erstinstallation (kein presets-Feld in raw)", () => {
+    const geladen = loadSettings({ model: "x" });
+    expect(geladen.presets).toHaveLength(1);
+    expect(geladen.presets[0].regex.length).toBeGreaterThan(0);
+  });
+
+  it("resurrektiert das eingebaute Preset NICHT, wenn der Nutzer alle Presets geloescht hat", () => {
+    // Unterscheidungsmerkmal: raw TRAEGT den Schluessel presets, nur eben leer — das ist
+    // eine bewusste Nutzerentscheidung, kein Upgrade-Fall.
+    const geladen = loadSettings({ presets: [] });
+    expect(geladen.presets).toEqual([]);
   });
 });
 
