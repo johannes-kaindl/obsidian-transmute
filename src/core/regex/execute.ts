@@ -10,9 +10,23 @@ export type ExecuteOptions = {
   maxHits: number;
 };
 
+const TEMPLATE_ESCAPES: Record<string, string> = { n: "\n", t: "\t", "\\": "\\" };
+
+/**
+ * Backslash-Escapes im Ersetzungs-TEMPLATE aufloesen, bevor Gruppenverweise eingesetzt
+ * werden — JS' String.replace kennt nur $-Token, keine Backslash-Escapes, und wer
+ * `\n` tippt, um eine Leerzeile einzufuegen, bekam bisher den literalen String "\n"
+ * statt eines Zeilenumbruchs (Bug, Johannes 2026-09-12). Muss VOR der $-Expansion laufen:
+ * sonst wuerde ein gematchter Text, der zufaellig "\n" enthaelt, nachtraeglich mit
+ * umgeschrieben, obwohl er echter Nutzertext ist, kein Escape des Ersetzers.
+ */
+function unescapeTemplate(template: string): string {
+  return template.replace(/\\(n|t|\\)/g, (_, c: string) => TEMPLATE_ESCAPES[c]);
+}
+
 /** $1..$9, $&, $$ im Ersetzungsmuster aufloesen. */
 function expand(replacement: string, match: RegExpExecArray): string {
-  return replacement.replace(/\$(\$|&|\d{1,2})/g, (_, token: string) => {
+  return unescapeTemplate(replacement).replace(/\$(\$|&|\d{1,2})/g, (_, token: string) => {
     if (token === "$") return "$";
     if (token === "&") return match[0];
     const idx = Number(token);

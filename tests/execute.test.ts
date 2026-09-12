@@ -25,6 +25,33 @@ describe("runRule", () => {
     expect(res.hits[0].replacement).toBe("[hal]");
   });
 
+  it("loest \\n im Ersetzungsmuster als echten Zeilenumbruch auf, nicht als literalen String", () => {
+    // Bug (Johannes, 2026-09-12): wer im eigenen Regex vor einem String per \n eine
+    // Leerzeile einsetzen will, bekam bisher den String "\n" statt eines Zeilenumbruchs —
+    // JS' String.replace kennt nur $-Token, keine Backslash-Escapes.
+    const res = runRule("einsSatz zwei", /Satz/g, "\\n\\nSatz", false, opts);
+    expect(res.hits[0].replacement).toBe("\n\nSatz");
+    expect(res.hits[0].after).toBe("eins\n\nSatz zwei");
+  });
+
+  it("loest \\t als Tab auf", () => {
+    const res = runRule("a,b", /,/g, "\\t", false, opts);
+    expect(res.hits[0].replacement).toBe("\t");
+  });
+
+  it("ein doppelter Backslash bleibt ein literaler Backslash, kein \\n", () => {
+    const res = runRule("x", /x/g, "C:\\\\new", false, opts);
+    expect(res.hits[0].replacement).toBe("C:\\new");
+  });
+
+  it("Gruppenverweise bleiben unberuehrt, auch wenn der getroffene Text \\n enthaelt", () => {
+    // Die Escape-Aufloesung darf nur das TEMPLATE betreffen, nie den eingesetzten
+    // Gruppeninhalt — sonst wuerde ein literales "\n" im gematchten Text nachtraeglich
+    // in einen Zeilenumbruch verwandelt, obwohl es echter Nutzertext ist.
+    const res = runRule("literal \\n text", /literal (.+) text/g, "[$1]", false, opts);
+    expect(res.hits[0].replacement).toBe("[\\n]");
+  });
+
   it("bricht bei ueberschrittenem Zeitbudget ab und meldet die Zeile", () => {
     let t = 0;
     const res = runRule("a\nb\nc\nd", /./g, "x", false, { budgetMs: 5, maxHits: 500, now: () => (t += 4) });

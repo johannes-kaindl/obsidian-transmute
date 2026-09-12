@@ -54,6 +54,8 @@ export const CHEATSHEET: readonly CheatsheetGroup[] = [
       { syntax: "$1", descKey: "cheat.ref" },
       { syntax: "$&", descKey: "cheat.whole" },
       { syntax: "$$", descKey: "cheat.dollar" },
+      { syntax: "\\n", descKey: "cheat.newline" },
+      { syntax: "\\t", descKey: "cheat.tab" },
     ],
   },
 ];
