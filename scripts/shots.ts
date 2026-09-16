@@ -247,7 +247,9 @@ async function main(): Promise<void> {
     // Aufnahmesprache ist Englisch — README.md ist die kanonische Fassung. Die
     // Einstellung ist APP-weit und wird deshalb geprueft, nicht gesetzt: ein stiller
     // Wechsel wuerde den Arbeits-Vault des Maintainers mitnehmen.
-    const sprache = await cdp.evaluate<string>(`return window.localStorage.getItem("language") || "en";`);
+    const sprache = await cdp.evaluate<string>(
+      `return document.documentElement.lang || (window.localStorage && localStorage.getItem("language")) || "en";`,
+    );
     if (!sprache.startsWith("en")) {
       throw new Error(
         `Obsidian steht auf „${sprache}". Die Bilder sind englisch (README.md ist kanonisch).\n`

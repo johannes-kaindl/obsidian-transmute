@@ -722,7 +722,9 @@ async function abschnittSetter(cdp: Cdp): Promise<void> {
 
 /** Sprache des Panels — fuer die Knoepfe, deren Beschriftung gelesen werden muss. */
 async function panelSprache(cdp: Cdp): Promise<"de" | "en"> {
-  const roh = await cdp.evaluate<string>(`return window.localStorage.getItem("language") || "en";`);
+  const roh = await cdp.evaluate<string>(
+    `return document.documentElement.lang || (window.localStorage && localStorage.getItem("language")) || "en";`,
+  );
   return roh.startsWith("de") ? "de" : "en";
 }
 
