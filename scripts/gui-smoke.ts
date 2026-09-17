@@ -7,9 +7,11 @@
  * Obsidians Undo-Stack. Die drei Releases davor haben ihre echten Fehler samt und sonders
  * im GUI-Durchlauf gefunden und keinen einzigen im Gate.
  *
- * Der Treiber kommt **ohne LLM aus**: die Regel wird ueber den Handpfad gesetzt
+ * Der Treiber kommt **ohne echtes LLM aus**: die Regel wird ueber den Handpfad gesetzt
  * („oder Regex selbst schreiben"). Ein Smoke, der an einem Modell haengt, misst das
- * Modell mit.
+ * Modell mit. Einzige Ausnahme: der llm-lab-Pruefpunkt (Abschnitt „llm-lab") — dort geht es
+ * genau um die Meldestrecke zum Modell-Aufruf, deshalb ein eigener Stub-Server statt eines
+ * echten Modells (Muster koda-agent Punkt 41).
  *
  * ## Voraussetzung
  *
@@ -43,6 +45,8 @@
  * ```
  */
 
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 
 import { attachTo, Cdp, closeExtraLeaves, notices, pollUntil, releaseAlwaysOnTop, requireVisible, setPluginSetting }
@@ -824,6 +828,146 @@ async function abschnittSetter(cdp: Cdp): Promise<void> {
   );
 }
 
+// --- Abschnitt: llm-lab --------------------------------------------------------
+
+/**
+ * Ein eigener HTTP-Server statt des konfigurierten Endpunkts — derselbe Grund wie bei
+ * koda-agent Punkt 40/41: ein Smoke, der an einem echten Modell haengt, misst das Modell
+ * mit statt die Meldestrecke. `requestUrl` (der Transport dieses Plugins, `obsidian/http.ts`)
+ * umgeht CORS — die OPTIONS/CORS-Antwort ist trotzdem eingebaut (REGISTRY GUI-Smoke-Zeile,
+ * Befund koda), defensiv fuer den Fall, dass der Renderer den Request je ueber `fetch`
+ * schickt statt ueber `requestUrl`.
+ */
+async function startFakeEndpoint(
+  draft: { regex: string; flags: string; replacement: string; explanation: string },
+): Promise<{ url: string; close: () => Promise<void> }> {
+  const server: Server = createServer((req, res) => {
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+      });
+      res.end();
+      return;
+    }
+    if (req.method === "POST" && req.url?.includes("/v1/chat/completions") === true) {
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({
+        choices: [{ message: { content: JSON.stringify(draft) }, finish_reason: "stop" }],
+      }));
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(
+      req.url?.includes("/v1/models") === true
+        ? JSON.stringify({ data: [{ id: "smoke-model", object: "model" }] })
+        : JSON.stringify({ ok: true }),
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    close: () => new Promise<void>((resolve) => { server.close(() => { resolve(); }); }),
+  };
+}
+
+/**
+ * llm-lab-Meldestrecke (Konsumenten-Seite) — Task „llm-lab als Konsument anschliessen".
+ * Echter Roundtrip: `TransmuteSession.generate()` gegen den Stub-Endpunkt oben, mit
+ * eingehaengtem llm-lab-Stub. Geprueft wird NICHT, ob ein echtes llm-lab die Zeile
+ * speichert (das ist dessen Smoke) — nur, dass transmute ueberhaupt meldet und mit
+ * welchen Feldern (feature, turnId, promptTemplate, Nachrichten nur system/user/assistant).
+ *
+ * Ein Stub statt eines echten Lab, aus demselben Grund wie in koda-agents Treiber: die
+ * Zusage ist "wir rufen readLabApi(app)?.log(...) mit diesen Feldern", nicht "das Lab
+ * verhaelt sich richtig".
+ */
+async function abschnittLlmLab(cdp: Cdp): Promise<void> {
+  const labVorher = await cdp.evaluate<boolean>(`return !!app.plugins.plugins["llm-lab"];`);
+  if (labVorher) {
+    skipped(
+      "llm-lab-Meldestrecke (Konsumenten-Seite)",
+      "ein llm-lab-Eintrag existiert bereits (echtes Plugin oder Rest eines abgebrochenen Laufs); Stub wuerde ihn ueberschreiben",
+    );
+    return;
+  }
+
+  const fake = await startFakeEndpoint({ regex: "foo", flags: "", replacement: "bar", explanation: "e" });
+  const vorEndpoints = await cdp.evaluate<unknown>(
+    `return app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.endpoints;`,
+  );
+  try {
+    await cdp.evaluate(`
+      window.__transmuteLabSeen = [];
+      app.plugins.plugins["llm-lab"] = {
+        __transmuteSmokeStub: true,
+        api: {
+          apiVersion: 4,
+          status: () => ({ apiVersion: 4, recording: true }),
+          log: (input) => { window.__transmuteLabSeen.push(input); return "smoke-" + window.__transmuteLabSeen.length; },
+        },
+      };
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = [{ url: ${JSON.stringify(fake.url)} }];
+      await p.saveSettings();
+      // resolver.resolve() cacht den ersten erreichbaren Endpunkt fuer die Session-Laufzeit
+      // (EndpointResolver-Kopfkommentar). Hat ein frueherer Abschnitt (Modell-Liste laden,
+      // Settings-Tab) bereits aufgeloest — z. B. auf den echten Default ":1234" — wuerde
+      // dieser Cache den Stub-Endpunkt sonst stillschweigend ignorieren und die Anfrage
+      // ginge an einen echten, moeglicherweise langsamen/inkompatiblen Server: „generating"
+      // haengt dann unbegrenzt, ohne dass der Stub je einen Request sieht (gemessen an
+      // genau diesem Punkt, Welle 7).
+      p.resolver.invalidate();
+      // Direkter Aufruf der Sitzung — derselbe Pfad, den der Generieren-Knopf im Panel
+      // ausloest (view.ts::generate() ruft nichts anderes). Kein DOM-Umweg noetig: eine
+      // turnId misst der Port, keine Tastatureingabe.
+      void p.sessionInstance.generate("Smoke-Test: ersetze foo", "foo bar");
+      return true;
+    `);
+
+    const gemeldet = await pollUntil<{
+      feature: string; model: string; endpointUrl: string; content: string;
+      latencyMs: number; turnId: string; promptTemplate: string;
+      messages: { role: string; content: string }[];
+    }>(
+      cdp,
+      `
+        const seen = window.__transmuteLabSeen || [];
+        return seen.length > 0 ? seen[0] : null;
+      `,
+      15_000,
+    );
+    const ok =
+      gemeldet !== null
+      && gemeldet.feature === "rule:apply"
+      && gemeldet.endpointUrl === fake.url
+      && gemeldet.latencyMs >= 0
+      && typeof gemeldet.turnId === "string" && gemeldet.turnId !== ""
+      && gemeldet.promptTemplate !== ""
+      && Array.isArray(gemeldet.messages)
+      && gemeldet.messages.some((m) => m.role === "user" && m.content.includes("Smoke-Test"))
+      && !gemeldet.messages.some((m) => (m as { role: string }).role !== "system" && (m as { role: string }).role !== "user" && (m as { role: string }).role !== "assistant");
+    const detail = gemeldet
+      ? `feature „${gemeldet.feature}“ · model „${gemeldet.model}“ · turnId ${gemeldet.turnId.slice(0, 12)}… · `
+        + `promptTemplate ${gemeldet.promptTemplate.length} Z. · Nachrichten ${gemeldet.messages.length} (nur system/user/assistant)`
+      : "kein log()-Aufruf innerhalb 15s";
+    record("llm-lab-Meldestrecke (Konsumenten-Seite): feature/turnId/promptTemplate/Nachrichten korrekt gemeldet", ok, detail);
+  } finally {
+    await fake.close();
+    await cdp.evaluate(`
+      delete app.plugins.plugins["llm-lab"];
+      delete window.__transmuteLabSeen;
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = ${JSON.stringify(vorEndpoints)};
+      await p.saveSettings();
+      p.resolver.invalidate();
+      return true;
+    `).catch(() => undefined);
+  }
+}
+
 // --- Abschnitt: i18n ---------------------------------------------------------
 
 /** Sprache des Panels — fuer die Knoepfe, deren Beschriftung gelesen werden muss. */
@@ -967,6 +1111,7 @@ async function main(): Promise<void> {
     await abschnitt("Datei-Anwenden", () => abschnittDateiAnwenden(cdp));
     await abschnitt("Abbruch", () => abschnittAbbruch(cdp, kandidaten));
     await abschnitt("Setter", () => abschnittSetter(cdp));
+    await abschnitt("llm-lab", () => abschnittLlmLab(cdp));
     await abschnitt("i18n", () => abschnittI18n(cdp));
   } finally {
     // Nimmt zurueck, was `requireVisible` in seiner letzten Stufe gesetzt haben kann —

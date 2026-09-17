@@ -102,4 +102,8 @@ export type Version = {
   truncated: boolean;
   /** Die angeforderte Diagnose zu diesem Muster, oder null. */
   diagnosis: Diagnosis | null;
+  /** Klammert diesen Stand mit einer spaeteren Diagnose zu EINEM llm-lab-Turn — die
+   *  Diagnose gehoert fachlich zum vorangehenden Aufruf, der diesen Stand erzeugt hat
+   *  (Entscheidung Johannes 2026-09-17, Task „llm-lab als Konsument anschliessen"). */
+  turnId: string;
 };

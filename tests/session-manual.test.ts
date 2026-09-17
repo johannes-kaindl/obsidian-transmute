@@ -5,7 +5,7 @@ const options = () => ({ sampleChars: 500, budgetMs: 1000, maxHits: 500 });
 const answer = JSON.stringify({ regex: "foo", flags: "", replacement: "bar", explanation: "e" });
 
 function session(complete = vi.fn()): TransmuteSession {
-  return new TransmuteSession({ complete, now: () => 0 }, options);
+  return new TransmuteSession({ complete, now: () => 0, newTurnId: () => "t" }, options);
 }
 
 /** Eine Sitzung, die bereits einen Modell-Stand in der Vorschau hat. */
@@ -182,7 +182,7 @@ describe("Kanarienvogel vor der Freigabe", () => {
   it("fuehrt nicht aus, wenn die Probe schon zu lange braucht", () => {
     let t = 0;
     const s = new TransmuteSession(
-      { complete: vi.fn(), now: () => (t += 10) },
+      { complete: vi.fn(), now: () => (t += 10), newTurnId: () => "t" },
       () => ({ sampleChars: 500, budgetMs: 1000, maxHits: 500 }),
     );
     s.startManual();

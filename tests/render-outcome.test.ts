@@ -60,6 +60,7 @@ const version = (over: Partial<Version> = {}): Version => ({
   reasoning: null,
   truncated: false,
   diagnosis: null,
+  turnId: "t",
   ...over,
 });
 

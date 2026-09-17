@@ -5,7 +5,7 @@ const options = () => ({ sampleChars: 500, budgetMs: 1000, maxHits: 500 });
 
 /** Eine Sitzung mit genau einem Handstand, dessen Muster nichts trifft. */
 const manualSession = (complete: ReturnType<typeof vi.fn>, regex: string, text: string) => {
-  const session = new TransmuteSession({ complete, now: () => 0 }, options);
+  const session = new TransmuteSession({ complete, now: () => 0, newTurnId: () => "t" }, options);
   session.startManual();
   session.editRule({ regex }, text);
   return session;
@@ -95,6 +95,21 @@ describe("diagnose", () => {
     await session.diagnose("foo bar");
     expect(complete).not.toHaveBeenCalled();
     expect(session.activeVersion!.diagnosis).toBeNull();
+  });
+
+  // llm-lab-Task: die Diagnose gehoert fachlich zum vorangehenden Aufruf, der diesen
+  // Stand erzeugt hat (Entscheidung Johannes 2026-09-17) — derselbe Turn, kein neuer.
+  it("ruft complete() mit feature rule:diagnose und der turnId des diagnostizierten Standes auf", async () => {
+    const complete = vi.fn().mockResolvedValue({ ok: true, reasoning: null, content: "nichts dergleichen" });
+    const session = new TransmuteSession(
+      { complete, now: () => 0, newTurnId: vi.fn().mockReturnValue("turn-manual") },
+      options,
+    );
+    session.startManual();
+    session.editRule({ regex: "^foo" }, "nichts");
+    await session.diagnose("nichts");
+    expect(complete).toHaveBeenCalledWith(expect.anything(), "rule:diagnose", "turn-manual");
+    expect(session.activeVersion!.turnId).toBe("turn-manual");
   });
 });
 

@@ -72,7 +72,7 @@ describe("Anwenden im Geltungsbereich Datei", () => {
     const editor = fakeEditor("alte Schreibweise und alte Schreibweise");
     const app = fakeApp(editor, "notiz.md");
     const session = new TransmuteSession(
-      { complete: () => Promise.resolve({ ok: true as const, content: "", reasoning: null, truncated: false }), now: () => 0 },
+      { complete: () => Promise.resolve({ ok: true as const, content: "", reasoning: null, truncated: false }), now: () => 0, newTurnId: () => "t" },
       () => ({ sampleChars: 400, budgetMs: 2000, maxHits: 500 }),
     );
 
@@ -102,7 +102,7 @@ describe("Anwenden im Geltungsbereich Datei", () => {
     const editor = fakeEditor("alte Schreibweise");
     const app = fakeApp(editor, "notiz.md");
     const session = new TransmuteSession(
-      { complete: () => Promise.resolve({ ok: true as const, content: "", reasoning: null, truncated: false }), now: () => 0 },
+      { complete: () => Promise.resolve({ ok: true as const, content: "", reasoning: null, truncated: false }), now: () => 0, newTurnId: () => "t" },
       () => ({ sampleChars: 400, budgetMs: 2000, maxHits: 500 }),
     );
 

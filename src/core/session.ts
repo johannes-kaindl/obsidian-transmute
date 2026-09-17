@@ -54,9 +54,19 @@ function problemToError(problem: RuleProblem): { messageKey: string; args: strin
   }
 }
 
+/** Zwei Aufrufarten gehen durch denselben Port und sind ohne dieses Feld nicht
+ *  unterscheidbar (llm-lab-Task „llm-lab als Konsument anschliessen" — dieselbe
+ *  Fehlerklasse, an der `systemPromptHash` in llm-lab gescheitert ist). */
+export type CompleteFeature = "rule:apply" | "rule:diagnose";
+
 export type SessionDeps = {
-  complete(messages: ChatMessage[]): Promise<CompleteResult>;
+  /** turnId wird HIER durchgereicht statt am Ergebnis abgelesen zu werden — nur so kennt
+   *  die Implementierung (llm-lab-Meldung) ihn zum Zeitpunkt des Aufrufs. */
+  complete(messages: ChatMessage[], feature: CompleteFeature, turnId: string): Promise<CompleteResult>;
   now(): number;
+  /** Ein Turn je Nutzer-Handlung (neuer Stand) — die Diagnose eines Standes teilt sich
+   *  dessen turnId, statt eine eigene zu ziehen. */
+  newTurnId(): string;
 };
 
 export type SessionOptions = { sampleChars: number; budgetMs: number; maxHits: number };
@@ -130,6 +140,7 @@ export class TransmuteSession {
         reasoning: null,
         truncated: false,
         diagnosis: null,
+        turnId: this.deps.newTurnId(),
       },
     ];
     this.set({ phase: "preview", versions: this.versions, active: 0 });
@@ -161,8 +172,13 @@ export class TransmuteSession {
     }
 
     // Die Beschriftung im Verlauf kommt aus source, nicht aus instruction — deshalb
-    // bleibt die Anweisung leer, statt einen erfundenen Text zu tragen.
-    this.versions = [...state.versions, { ...next, instruction: "", source: "manual", reasoning: null, truncated: false, diagnosis: null }];
+    // bleibt die Anweisung leer, statt einen erfundenen Text zu tragen. Ein neu
+    // angehaengter Stand ist eine eigene Nutzer-Handlung und bekommt deshalb eine eigene
+    // turnId — anders als beim In-Place-Zweig oben, der denselben Stand weiter bearbeitet.
+    this.versions = [
+      ...state.versions,
+      { ...next, instruction: "", source: "manual", reasoning: null, truncated: false, diagnosis: null, turnId: this.deps.newTurnId() },
+    ];
     this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 }, "edit");
   }
 
@@ -305,10 +321,13 @@ export class TransmuteSession {
   private async run(instruction: string, messages: ChatMessage[], text: string): Promise<void> {
     this.set({ phase: "generating" });
 
-    let attempt = await this.ask(messages);
+    // Eine turnId fuer beide Versuche dieser Runde: der Retry ist dieselbe Nutzer-Handlung,
+    // kein eigener Turn.
+    const turnId = this.deps.newTurnId();
+    let attempt = await this.ask(messages, turnId);
     if (!attempt.ok) {
       const retry = buildRetryPrompt(messages, attempt.raw ?? "", attempt.problem);
-      attempt = await this.ask(retry);
+      attempt = await this.ask(retry, turnId);
     }
     if (!attempt.ok) {
       this.set({ phase: "error", messageKey: attempt.messageKey, args: attempt.args, raw: attempt.raw });
@@ -338,13 +357,14 @@ export class TransmuteSession {
         reasoning: attempt.reasoning,
         truncated: attempt.truncated,
         diagnosis: null,
+        turnId,
       },
     ];
     this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 });
   }
 
-  private async ask(messages: ChatMessage[]): Promise<Attempt> {
-    const res = await this.deps.complete(messages);
+  private async ask(messages: ChatMessage[], turnId: string): Promise<Attempt> {
+    const res = await this.deps.complete(messages, "rule:apply", turnId);
     if (!res.ok) {
       if (res.truncatedEmpty === true) {
         return { ok: false, messageKey: "error.truncatedEmpty", args: [], raw: null, problem: "truncated, no usable text" };
@@ -415,7 +435,11 @@ export class TransmuteSession {
 
     const findings = probeRelaxations(version.rule, text, this.evalOptions());
     const sample = sampleForPrompt(text, this.options().sampleChars);
-    const res = await this.deps.complete(buildDiagnosePrompt(version.rule, findings, sample, version.instruction));
+    const res = await this.deps.complete(
+      buildDiagnosePrompt(version.rule, findings, sample, version.instruction),
+      "rule:diagnose",
+      version.turnId,
+    );
 
     if (!res.ok) {
       const failed: Diagnosis =
@@ -475,6 +499,8 @@ export class TransmuteSession {
         reasoning: null,
         truncated: false,
         diagnosis: null,
+        // Das Uebernehmen des Vorschlags ist eine eigene Nutzer-Handlung.
+        turnId: this.deps.newTurnId(),
       },
       text,
     );

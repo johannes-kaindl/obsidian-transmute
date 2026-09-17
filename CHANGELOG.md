@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **llm-lab integration** — every model call now carries a `feature` tag
+  (`rule:apply`/`rule:diagnose`) so the two call shapes on the same port are distinguishable
+  downstream, and reports itself to llm-lab when the plugin is installed (model, endpoint,
+  messages, latency, a stable `promptTemplate`, and a `turnId` grouping a diagnosis with the
+  version it explains). No effect when llm-lab is absent.
 - **Presets** — a saved rule (pattern, flags, replacement) can be fired from the sidebar
   with one click, no model round-trip needed. Managed in Settings.
 - **A built-in "Remove line breaks in paragraphs" preset**, seeded for new installs —
