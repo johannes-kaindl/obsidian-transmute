@@ -332,10 +332,23 @@ describe("renderPanel — Modellzeile", () => {
     expect(on.textContent).toContain("Thinking on");
   });
 
-  it("sperrt den Schalter bei Modellen, die immer denken", () => {
+  it("Thinking-Toggle traegt aria-pressed passend zum Zustand (UI-STANDARD 8)", () => {
+    const off = makeFakeEl();
+    renderPanel(off, { ...base, model: "qwen", state: { phase: "idle" } }, handlers);
+    expect(findByClass<any>(off, "transmute-think")?.getAttribute("aria-pressed")).toBe("false");
+
+    const on = makeFakeEl();
+    renderPanel(on, { ...base, model: "qwen", suppressReasoning: false, state: { phase: "idle" } }, handlers);
+    expect(findByClass<any>(on, "transmute-think")?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("sperrt den Schalter bei Modellen, die immer denken — nativ disabled, aria-pressed=true", () => {
     const root = makeFakeEl();
     renderPanel(root, { ...base, model: "gpt-oss-20b", state: { phase: "idle" } }, handlers);
     expect(root.textContent).toContain("Always thinks");
+    const toggle = findByClass<any>(root, "transmute-think");
+    expect(toggle?.disabled).toBe(true);
+    expect(toggle?.getAttribute("aria-pressed")).toBe("true");
   });
 });
 

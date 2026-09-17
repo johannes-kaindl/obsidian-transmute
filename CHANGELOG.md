@@ -18,6 +18,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Thinking toggle now shows its state without relying on color alone** (UI-STANDARD §8,
+  state-button contract) — `aria-pressed` was missing entirely, and a locked (always-on
+  thinker) toggle carried only `aria-disabled` instead of the native `disabled` property.
+  Fixed: `aria-pressed` follows the state on every render, `disabled` is now the native
+  button property, and the icon switches `brain` ↔ `brain-cog` for on/off instead of always
+  showing `brain`.
 - `\n` and `\t` in a replacement pattern are now interpreted as a line break / tab,
   instead of being inserted as the literal two-character string (JavaScript's
   `String.replace` only understands `$`-tokens, not backslash escapes).

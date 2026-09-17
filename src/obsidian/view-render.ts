@@ -109,14 +109,14 @@ function modelRow(parent: El, model: PanelModel, handlers: PanelHandlers): void 
 
   // Zustand traegt Text UND Klasse, nicht nur Farbe (WCAG 1.4.1).
   const think = thinkToggleView(model.model, model.suppressReasoning);
+  const thinkOn = think.cls !== "is-off";
   const toggle = row.createEl("button", { cls: "transmute-think" });
   toggle.addClass(...(think.cls === "" ? [] : [think.cls]));
-  setIcon(toggle.createSpan(), "brain");
+  setIcon(toggle.createSpan(), thinkOn ? "brain" : "brain-cog");
   toggle.createSpan({ text: t(think.labelKey) });
-  if (think.disabled) {
-    // aria-disabled statt disabled: der Grund bleibt so vorlesbar.
-    toggle.setAttribute("aria-disabled", "true");
-  } else {
+  toggle.setAttribute("aria-pressed", String(thinkOn));
+  toggle.disabled = think.disabled;
+  if (!think.disabled) {
     toggle.addEventListener("click", () => handlers.onToggleThinking());
   }
 }
