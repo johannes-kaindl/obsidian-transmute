@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { makeFakeEl } from "./__mocks__/obsidian";
-import { findAllByClass, findByClass } from "./helpers/dom";
+import { findAllByClass, findAllByTag, findByClass } from "./helpers/dom";
 import { renderOutcome, renderPanel, type PanelHandlers, type PanelModel } from "../src/obsidian/view-render";
 import type { Hit, Version } from "../src/core/types";
 import "../src/core/i18n/strings";
@@ -14,7 +14,7 @@ const handlers: PanelHandlers = {
   onRefine: vi.fn(),
   onApply: vi.fn(),
   onToggle: vi.fn(),
-  onDiscard: vi.fn(),
+  onReset: vi.fn(),
   onSelectVersion: vi.fn(),
   onModel: vi.fn(),
   onRefreshModels: vi.fn(),
@@ -145,6 +145,27 @@ describe("Anwenden-Knopf", () => {
     renderPanel(root, model(v), handlers);
     const apply = findAllByClass<{ getAttribute(k: string): string | null }>(root, "mod-cta").at(-1);
     expect(apply?.getAttribute("disabled")).toBe("true");
+  });
+});
+
+describe("Zuruecksetzen-Knopf", () => {
+  // Bug (Johannes' Quicktasks 2026-09-16): Anwenden leerte bisher die ganze Runde. Jetzt
+  // bleibt das Formular stehen — geleert wird nur noch ueber diesen eigenen Knopf.
+  it("steht neben Anwenden und feuert onReset beim Klick", () => {
+    const root = makeFakeEl();
+    renderPanel(root, model(version({ hits: [hit()], selected: [true] })), handlers);
+
+    const reset = findAllByTag<{ textContent?: string; click(): void }>(root, "button")
+      .find((btn) => btn.textContent === "Reset");
+    expect(reset).toBeDefined();
+
+    const onReset = vi.fn();
+    const root2 = makeFakeEl();
+    renderPanel(root2, model(version({ hits: [hit()], selected: [true] })), { ...handlers, onReset });
+    findAllByTag<{ textContent?: string; click(): void }>(root2, "button")
+      .find((btn) => btn.textContent === "Reset")
+      ?.click();
+    expect(onReset).toHaveBeenCalledOnce();
   });
 });
 

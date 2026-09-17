@@ -18,6 +18,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Applying a rule no longer empties the form.** Pattern, flags and replacement now stay
+  on screen after "Apply", so a second application with a small correction doesn't need
+  a fresh request. A new explicit "Reset" button clears the round on purpose.
 - **Thinking toggle now shows its state without relying on color alone** (UI-STANDARD §8,
   state-button contract) — `aria-pressed` was missing entirely, and a locked (always-on
   thinker) toggle carried only `aria-disabled` instead of the native `disabled` property.

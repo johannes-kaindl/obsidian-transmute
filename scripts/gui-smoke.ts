@@ -427,6 +427,112 @@ async function abschnittRueckgaengig(cdp: Cdp): Promise<void> {
   );
 }
 
+// --- Abschnitt: Datei-Anwenden (Geltungsbereich "Notiz") ---------------------
+
+/** Die Notiz im Hauptbereich oeffnen — nicht in der Sidebar, wo das Panel selbst haengt.
+ *  `activeMarkdownView` (editor-io.ts) sucht ueber `rootSplit` genau dort. */
+async function dateiOeffnen(cdp: Cdp, pfad: string): Promise<void> {
+  await cdp.evaluate(`
+    const f = app.vault.getAbstractFileByPath(${JSON.stringify(pfad)});
+    if (!f) throw new Error("Smoke-Notiz fehlt: ${pfad}");
+    await app.workspace.getLeaf(false).openFile(f);
+    await new Promise((r) => setTimeout(r, 500));
+    return true;
+  `);
+}
+
+/** Live-Inhalt der offenen Notiz — der Editor-Puffer, nicht die Platte: ein Speichern
+ *  laeuft debounced, der Puffer aendert sich sofort mit `applyHitsToEditor`. */
+async function dateiPufferInhalt(cdp: Cdp, pfad: string): Promise<string | null> {
+  return cdp.evaluate<string | null>(`
+    const leaf = app.workspace.getLeavesOfType("markdown")
+      .find((l) => l.view.file?.path === ${JSON.stringify(pfad)});
+    return leaf ? leaf.view.editor.getValue() : null;
+  `);
+}
+
+/**
+ * Regression (Johannes' Quicktasks 2026-09-16): „Anwenden" leerte im Geltungsbereich
+ * Notiz die ganze Runde — ein zweites Anwenden mit kleiner Korrektur brauchte deshalb
+ * jedes Mal eine neue Anfrage von vorn. Gemessen wird hier genau der Fall „zweimal
+ * Anwenden mit Aenderung dazwischen", dazu der neue „Zuruecksetzen"-Knopf.
+ */
+async function abschnittDateiAnwenden(cdp: Cdp): Promise<void> {
+  const pfad = `${SMOKE_DIR}/notiz-datei-anwenden.md`;
+  await cdp.evaluate(`
+    const p = ${JSON.stringify(pfad)};
+    const body = "Zeile mit ${ALT} und ${ALT}.\\n";
+    const vorhanden = app.vault.getAbstractFileByPath(p);
+    if (vorhanden) await app.vault.modify(vorhanden, body);
+    else await app.vault.create(p, body);
+    return true;
+  `);
+  await dateiOeffnen(cdp, pfad);
+
+  // Bereich "Notiz" ist Position 0 — sprachunabhaengig, s. abschnittUmfang.
+  await click(cdp, ".transmute-scope-btn", 0);
+
+  const manual = await click(cdp, ".transmute-manual-link");
+  if (!manual) {
+    record("Datei-Anwenden: Handpfad erreichbar", false, "Knopf „oder Regex selbst schreiben“ nicht gefunden");
+    return;
+  }
+  await fill(cdp, ".transmute-regex", ALT);
+  await fill(cdp, ".transmute-replacement-input", NEU);
+  await cdp.evaluate("await new Promise((r) => setTimeout(r, 700)); return true;");
+
+  const sprache = await panelSprache(cdp);
+  const labelAnwenden = sprache === "de" ? "Anwenden" : "Apply";
+  const labelReset = sprache === "de" ? "Zurücksetzen" : "Reset";
+
+  await clickByText(cdp, ".transmute-actions", labelAnwenden);
+  await cdp.evaluate("await new Promise((r) => setTimeout(r, 400)); return true;");
+
+  const nachErstem = await dateiPufferInhalt(cdp, pfad);
+  record(
+    "Erstes Anwenden ersetzt beide Treffer in der Notiz",
+    (nachErstem ?? "").includes(NEU) && !(nachErstem ?? "").includes(ALT),
+    `„${nachErstem ?? "(nichts)"}"`,
+  );
+
+  const musterNoch = await prop<string>(cdp, ".transmute-regex", "value");
+  const ersetzungNoch = await prop<string>(cdp, ".transmute-replacement-input", "value");
+  record(
+    "Regex bleibt nach Anwenden stehen, statt zu leeren",
+    musterNoch === ALT && ersetzungNoch === NEU,
+    `Muster „${musterNoch}", Ersetzung „${ersetzungNoch}"`,
+  );
+
+  // Aenderung dazwischen — ohne erneutes Pinnen ueber "Von Hand". Das Muster muss
+  // mitwandern: "${ALT}" steht nach dem ersten Anwenden nicht mehr im Text, ein
+  // unveraendertes Muster faende dort folgerichtig nichts mehr. Genau DAS ist der
+  // Beleg dafuer, dass der gemerkte Textstand nach dem Anwenden nachgezogen wird
+  // (sonst rechnete die Vorschau noch gegen den alten, laengst ersetzten Text).
+  await fill(cdp, ".transmute-regex", NEU);
+  await fill(cdp, ".transmute-replacement-input", "dritte Schreibweise");
+  await cdp.evaluate("await new Promise((r) => setTimeout(r, 700)); return true;");
+  await clickByText(cdp, ".transmute-actions", labelAnwenden);
+  await cdp.evaluate("await new Promise((r) => setTimeout(r, 400)); return true;");
+
+  const nachZweitem = await dateiPufferInhalt(cdp, pfad);
+  record(
+    "Zweites Anwenden mit Aenderung dazwischen greift ohne neues Pinnen",
+    (nachZweitem ?? "").includes("dritte Schreibweise"),
+    `„${nachZweitem ?? "(nichts)"}"`,
+  );
+
+  await clickByText(cdp, ".transmute-actions", labelReset);
+  await cdp.evaluate("await new Promise((r) => setTimeout(r, 300)); return true;");
+  const nochGepinnt = await exists(cdp, ".transmute-pinned");
+  record("Zuruecksetzen leert die Runde bewusst", !nochGepinnt, nochGepinnt ? "Pinned-Hinweis noch da" : "weg");
+
+  await cdp.evaluate(`
+    const f = app.vault.getAbstractFileByPath(${JSON.stringify(pfad)});
+    if (f) await app.fileManager.trashFile(f);
+    return true;
+  `);
+}
+
 // --- Abschnitt: unvollstaendig gemessen --------------------------------------
 
 /** Was nicht vollstaendig gemessen wurde, darf nicht geschrieben werden.
@@ -858,6 +964,7 @@ async function main(): Promise<void> {
       if (undo) await abschnitt("Rueckgaengig", () => abschnittRueckgaengig(cdp));
       await abschnitt("Unvollstaendig", () => abschnittUnvollstaendig(cdp));
     }
+    await abschnitt("Datei-Anwenden", () => abschnittDateiAnwenden(cdp));
     await abschnitt("Abbruch", () => abschnittAbbruch(cdp, kandidaten));
     await abschnitt("Setter", () => abschnittSetter(cdp));
     await abschnitt("i18n", () => abschnittI18n(cdp));

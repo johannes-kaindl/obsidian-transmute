@@ -54,7 +54,7 @@ export type PanelHandlers = {
   onGenerate(): void;
   onRefine(): void;
   onApply(): void;
-  onDiscard(): void;
+  onReset(): void;
   onSelectVersion(index: number): void;
   onModel(model: string): void;
   onRefreshModels(): void;
@@ -400,8 +400,8 @@ function renderActions(parent: El, version: Version, handlers: PanelHandlers): v
   const refine = actions.createEl("button", { text: t("view.refine") });
   refine.addEventListener("click", () => handlers.onRefine());
 
-  const discard = actions.createEl("button", { text: t("view.discard") });
-  discard.addEventListener("click", () => handlers.onDiscard());
+  const reset = actions.createEl("button", { text: t("view.reset") });
+  reset.addEventListener("click", () => handlers.onReset());
 
   const apply = actions.createEl("button", { text: t("view.apply"), cls: "mod-cta" });
   // Ein Problem sperrt das Anwenden ausdruecklich — auch wenn ohnehin nichts ausgewaehlt

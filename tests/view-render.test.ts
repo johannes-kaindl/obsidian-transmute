@@ -16,7 +16,7 @@ const handlers: PanelHandlers = {
   onRefine: vi.fn(),
   onApply: vi.fn(),
   onToggle: vi.fn(),
-  onDiscard: vi.fn(),
+  onReset: vi.fn(),
   onSelectVersion: vi.fn(),
   onModel: vi.fn(),
   onRefreshModels: vi.fn(),

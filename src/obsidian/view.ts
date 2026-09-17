@@ -209,8 +209,8 @@ export class TransmuteView extends ItemView {
       onSelectVersion: (index) => {
         this.deps.session().selectVersion(index);
       },
-      onDiscard: () => {
-        // Die Anweisung bleibt stehen: verworfen wird das Ergebnis, nicht der Gedanke.
+      onReset: () => {
+        // Die Anweisung bleibt stehen: geleert wird das Ergebnis, nicht der Gedanke.
         this.clearEditTimer();
         this.refinement = "";
         this.pinned = null;
@@ -421,8 +421,19 @@ export class TransmuteView extends ItemView {
     if (applied === 0) return;
 
     new Notice(t("view.applied", applied));
-    this.pinned = null;
-    this.deps.session().reset();
+    // Muster, Flags und Ersetzung bleiben stehen — ein zweites Anwenden mit kleiner
+    // Korrektur braucht sonst jedes Mal eine neue Anfrage von vorn. "Zurücksetzen"
+    // leert bewusst, das Anwenden selbst tut es nicht mehr.
+    //
+    // Bei Geltungsbereich "Ganze Notiz" wird der gemerkte Textstand auf den frischen
+    // Inhalt nachgezogen: sonst rechnet eine Handaenderung DANACH (editRule) noch gegen
+    // den Text von VOR dieser Anwendung, und die Trefferliste zeigt Positionen, die es
+    // im Dokument nicht mehr gibt. Bei "Auswahl" bleibt der alte Anker stehen — die
+    // Auswahl selbst ist durch die Ersetzung ohnehin nicht mehr wiederzufinden, ein
+    // zweites Anwenden dort meldet dann korrekt "error.noteChanged" (Revalidierung).
+    if (this.pinned !== null && this.pinned.scope !== "selection") {
+      this.pinned = { ...this.pinned, text: view.editor.getValue() };
+    }
   }
 
   /**

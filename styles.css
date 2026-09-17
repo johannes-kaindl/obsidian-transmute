@@ -174,11 +174,13 @@
 
 .transmute-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--size-2-3);
 }
 
 .transmute-actions button {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: fit-content;
 }
 
 .transmute-error {
