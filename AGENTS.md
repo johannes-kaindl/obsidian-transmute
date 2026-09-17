@@ -164,6 +164,15 @@ die er abfangen sollte.)
 
 ## Gotchas (antizipiert — aus Nachbar-Plugins geerbt, bevor sie hier weh tun)
 
+- **`EndpointResolver.resolve()` cacht den ersten erreichbaren Endpunkt fuer die
+  Session-Laufzeit** (`src/obsidian/endpoint.ts`) — richtig fuer den Normalbetrieb (ein
+  lokaler Endpunkt wandert selten mitten in einer Sitzung), falsch fuer einen GUI-Smoke, der
+  `settings.endpoints` zur Laufzeit auf einen Stub-Server umbiegt: hat ein frueherer
+  Abschnitt (Modell-Liste laden, Settings-Tab) schon aufgeloest, ignoriert der Cache den
+  neuen Wert stillschweigend — die Anfrage geht an den alten (ggf. echten) Endpunkt und
+  haengt in „generating", ohne dass der Stub je einen Request sieht (gemessen am
+  llm-lab-Meldestrecke-Punkt, Welle 7). Treiber, die einen Endpunkt zur Laufzeit tauschen,
+  rufen danach `p.resolver.invalidate()`.
 - **Das eingebaute Preset „Zeilenumbrueche in Absaetzen entfernen" (`src/core/presets/remove-newlines.ts`)
   erkennt nur ZWEI benachbarte Zeilen, kein „bin ich innerhalb eines Codeblocks" ueber mehrere
   Zeilen hinweg.** Die Fence-Zeilen selbst (` ``` `) bleiben stehen, Zeilen DAZWISCHEN wuerden
