@@ -94,7 +94,7 @@ Open **Settings → Community plugins → Transmute**. Settings are grouped unde
 
 | Setting | Default | Effect |
 |---|---|---|
-| **Endpoints** | `["http://127.0.0.1:1234"]` | Ordered list of OpenAI-compatible servers, tried in order; the first reachable one is used. Each row can carry its own **API key** — leave it empty for a local server, set it to mix in a hosted provider (e.g. OpenRouter) alongside your local ones. One-click presets for LM Studio and Ollama, a "Use first" reorder button, a per-row reachability status, and a "Test connections" button. |
+| **Endpoints** | `["http://127.0.0.1:1234"]` | With the **LLM Endpoint Manager** plugin installed, endpoints and keys come from there (an endpoint picker, a model picker and an import button replace this list; the list below is the fallback without the manager). Otherwise: an ordered list of OpenAI-compatible servers, tried in order; the first reachable one is used. Each row can carry its own **API key** — leave it empty for a local server, set it to mix in a hosted provider (e.g. OpenRouter) alongside your local ones. One-click presets for LM Studio and Ollama, a "Use first" reorder button, a per-row reachability status, and a "Test connections" button. |
 | **Model** | `""` (empty) | Which model to request. Empty lets the server choose whichever is loaded. A dropdown is filled from the active endpoint's `/v1/models`; use the reload button to refresh it. |
 | **Request timeout (ms)** | `120000` | How long to wait for the model to answer before giving up. |
 | **Default scope** | `file` (Whole note) | Which scope a new rule starts with — "Whole note", "Selection" or "Whole vault". Switchable per run in the panel. |

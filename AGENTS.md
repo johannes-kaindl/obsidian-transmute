@@ -64,9 +64,11 @@ kam fertig aus dem Ökosystem, neu gebaut wurde im Wesentlichen die Regex-Domän
   Bäume; die Liste hier ist vollständig zu halten):
   - `src/vendor/kit/` (pure): `clipboard.ts`, `cooperative-yield.ts`, `endpoint.ts`,
     `endpoint_config.ts`, `endpoint_diagnostics.ts`, `error_body.ts`, `i18n.ts`,
-    `reasoning.ts`, `run-state.ts`, `settings.ts`, `think-splitter.ts`, `timeout.ts`.
+    `reasoning.ts`, `run-state.ts`, `settings.ts`, `think-splitter.ts`, `timeout.ts`,
+    `model-choice.ts`, `sampling-profiles.ts`, `endpoint-source.ts`.
   - `src/vendor/kit-obsidian/` (importiert `obsidian`): `clipboard.ts`, `folder-suggest.ts`,
-    `settings_walker.ts`.
+    `settings_walker.ts`, `model-picker.ts`, `endpoint-source.ts`.
+  - `tests/vendor/kit/obsidian-mock.ts` — der Obsidian-Mock (seit 0.6.0 gestempelt aus dem Kit-Tag, vorher eine ungestempelte Kopie von 0.15.0); `tests/__mocks__/obsidian.ts` re-exportiert nur.
 - **Aus Nachbar-Plugins übernommen:** Endpoint-Zeilen-Editor + pure Editor-Model
   (`yijing-oracle`), EndpointResolver/Probe/Modell-Liste (`vim-dojo`), Chat-Response-Auswertung
   (`vault-crews`), `raceTimeout` (`local-image-generator`), Inline-`eslint-disable`-Gate
@@ -173,6 +175,7 @@ die er abfangen sollte.)
   haengt in „generating", ohne dass der Stub je einen Request sieht (gemessen am
   llm-lab-Meldestrecke-Punkt, Welle 7). Treiber, die einen Endpunkt zur Laufzeit tauschen,
   rufen danach `p.resolver.invalidate()`.
+  Mit dem LLM Endpoint Manager (seit 0.6.0) gilt das nur fuer den lokalen Pfad: der Manager-Pfad wird nie gecacht, und `resolver.last` haelt Quelle/Modell/Grund des letzten Durchlaufs. Das Modell im Manager-Fall ist `last.sentModel`, nicht `settings.model` — ein Treiber, der das Modell prueft, liest also den Stub-Server, nicht die Einstellung (Abschnitt „Manager" im Smoke).
 - **Das eingebaute Preset „Zeilenumbrueche in Absaetzen entfernen" (`src/core/presets/remove-newlines.ts`)
   erkennt nur ZWEI benachbarte Zeilen, kein „bin ich innerhalb eines Codeblocks" ueber mehrere
   Zeilen hinweg.** Die Fence-Zeilen selbst (` ``` `) bleiben stehen, Zeilen DAZWISCHEN wuerden

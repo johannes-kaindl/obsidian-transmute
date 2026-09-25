@@ -4,8 +4,9 @@ import { TransmuteSession, type CompleteFeature } from "./core/session";
 import { DEFAULT_SETTINGS, loadSettings, MAX_HITS, type TransmuteSettings } from "./core/settings";
 import type { ChatMessage } from "./core/types";
 import "./core/i18n/strings";
-import { pickLang, setLang } from "./vendor/kit/i18n";
+import { pickLang, setLang, t } from "./vendor/kit/i18n";
 import type { EndpointConfig } from "./vendor/kit/endpoint_config";
+import { findEndpointManager } from "./vendor/kit-obsidian/endpoint-source";
 import { EndpointResolver } from "./obsidian/endpoint";
 import { obsidianTransport, pingEndpoint } from "./obsidian/http";
 import { readLabApi } from "./obsidian/lab";
@@ -36,12 +37,13 @@ export default class TransmutePlugin extends Plugin {
     this.resolver = new EndpointResolver(
       () => this.settings.endpoints,
       (endpoint) => pingEndpoint(endpoint, 5000),
+      { manager: () => findEndpointManager(this.app), choice: () => this.settings.choice },
     );
 
     this.client = new RuleClient(obsidianTransport, () => ({
       endpoint: this.activeEndpoint.url,
       apiKey: this.activeEndpoint.apiKey,
-      model: this.settings.model,
+      model: this.activeModel(),
       timeoutMs: this.settings.timeoutMs,
       suppressReasoning: this.settings.suppressReasoning,
     }));
@@ -52,12 +54,17 @@ export default class TransmutePlugin extends Plugin {
           // Endpunkt einmal pro Session aufloesen, nicht pro Anfrage.
           const resolved = await this.resolver.resolve();
           if (resolved !== null) this.activeEndpoint = resolved;
+          // Der Manager entscheidet allein — kein stiller Rueckfall auf einen alten Endpunkt.
+          // Ein fehlender Schluessel liegt im Manager-Plugin, nicht in der lokalen Liste.
+          else if (this.resolver.last?.kind === "manager") {
+            return { ok: false, error: t(this.resolver.last.reason === "secret-missing" ? "error.secretMissing" : "error.managerNoEndpoint") } satisfies CompleteResult;
+          }
           const endpoint = this.activeEndpoint;
           const started = Date.now();
           const res = await this.client.complete(messages);
           this.reportToLab({
             feature,
-            model: this.settings.model,
+            model: this.activeModel(),
             endpointUrl: endpoint.url,
             apiKey: endpoint.apiKey,
             messages,
@@ -86,9 +93,12 @@ export default class TransmutePlugin extends Plugin {
             await this.reloadModels();
             return this.knownModels;
           },
-          getModel: () => this.settings.model,
+          // Im Manager-Fall ist `settings.model` nur der Rueckfall fuer die lokale Liste — die
+          // Modellwahl gehoert dann in `choice`, sonst aendert das Panel-Feld nichts.
+          getModel: () => (findEndpointManager(this.app) !== null ? (this.settings.choice.model ?? "") : this.settings.model),
           setModel: (model: string) => {
-            this.settings.model = model;
+            if (findEndpointManager(this.app) !== null) this.settings.choice = { ...this.settings.choice, model: model || undefined };
+            else this.settings.model = model;
             void this.saveSettings();
           },
           getSuppressReasoning: () => this.settings.suppressReasoning,
@@ -129,6 +139,13 @@ export default class TransmutePlugin extends Plugin {
   }
 
   private activeEndpoint: EndpointConfig = { url: "" };
+
+  /** Modell fuer den naechsten Aufruf: mit Manager die aufgeloeste Schreibweise (Wahl →
+   *  Standard des Endpunkts, Alias aufgeloest), sonst die lokale Einstellung wie bisher. */
+  private activeModel(): string {
+    const last = this.resolver.last;
+    return last?.kind === "manager" ? last.sentModel : this.settings.model;
+  }
 
   /** Die zurzeit bearbeitete Notiz, falls eine offen ist — fail-open: bleibt leer, greift
    *  der Ordner-Filter im Lab einfach nicht (llm-lab plugin_api.ts, contextPaths-Kommentar,
@@ -182,7 +199,9 @@ export default class TransmutePlugin extends Plugin {
   }
 
   async reloadModels(): Promise<void> {
-    const resolved = (await this.resolver.resolve()) ?? this.settings.endpoints[0];
+    // Mit Manager entscheidet er allein; der lokale Rueckfall gilt nur ohne ihn.
+    const managed = findEndpointManager(this.app) !== null;
+    const resolved = (await this.resolver.resolve()) ?? (managed ? undefined : this.settings.endpoints[0]);
     if (!resolved || resolved.url.trim().length === 0) {
       this.knownModels = [];
       return;

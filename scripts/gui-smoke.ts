@@ -840,7 +840,9 @@ async function abschnittSetter(cdp: Cdp): Promise<void> {
  */
 async function startFakeEndpoint(
   draft: { regex: string; flags: string; replacement: string; explanation: string },
-): Promise<{ url: string; close: () => Promise<void> }> {
+): Promise<{ url: string; close: () => Promise<void>; chatCalls: () => number; lastModel: () => string }> {
+  let chatCalls = 0;
+  let lastModel = "";
   const server: Server = createServer((req, res) => {
     if (req.method === "OPTIONS") {
       res.writeHead(204, {
@@ -852,10 +854,17 @@ async function startFakeEndpoint(
       return;
     }
     if (req.method === "POST" && req.url?.includes("/v1/chat/completions") === true) {
-      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-      res.end(JSON.stringify({
-        choices: [{ message: { content: JSON.stringify(draft) }, finish_reason: "stop" }],
-      }));
+      // Modell mitschneiden: ein Lauf „ging durch" belegt nicht, WELCHES Modell ankam.
+      const teile: Buffer[] = [];
+      req.on("data", (c: Buffer) => teile.push(c));
+      req.on("end", () => {
+        chatCalls += 1;
+        try { lastModel = String((JSON.parse(Buffer.concat(teile).toString("utf8")) as { model?: unknown }).model ?? ""); } catch { lastModel = "?"; }
+        res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+        res.end(JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(draft) }, finish_reason: "stop" }],
+        }));
+      });
       return;
     }
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
@@ -870,6 +879,8 @@ async function startFakeEndpoint(
   return {
     url: `http://127.0.0.1:${port}`,
     close: () => new Promise<void>((resolve) => { server.close(() => { resolve(); }); }),
+    chatCalls: () => chatCalls,
+    lastModel: () => lastModel,
   };
 }
 
@@ -965,6 +976,169 @@ async function abschnittLlmLab(cdp: Cdp): Promise<void> {
       p.resolver.invalidate();
       return true;
     `).catch(() => undefined);
+  }
+}
+
+// --- Abschnitt: LLM Endpoint Manager ---------------------------------------------
+
+const MANAGER_PLUGIN_ID = "llm-endpoint-manager";
+const MANAGER_DEFAULT_MODEL = "mgr-default-smoke";
+const MANAGER_CHOICE_MODEL = "mgr-choice-smoke";
+const LOCAL_MODEL = "lokal-smoke";
+const MANAGED_TEXT = ["Endpunkte kommen vom LLM Endpoint Manager", "Endpoints come from the LLM Endpoint Manager"];
+
+/** Haengt eine FAKE-API des Managers ein. `findEndpointManager()` prueft nur die FORM
+ *  (version === 1 + alle Methoden), keine Herkunft. Einen vorgefundenen Eintrag parkt der
+ *  Renderer selbst auf `window` (eine CDP-Rundreise ueber Node verliert Funktionen) und
+ *  setzt ihn beim Abbau wieder ein — ein echter Manager im Vault bleibt so unangetastet. */
+async function fakeManagerEin(cdp: Cdp, url: string): Promise<void> {
+  await cdp.evaluate(`
+    if (!("__smokeVorherManager" in window)) window.__smokeVorherManager = app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}] ?? null;
+    const ep = { id: "fake-mgr-ep", label: "Fake Manager Endpoint", url: ${JSON.stringify(url)}, provider: "openai", capabilities: ["chat"], defaultModel: ${JSON.stringify(MANAGER_DEFAULT_MODEL)}, enabled: true, hasSecret: false };
+    // config.model traegt wie beim echten Manager ebenfalls den Standard — sonst waere die
+    // Vorrangregel „Nutzerwahl schlaegt Standard" (M2b) ohne Wirkung gruen.
+    const geloest = { id: ep.id, label: ep.label, config: { url: ${JSON.stringify(url)}, model: ${JSON.stringify(MANAGER_DEFAULT_MODEL)} }, defaultModel: ${JSON.stringify(MANAGER_DEFAULT_MODEL)} };
+    app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}] = { api: {
+      version: 1,
+      list: () => [ep],
+      get: (id) => (id === ep.id ? ep : null),
+      resolve: async () => geloest,
+      materialize: async (id) => (id === ep.id ? geloest : { error: "not-found" }),
+      models: async (id) => (id === ep.id ? [${JSON.stringify(MANAGER_DEFAULT_MODEL)}, ${JSON.stringify(MANAGER_CHOICE_MODEL)}] : { error: "not-found" }),
+      importEndpoints: async (eps) => ({ added: [], merged: [], skipped: eps.map((e) => e.url) }),
+      on: () => () => {},
+    } };
+    return true;
+  `);
+}
+
+async function fakeManagerAus(cdp: Cdp): Promise<void> {
+  await cdp.evaluate(`
+    const id = ${JSON.stringify(MANAGER_PLUGIN_ID)};
+    if ("__smokeVorherManager" in window) {
+      const vorher = window.__smokeVorherManager;
+      if (vorher === null) delete app.plugins.plugins[id]; else app.plugins.plugins[id] = vorher;
+      delete window.__smokeVorherManager;
+    } else delete app.plugins.plugins[id];
+    return true;
+  `);
+}
+
+/** Text und Zeilenzahl des Einstellungs-Tabs, gezeichnet in dessen eigenen (abgehaengten)
+ *  Container — `display()` ist der Fallback-Renderer, derselbe Walker wie im Fenster, nur ohne
+ *  das Fenster selbst (das ab 1.13 ein eigener Renderer ist). Null, wenn der Tab fehlt. */
+async function einstellungenText(cdp: Cdp): Promise<{ text: string; lokaleZeilen: number } | null> {
+  return cdp.evaluate<{ text: string; lokaleZeilen: number } | null>(`
+    const tabs = app.setting?.pluginTabs ?? [];
+    const tab = tabs.find((x) => x.id === ${JSON.stringify(PLUGIN_ID)});
+    if (!tab) return null;
+    tab.display();
+    return { text: tab.containerEl.textContent ?? "", lokaleZeilen: tab.containerEl.querySelectorAll(".transmute-ep-status").length };
+  `);
+}
+
+/** Erzeugt einen Lauf (dieselbe Sitzung wie der Generieren-Knopf) und wartet auf den Aufruf. */
+async function laufAnstossen(cdp: Cdp, fake: { chatCalls: () => number }): Promise<boolean> {
+  const vorher = fake.chatCalls();
+  await cdp.evaluate(`
+    const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+    void p.sessionInstance.generate("Smoke-Test: ersetze foo", "foo bar");
+    return true;
+  `);
+  const ende = Date.now() + 15_000;
+  while (Date.now() < ende) {
+    if (fake.chatCalls() > vorher) return true;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return false;
+}
+
+/** M1–M3: Manager an → Einstellungen zeigen den Baustein, der Lauf geht an den Manager-Endpunkt
+ *  mit dem Standardmodell; die Nutzerwahl schlaegt den Standard; Manager aus → lokale Liste und
+ *  lokales Modell. Zwei Stub-Server, damit der lokale Fall nicht an einem echten LM Studio
+ *  haengt („nichts gemessen" statt „geprueft"). */
+async function abschnittManager(cdp: Cdp): Promise<void> {
+  const REST = [
+    "M1 Einstellungen zeigen den Manager statt der lokalen Liste",
+    "M2 Lauf nutzt den Manager-Endpunkt und dessen Standardmodell",
+    "M2b Die Modellwahl des Nutzers schlaegt den Standard des Endpunkts",
+    "M3 Manager aus: lokale Liste in den Einstellungen und im Lauf",
+  ];
+  if (await cdp.evaluate<boolean>(`return !!app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}];`)) {
+    for (const n of REST) skipped(n, "ein llm-endpoint-manager ist im Vault aktiv; die Fake-API wuerde ihn verdecken");
+    return;
+  }
+  const draft = { regex: "foo", flags: "", replacement: "bar", explanation: "e" };
+  const mgr = await startFakeEndpoint(draft);
+  const lokal = await startFakeEndpoint(draft);
+  const vor = await cdp.evaluate<{ endpoints: unknown; choice: unknown; model: string }>(
+    `const s = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings; return { endpoints: s.endpoints, choice: s.choice, model: s.model };`,
+  );
+  try {
+    await fakeManagerEin(cdp, mgr.url);
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.choice = {};
+      // Der lokale Weg zeigt auf den zweiten Stub, mit eigenem Modell — er darf im Manager-Fall
+      // nie angefasst werden.
+      p.settings.endpoints = [{ url: ${JSON.stringify(lokal.url)} }];
+      p.settings.model = ${JSON.stringify(LOCAL_MODEL)};
+      await p.saveSettings();
+      p.resolver.invalidate();
+      return true;
+    `);
+
+    const mit = await einstellungenText(cdp);
+    if (mit === null) {
+      skipped(REST[0]!, "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden");
+    } else {
+      const da = MANAGED_TEXT.some((x) => mit.text.includes(x));
+      record(REST[0]!, da && mit.lokaleZeilen === 0, `Manager-Text ${da ? "da" : "fehlt"}, ${mit.lokaleZeilen} lokale Endpunkt-Zeilen`);
+    }
+
+    const okM2 = await laufAnstossen(cdp, mgr);
+    record(REST[1]!, okM2 && mgr.lastModel() === MANAGER_DEFAULT_MODEL && lokal.chatCalls() === 0,
+      `Manager-Stub ${mgr.chatCalls()} Aufruf(e), Modell „${mgr.lastModel()}“ (erwartet „${MANAGER_DEFAULT_MODEL}“); lokaler Stub ${lokal.chatCalls()} Aufruf(e) (erwartet 0)`);
+
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.choice = { model: ${JSON.stringify(MANAGER_CHOICE_MODEL)} };
+      await p.saveSettings();
+      return true;
+    `);
+    const okM2b = await laufAnstossen(cdp, mgr);
+    record(REST[2]!, okM2b && mgr.lastModel() === MANAGER_CHOICE_MODEL,
+      `Manager-Stub sah Modell „${mgr.lastModel()}“ (erwartet „${MANAGER_CHOICE_MODEL}“)`);
+
+    // Zurueck auf lokal: choice leeren, sonst wuerde M3 ein altes Manager-Modell lesen und
+    // an der falschen Stelle rot.
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.choice = {};
+      await p.saveSettings();
+      return true;
+    `);
+    await fakeManagerAus(cdp);
+    await cdp.evaluate(`app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].resolver.invalidate(); return true;`);
+    const ohne = await einstellungenText(cdp);
+    const okM3 = await laufAnstossen(cdp, lokal);
+    const zeigtLokal = ohne !== null && !MANAGED_TEXT.some((x) => ohne.text.includes(x)) && ohne.lokaleZeilen > 0;
+    record(REST[3]!, zeigtLokal && okM3 && lokal.lastModel() === LOCAL_MODEL,
+      `Einstellungen: ${ohne === null ? "kein Tab" : `${ohne.lokaleZeilen} lokale Zeilen, Manager-Text ${MANAGED_TEXT.some((x) => ohne.text.includes(x)) ? "noch da" : "weg"}`}; `
+      + `lokaler Stub ${lokal.chatCalls()} Aufruf(e), Modell „${lokal.lastModel()}“ (erwartet „${LOCAL_MODEL}“)`);
+  } finally {
+    await fakeManagerAus(cdp).catch(() => undefined);
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = ${JSON.stringify(vor.endpoints)};
+      p.settings.choice = ${JSON.stringify(vor.choice)};
+      p.settings.model = ${JSON.stringify(vor.model)};
+      await p.saveSettings();
+      p.resolver.invalidate();
+      return true;
+    `).catch(() => undefined);
+    await mgr.close();
+    await lokal.close();
   }
 }
 
@@ -1112,6 +1286,7 @@ async function main(): Promise<void> {
     await abschnitt("Abbruch", () => abschnittAbbruch(cdp, kandidaten));
     await abschnitt("Setter", () => abschnittSetter(cdp));
     await abschnitt("llm-lab", () => abschnittLlmLab(cdp));
+    await abschnitt("Manager", () => abschnittManager(cdp));
     await abschnitt("i18n", () => abschnittI18n(cdp));
   } finally {
     // Nimmt zurueck, was `requireVisible` in seiner letzten Stufe gesetzt haben kann —

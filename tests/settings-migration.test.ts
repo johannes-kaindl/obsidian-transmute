@@ -24,3 +24,16 @@ describe("loadSettings — Endpunkt-Migration", () => {
       .toEqual([{ url: "http://a:1234" }]);
   });
 });
+
+describe("loadSettings — Endpunkt-Wahl (choice)", () => {
+  it("Default ist eine leere Wahl", () => {
+    expect(loadSettings({}).choice).toEqual({});
+  });
+  it("behaelt endpointId und model", () => {
+    expect(loadSettings({ choice: { endpointId: "e1", model: "m" } }).choice).toEqual({ endpointId: "e1", model: "m" });
+  });
+  it("verwirft Fremdfelder und Nicht-Objekte", () => {
+    expect(loadSettings({ choice: { endpointId: "e1", boese: 1 } }).choice).toEqual({ endpointId: "e1" });
+    expect(loadSettings({ choice: "quatsch" }).choice).toEqual({});
+  });
+});

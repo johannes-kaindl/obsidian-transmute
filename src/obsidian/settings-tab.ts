@@ -3,6 +3,7 @@ import type TransmutePlugin from "../main";
 import type { PresetDef, ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
 import { renderSettingDefinitions, settingBodyHost, refreshSettingsTab } from "../vendor/kit-obsidian/settings_walker";
+import { buildEndpointSourceSection, findEndpointManager } from "../vendor/kit-obsidian/endpoint-source";
 import { buildEndpointList } from "./settings/endpoint-list";
 import { probeEndpoint } from "./http";
 
@@ -174,7 +175,46 @@ export class TransmuteSettingTab extends PluginSettingTab {
   }
 
   private renderEndpoints(setting: Setting): void {
-    buildEndpointList(settingBodyHost(setting), {
+    const host = settingBodyHost(setting);
+    // Manager da → Kit-Baustein (Wahl, Modell, Import); sonst der eigene Listen-Editor.
+    buildEndpointSourceSection({
+      app: this.app,
+      containerEl: host,
+      capability: "chat",
+      caller: "transmute",
+      choice: () => this.plugin.settings.choice,
+      setChoice: async (c) => {
+        this.plugin.settings.choice = c;
+        await this.plugin.saveSettings();
+        await this.plugin.resolver.resolve();
+      },
+      local: () => this.plugin.settings.endpoints,
+      strings: {
+        managed: t("src.managed"),
+        managedDesc: t("src.managedDesc"),
+        openManager: t("src.openManager"),
+        pickEndpoint: t("src.pickEndpoint"),
+        automatic: t("src.automatic"),
+        model: t("set.model"),
+        importLocal: t("src.importLocal"),
+        imported: (r) => t("src.imported", String(r.added.length), String(r.merged.length)),
+        importFailed: t("src.importFailed"),
+        modelHint: (key) => (key === "" ? "" : t(`src.modelHint.${key}`)),
+        savedSuffix: t("src.saved"),
+        refreshModels: t("set.modelReload"),
+        saveFailed: t("src.saveFailed"),
+      },
+      renderLocalList: () => {
+        this.renderLocalEndpointList(host);
+      },
+      rerender: () => {
+        this.refreshUi();
+      },
+    });
+  }
+
+  private renderLocalEndpointList(host: HTMLElement): void {
+    buildEndpointList(host, {
       list: this.plugin.settings.endpoints,
       setList: (next) => {
         this.plugin.settings.endpoints = next;
@@ -190,6 +230,10 @@ export class TransmuteSettingTab extends PluginSettingTab {
   }
 
   private renderModel(setting: Setting): void {
+    if (findEndpointManager(this.app) !== null) {
+      setting.setDesc(t("src.modelManaged"));
+      return;
+    }
     const host = settingBodyHost(setting);
     const row = new Setting(host).setName(t("set.model")).setDesc(t("set.modelDesc"));
     row.addDropdown((d) => {

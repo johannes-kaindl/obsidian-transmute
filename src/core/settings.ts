@@ -1,5 +1,6 @@
 import { mergeSettings } from "../vendor/kit/settings";
 import { migrateEndpointList, type EndpointConfig } from "../vendor/kit/endpoint_config";
+import type { EndpointChoice } from "../vendor/kit/endpoint-source";
 import { removeNewlinesPreset } from "./presets/remove-newlines";
 
 export type ScopeKind = "file" | "selection" | "vault";
@@ -17,6 +18,9 @@ export type TransmuteSettings = {
   /** Geordnete Fallback-Kette; der erste erreichbare gewinnt. Jede Zeile trägt ihren
    *  eigenen API-Schlüssel, damit lokale und gehostete Anbieter in EINER Liste stehen können. */
   endpoints: EndpointConfig[];
+  /** Wahl gegenueber dem LLM Endpoint Manager (Endpunkt + Modell); leer = automatisch. Gilt nur,
+   *  solange der Manager installiert ist — sonst zaehlen `endpoints` und `model`. */
+  choice: EndpointChoice;
   model: string;
   timeoutMs: number;
   suppressReasoning: boolean;
@@ -46,6 +50,7 @@ export const MAX_HITS = 500;
 
 export const DEFAULT_SETTINGS: TransmuteSettings = {
   endpoints: [{ url: "http://127.0.0.1:1234" }],
+  choice: {},
   model: "",            // modellagnostisch: kommt aus GET /v1/models
   timeoutMs: 120000,
   suppressReasoning: true,
@@ -70,5 +75,12 @@ export function loadSettings(raw: unknown): TransmuteSettings {
   // Faelle nicht unterscheiden, der Schluessel-Check kann es.
   const hadPresetsKey = typeof raw === "object" && raw !== null && "presets" in raw;
   const presets = hadPresetsKey ? merged.presets : [removeNewlinesPreset()];
-  return { ...merged, endpoints: migrateEndpointList(undefined, rawList), presets };
+  const rawChoice = (merged as { choice?: unknown }).choice as EndpointChoice | null | undefined;
+  const choice: EndpointChoice = rawChoice && typeof rawChoice === "object"
+    ? {
+        ...(rawChoice.endpointId ? { endpointId: String(rawChoice.endpointId) } : {}),
+        ...(rawChoice.model ? { model: String(rawChoice.model) } : {}),
+      }
+    : {};
+  return { ...merged, endpoints: migrateEndpointList(undefined, rawList), presets, choice };
 }

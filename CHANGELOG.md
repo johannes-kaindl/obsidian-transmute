@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Endpoints from the LLM Endpoint Manager.** If the LLM Endpoint Manager plugin is installed, Transmute now takes its endpoint (and keys, stored in the keychain) from there: Settings show an endpoint picker, a model picker and a "copy local endpoints into the manager" button instead of the local list. Behaviour change worth knowing: with the manager active it decides alone — there is no silent fallback to the local list when it offers no endpoint (a missing key gets its own message pointing at the manager), and the panel's model field then writes the manager choice, not the local model setting. The local list and model setting stay as the fallback when the manager is absent, and are unchanged in that case.
+
 - **llm-lab integration** — every model call now carries a `feature` tag
   (`rule:apply`/`rule:diagnose`) so the two call shapes on the same port are distinguishable
   downstream, and reports itself to llm-lab when the plugin is installed (model, endpoint,
