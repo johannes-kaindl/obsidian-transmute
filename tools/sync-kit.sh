@@ -119,9 +119,42 @@ relayer() { # relayer <vendored-file>
   mv "$f.tmp" "$f"
 }
 
+# Zweite Fallgruppe: ein PURE_MODULE, das selbst aus obsidian-kit/src/pure/ stammt, aber einen
+# Querimport auf code-kit traegt (dessen eigene Vendor-Kopie unter obsidian-kit/src/vendor/code-kit/
+# liegt). Hier landen BEIDE Seiten flach nebeneinander in src/vendor/kit/ — der Zielpfad ist also
+# NICHT ../kit/ (das waere fuer kit-obsidian/, das eine Ebene hoeher liegt), sondern ./ (Geschwisterdatei
+# in derselben Ablage). Anlass: endpoint-source.ts importiert endpoint_config aus
+# ../vendor/code-kit/pure/ (obsidian-kit-Perspektive) — Praezedenz: llm-endpoint-manager/tools/sync-kit.sh.
+relayer_pure() { # relayer_pure <vendored-file>
+  f=$1
+  case "$f" in
+    src/vendor/kit/*) ;;
+    *) echo "sync-kit: $f liegt nicht in src/vendor/kit/ — relayer_pure gilt nur fuer die pure-Schicht" >&2; exit 1 ;;
+  esac
+
+  sed -e 's|\(["'"'"']\)\.\./vendor/code-kit/pure/|\1./|g' \
+      -e 's|\(["'"'"']\)\.\./vendor/code-kit/web/|\1./|g' "$f" > "$f.tmp"
+  if cmp -s "$f" "$f.tmp"; then rm -f "$f.tmp"; return 0; fi   # nichts zu tun, KEINE Notiz
+  mv "$f.tmp" "$f"
+
+  if grep -qE '\.\./vendor/code-kit/' "$f"; then
+    echo "sync-kit: unaufgeloester Kit-Querimport in $f — Muster pruefen" >&2; exit 1
+  fi
+
+  for dep in $(sed -n 's|.*from ["'"'"']\./\([A-Za-z0-9_/-]*\)["'"'"'].*|\1|p' "$f" | sort -u); do
+    [ -f "src/vendor/kit/$dep.ts" ] || {
+      echo "sync-kit: $f importiert ./$dep, aber src/vendor/kit/$dep.ts fehlt — mitvendorieren" >&2; exit 1
+    }
+  done
+
+  note="// ONE mechanical deviation from verbatim: kit-internal import (../vendor/code-kit/{pure,web}/) → ./ (flat vendor layout, sibling module in src/vendor/kit/); reproduce on every re-vendor, nothing else may differ."
+  printf '%s\n' "$note" | cat - "$f" > "$f.tmp"
+  mv "$f.tmp" "$f"
+}
+
 mkdir -p src/vendor/kit src/vendor/kit-obsidian
 
-PURE_MODULE="clipboard cooperative-yield endpoint endpoint_config endpoint_diagnostics error_body i18n reasoning run-state settings think-splitter timeout"
+PURE_MODULE="clipboard cooperative-yield endpoint endpoint_config endpoint_diagnostics error_body i18n reasoning run-state settings think-splitter timeout model-choice sampling-profiles endpoint-source"
 
 # Erst ALLE Quellen aufloesen, dann kopieren: ein fehlendes Modul ist ein Aufbaufehler und
 # wird als solcher gemeldet, statt den Lauf auf halber Strecke abzubrechen.
@@ -142,19 +175,38 @@ for m in $PURE_MODULE; do
   ver=$(printf '%s' "$fund" | cut -d'|' -f5)
   hole "$repo" "$ref" "$rel" "src/vendor/kit/$m.ts" || {
     echo "FEHLER: $ref:$rel nicht lesbar in $repo" >&2; exit 2; }
+  # endpoint-source.ts (obsidian-kit/src/pure/) traegt Querimporte auf code-kit, dessen
+  # obsidian-kit-eigene Vendor-Kopie hier nicht existiert — auf die flache Ablage umschreiben.
+  case "$m" in endpoint-source) relayer_pure "src/vendor/kit/$m.ts" ;; esac
   stamp "src/vendor/kit/$m.ts" "$rel" "$quelle" "$ver"
   echo "vendored $quelle@$ver/$rel"
 done
 
-for m in clipboard folder-suggest settings_walker; do
+for m in clipboard folder-suggest settings_walker model-picker endpoint-source; do
   hole "$KIT" "$VER" "src/obsidian/$m.ts" "src/vendor/kit-obsidian/$m.ts" || {
     echo "FEHLER: $VER:src/obsidian/$m.ts nicht lesbar" >&2; exit 2; }
   # Nur clipboard.ts traegt einen Querimport (../pure/clipboard). Ein pauschaler Aufruf waere
   # wirkungslos, aber irrefuehrend — deshalb gezielt.
-  if [ "$m" = clipboard ]; then relayer "src/vendor/kit-obsidian/$m.ts"; fi
+  case "$m" in clipboard|model-picker|endpoint-source) relayer "src/vendor/kit-obsidian/$m.ts" ;; esac
   stamp "src/vendor/kit-obsidian/$m.ts" "src/obsidian/$m.ts"
   echo "vendored obsidian-kit@$VER/obsidian/$m.ts"
 done
+
+mkdir -p tests/vendor/kit
+hole "$KIT" "$VER" "src/testing/obsidian-mock.ts" "tests/vendor/kit/obsidian-mock.ts" || {
+  echo "FEHLER: $VER:src/testing/obsidian-mock.ts nicht lesbar" >&2; exit 2; }
+stamp "tests/vendor/kit/obsidian-mock.ts" "src/testing/obsidian-mock.ts"
+echo "vendored obsidian-kit@$VER/testing/obsidian-mock.ts"
+
+cat > tests/vendor/kit/VENDOR.json <<JSON
+{
+  "source": "obsidian-kit",
+  "version": "$VER",
+  "sha": "$SHA",
+  "vendored": "obsidian-mock.ts",
+  "note": "Verbatim snapshot. Never hand-edit. Re-vendor via tools/sync-kit.sh."
+}
+JSON
 
 cat > src/vendor/kit/VENDOR.json <<JSON
 {
@@ -162,7 +214,7 @@ cat > src/vendor/kit/VENDOR.json <<JSON
   "version": "$VER",
   "sha": "$SHA",
   "code_kit_version": "$CODE_VER",
-  "vendored": "clipboard.ts, cooperative-yield.ts, endpoint.ts, endpoint_config.ts, endpoint_diagnostics.ts, error_body.ts, i18n.ts, reasoning.ts, run-state.ts, settings.ts, think-splitter.ts, timeout.ts",
+  "vendored": "clipboard.ts, cooperative-yield.ts, endpoint.ts, endpoint_config.ts, endpoint_diagnostics.ts, error_body.ts, i18n.ts, reasoning.ts, run-state.ts, settings.ts, think-splitter.ts, timeout.ts, model-choice.ts, sampling-profiles.ts, endpoint-source.ts",
   "note": "Verbatim snapshot aus ZWEI Quellen (obsidian-kit + code-kit); welche Datei woher stammt, sagt ihr eigener Kopf. Never hand-edit. Re-vendor via tools/sync-kit.sh. version/sha gelten AUSSCHLIESSLICH fuer die unter \"vendored\" gelisteten Dateien. kit-obsidian/ siehe dortige VENDOR.json."
 }
 JSON
@@ -171,8 +223,8 @@ cat > src/vendor/kit-obsidian/VENDOR.json <<JSON
   "source": "obsidian-kit",
   "version": "$VER",
   "sha": "$SHA",
-  "vendored": "clipboard.ts, folder-suggest.ts, settings_walker.ts",
-  "note": "Verbatim snapshot. Never hand-edit. Re-vendor via tools/sync-kit.sh. version/sha gelten AUSSCHLIESSLICH fuer die unter \"vendored\" gelisteten Dateien. clipboard.ts traegt EINE mechanische Abweichung: der kit-interne Import ../pure/clipboard ist auf ../kit/clipboard umgeschrieben (Vendor-Layout). Bei jedem Re-Vendoring reproduzieren; sonst darf nichts abweichen. Praezedenz: vim-dojo, markdown-presentation, vault-crews, kuro-gamification. Eigene Ablage neben src/vendor/kit/, weil diese Module \"obsidian\" importieren."
+  "vendored": "clipboard.ts, folder-suggest.ts, settings_walker.ts, model-picker.ts, endpoint-source.ts",
+  "note": "Verbatim snapshot. Never hand-edit. Re-vendor via tools/sync-kit.sh. version/sha gelten AUSSCHLIESSLICH fuer die unter \"vendored\" gelisteten Dateien. clipboard.ts, model-picker.ts und endpoint-source.ts tragen EINE mechanische Abweichung: kit-interne Importe (../pure/ bzw. ../vendor/code-kit/{pure,web}/) sind auf ../kit/ umgeschrieben (Vendor-Layout). Bei jedem Re-Vendoring reproduzieren; sonst darf nichts abweichen. Praezedenz: vim-dojo, markdown-presentation, vault-crews, kuro-gamification. Eigene Ablage neben src/vendor/kit/, weil diese Module \"obsidian\" importieren."
 }
 JSON
 echo "VENDOR.json → $VER ($SHA)"
