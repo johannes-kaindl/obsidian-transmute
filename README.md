@@ -13,7 +13,7 @@
 
 ## Features
 
-- **Natural-language search & replace.** Type what should change (e.g. "turn dates from DD.MM.YYYY into YYYY-MM-DD") and a local OpenAI-compatible LLM turns it into a JavaScript regular expression, a replacement pattern, and a one-sentence plain-language explanation of what the pattern matches.
+- **Natural-language search & replace.** Type what should change (e.g. "turn dates like 26.09.2026 into 2026-09-26") and a local OpenAI-compatible LLM turns it into a JavaScript regular expression, a replacement pattern, and a one-sentence plain-language explanation of what the pattern matches.
 - **Preview before anything is written.** Every match is shown before/after, line by line, with its own checkbox. Nothing changes in your note until you click **"Apply"** — and only the checked matches are written.
 - **No separate undo system needed.** Applying writes through the editor, so the change lands in Obsidian's own undo stack — **Cmd+Z reverts it in one step**, exactly like any other edit.
 - **Iterative refinement.** Not quite right? Type a follow-up such as "but not inside code blocks" and click **"Refine"** — the plugin sends the conversation history *and* the actual matches found so far back to the model, so it can see what it got wrong.
@@ -77,7 +77,7 @@ Then copy `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/p
 1. Point the plugin at your local server (see [Configuration](#configuration) below) and make sure a model is loaded.
 2. Click the ribbon icon **"Transmute"** (or run the command **"Open panel"**) to open the panel in the sidebar.
 3. Pick a scope: **"Whole note"**, **"Selection"** or **"Whole vault"**. For the vault, narrow it down with the folder, tag and property fields — the line underneath tells you how many notes are in scope ("412 of 2140 notes").
-4. Describe the change in the instruction box, e.g. *"turn dates from DD.MM.YYYY into YYYY-MM-DD"*, and click **"Preview"**.
+4. Describe the change in the instruction box, e.g. *"turn dates like 26.09.2026 into 2026-09-26"*, and click **"Preview"**.
 5. Review the preview: the generated pattern, its plain-language explanation, and every match with a before/after line and a checkbox. Deselect anything you don't want, or use **"Select all"** / **"Select none"**.
 6. Not quite right? Type a follow-up in the refine box (e.g. *"but not inside code blocks"*) and click **"Refine"** — the model sees the previous rounds and the actual matches it produced.
 7. Refined more than once? The panel now shows a **history** above the pattern — click any earlier step to go back to it. Refining from there continues that version; the later ones stay in the list.

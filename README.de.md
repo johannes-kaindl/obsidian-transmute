@@ -13,7 +13,7 @@
 
 ## Funktionen
 
-- **Suchen & Ersetzen in natürlicher Sprache.** Tippe, was sich ändern soll (z. B. „Daten von TT.MM.JJJJ in JJJJ-MM-TT umwandeln"), und ein lokales OpenAI-kompatibles LLM macht daraus eine JavaScript-Regex, ein Ersetzungsmuster und eine Ein-Satz-Erklärung in Klartext, was das Muster trifft.
+- **Suchen & Ersetzen in natürlicher Sprache.** Tippe, was sich ändern soll (z. B. „Daten wie 26.09.2026 in 2026-09-26 umwandeln"), und ein lokales OpenAI-kompatibles LLM macht daraus eine JavaScript-Regex, ein Ersetzungsmuster und eine Ein-Satz-Erklärung in Klartext, was das Muster trifft.
 - **Vorschau, bevor irgendetwas geschrieben wird.** Jeder Treffer wird zeilenweise vorher/nachher gezeigt, mit eigener Checkbox. Nichts ändert sich in der Notiz, bis du **„Anwenden"** klickst — und nur die angehakten Treffer werden geschrieben.
 - **Kein eigenes Undo-System nötig.** Das Anwenden schreibt über den Editor, die Änderung landet also in Obsidians eigenem Undo-Stack — **Cmd+Z macht sie in einem Schritt rückgängig**, genau wie jede andere Bearbeitung.
 - **Iteratives Nachschärfen.** Nicht ganz richtig? Tippe eine Anschluss-Anweisung wie „aber nicht in Codeblöcken" und klicke **„Nachschärfen"** — das Plugin schickt den Gesprächsverlauf *und* die bisher gefundenen echten Treffer zurück ans Modell, damit es sieht, was falsch lief.
@@ -70,7 +70,7 @@ Danach `main.js`, `manifest.json` und `styles.css` nach `<vault>/.obsidian/plugi
 1. Das Plugin auf den lokalen Server ausrichten (siehe [Konfiguration](#konfiguration) weiter unten) und sicherstellen, dass ein Modell geladen ist.
 2. Auf das Ribbon-Icon **„Transmute"** klicken (oder den Command **„Open panel"** ausführen), um das Panel in der Sidebar zu öffnen.
 3. Einen Bereich wählen: **„Ganze Notiz"** oder **„Auswahl"**.
-4. Die Änderung im Anweisungsfeld beschreiben, z. B. *„Daten von TT.MM.JJJJ in JJJJ-MM-TT umwandeln"*, und **„Vorschau"** klicken.
+4. Die Änderung im Anweisungsfeld beschreiben, z. B. *„Daten wie 26.09.2026 in 2026-09-26 umwandeln"*, und **„Vorschau"** klicken.
 5. Die Vorschau prüfen: das erzeugte Muster, seine Klartext-Erklärung, und jeder Treffer mit Vorher/Nachher-Zeile und Checkbox. Alles abwählen, was nicht gewünscht ist, oder **„Alle auswählen"** / **„Keinen auswählen"** nutzen.
 6. Nicht ganz richtig? Eine Anschluss-Anweisung im Nachschärf-Feld eintippen (z. B. *„aber nicht in Codeblöcken"*) und **„Nachschärfen"** klicken — das Modell sieht die vorherigen Runden und die tatsächlich erzeugten Treffer.
 7. **„Anwenden"** klicken. Nur die angehakten Treffer werden geschrieben, und die Änderung landet in Obsidians normalem Undo-Stack — **Cmd+Z** macht sie in einem Schritt rückgängig.
