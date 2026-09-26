@@ -8,13 +8,14 @@ Organised after [Diátaxis](https://diataxis.fr/): learning, doing, looking up a
 
 | | |
 |---|---|
+| **[Features and usage](manual/features-and-usage.md)** ([Deutsch](manual/features-and-usage.de.md)) | Every feature in full, the whole way through the panel, and the settings table — moved here from the README. |
 | **[Getting started](manual/tutorial.md)** | Learning-oriented. Start a local server, open the panel, describe a change, review it, apply it. |
 | **[How-to guides](manual/how-to.md)** | Task-oriented. "How do I run it on a selection?", "How do I undo?", "How do I add a second endpoint?" |
 | **[Reference](manual/reference.md)** | Information-oriented. Commands, settings, error and risk messages, the JSON contract. |
 | **[Explanation](manual/explanation.md)** | Understanding-oriented. Why the preview is the product, why there is no snapshot system for a single note, why the safety guard has no web worker. |
 | **[Troubleshooting](troubleshooting.md)** | Task-oriented. Symptom, cause, fix. |
 
-The [README](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/README.md) covers what the plugin does, how to install it and every setting.
+The [README](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/README.md) gives the short version: what the plugin does, how to install it and the basic steps. Every feature and every setting is in [Features and usage](manual/features-and-usage.md).
 
 ---
 

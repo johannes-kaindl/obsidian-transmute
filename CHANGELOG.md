@@ -14,6 +14,7 @@ All notable changes to this project are documented here. The format follows
   - A model's inline `<think>` block and its reasoning fields are separated by the client, as before; a rule is still sent with temperature 0.
 - **Lab recording through `logToLab`** (kit `lab-client`): a Lab with another `apiVersion` is named once per session in the console instead of looking like "no Lab".
 - Kit vendoring raised to 0.43.0 (adds `chat-client`, `chat-transport`, `clock`, `lab-client`, `sse`).
+- The README is shorter: the **Features** and **Usage** sections (with the settings table) moved word for word to `docs/manual/features-and-usage.md` (German: `features-and-usage.de.md`); the README keeps a short version of each and a new short **Configuration** section, all linking there.
 
 ## [0.7.0] — 2026-09-26
 
