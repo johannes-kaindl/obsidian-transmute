@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-09-26
+
 ### Changed
 - **Chat client from obsidian-kit 0.43.0** (`createChatClient`, non-streaming over Obsidian's `requestUrl` as before), replacing the local client. Visible effects:
   - An error body inside an HTTP `200` answer (LM Studio answers a wrong path that way) is now reported with the server's own message instead of falling through as an empty answer.
