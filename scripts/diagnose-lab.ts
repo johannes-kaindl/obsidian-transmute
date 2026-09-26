@@ -22,6 +22,7 @@
  */
 import { readFileSync } from "node:fs";
 import { RuleClient, type JsonTransport } from "../src/core/llm/client";
+import { createChatClient, type SseTransport } from "../src/vendor/kit-obsidian/chat-client";
 import { buildDiagnosePrompt } from "../src/core/llm/prompt";
 import { parseDiagnoseResponse } from "../src/core/llm/response";
 import { probeRelaxations, type ProbeKind } from "../src/core/regex/relax";
@@ -62,16 +63,25 @@ const CASES: { name: string; rule: RuleDraft; expect: ProbeKind[] }[] = [
   { name: "5 · nichts dergleichen", rule: rule("giraffe"), expect: [] },
 ];
 
-const transport: JsonTransport = {
-  async postJson(url, body, timeoutMs, headers) {
+/** Node-Ersatz fuer den Obsidian-Transport: fetch statt requestUrl, Antwortkoerper als ein Chunk. */
+const chatTransport: SseTransport = {
+  async postStream(url, body, headers, onChunk, signal) {
     const res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal,
     });
-    return { status: res.status, text: await res.text() };
+    onChunk(await res.text());
+    return res.status;
   },
+};
+const nodeClock = {
+  now: () => Date.now(),
+  setTimeout: (fn: () => void, ms: number) => globalThis.setTimeout(fn, ms) as unknown as number,
+  clearTimeout: (id: number) => globalThis.clearTimeout(id as unknown as ReturnType<typeof setTimeout>),
+};
+const transport: JsonTransport = {
   async getJson(url, timeoutMs, headers) {
     const res = await fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
     return { status: res.status, text: await res.text() };
@@ -95,7 +105,7 @@ async function main(): Promise<void> {
   // beim echten Modell auch ankommt.
   setLang(lang);
 
-  const client = new RuleClient(transport, () => ({
+  const client = new RuleClient((timeoutMs) => createChatClient({ transport: chatTransport, clock: nodeClock, nonStreamTimeoutMs: timeoutMs }), transport, () => ({
     endpoint,
     apiKey,
     model: flag("model") ?? "",

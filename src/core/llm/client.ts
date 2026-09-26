@@ -2,15 +2,14 @@ import { extractModelIds } from "../../vendor/kit/endpoint_diagnostics";
 import { normalizeEndpoint } from "../../vendor/kit/endpoint";
 import { authHeaders, type EndpointConfig } from "../../vendor/kit/endpoint_config";
 import { suppressParams } from "../../vendor/kit/reasoning";
-import { errorMessageFromText } from "../../vendor/kit/error_body";
+import type { ChatClient } from "../../vendor/kit-obsidian/chat-client";
 import { effectiveSuppress } from "../reasoning-toggle";
 import type { ChatMessage } from "../types";
-import { extractChatContent, extractFinishReason, extractReasoning } from "./response";
 
-/** Netz-Port. Die Implementierung lebt in der obsidian-Schicht (requestUrl) —
- *  hier bleibt der Kern obsidian-frei und in Node testbar (PROF-OBS-12). */
+/** Netz-Port fuer die Modell-Liste (GET). Der Chat-Aufruf laeuft ueber den Kit-Chat-Client;
+ *  die Implementierung lebt in der obsidian-Schicht (requestUrl) — hier bleibt der Kern
+ *  obsidian-frei und in Node testbar (PROF-OBS-12). */
 export interface JsonTransport {
-  postJson(url: string, body: unknown, timeoutMs: number, headers?: Record<string, string>): Promise<{ status: number; text: string }>;
   getJson(url: string, timeoutMs: number, headers?: Record<string, string>): Promise<{ status: number; text: string }>;
 }
 
@@ -36,57 +35,46 @@ export type ClientConfig = {
   suppressReasoning: boolean;
 };
 
+/** Ein Chat-Client je Zeitlimit: die Frist ist Teil der Instanz (`nonStreamTimeoutMs`). */
+export type ChatClientFactory = (timeoutMs: number) => ChatClient;
+
 export class RuleClient {
+  private chat: { timeoutMs: number; client: ChatClient } | null = null;
+
   constructor(
+    private readonly makeChat: ChatClientFactory,
     private readonly transport: JsonTransport,
     private readonly config: () => ClientConfig,
   ) {}
 
+  private chatFor(timeoutMs: number): ChatClient {
+    if (this.chat?.timeoutMs !== timeoutMs) this.chat = { timeoutMs, client: this.makeChat(timeoutMs) };
+    return this.chat.client;
+  }
+
   async complete(messages: ChatMessage[]): Promise<CompleteResult> {
     const cfg = this.config();
-    // normalizeEndpoint strippt ein trailing /v1; wir haengen es kontrolliert wieder an.
-    // Ohne das baut der Client …/v1/v1/chat/completions — und LM Studio antwortet auf
-    // falsche Pfade mit HTTP 200 plus Fehler-Body, also ohne erkennbaren Fehler.
-    const base = normalizeEndpoint(cfg.endpoint);
-    const body: Record<string, unknown> = {
+    // temperature ist Sache dieses Plugins, nicht des Clients: eine Regel soll bei gleicher
+    // Eingabe gleich ausfallen. effectiveSuppress: ein Modell, das immer denkt, laesst sich
+    // nicht bitten — die Parameter zu schicken erzeugt dort nur Rauschen im Request.
+    const r = await this.chatFor(cfg.timeoutMs).complete({
+      endpoint: { url: cfg.endpoint, ...(cfg.apiKey ? { apiKey: cfg.apiKey } : {}) },
       model: cfg.model,
       messages,
-      temperature: 0,
+      params: { temperature: 0, ...suppressParams(effectiveSuppress(cfg.model, cfg.suppressReasoning)) },
       stream: false,
-      // effectiveSuppress: ein Modell, das immer denkt, laesst sich nicht bitten — die
-      // Parameter zu schicken erzeugt dort nur Rauschen im Request.
-      ...suppressParams(effectiveSuppress(cfg.model, cfg.suppressReasoning)),
-    };
+    });
 
-    const res = await this.transport.postJson(
-      `${base}/v1/chat/completions`, body, cfg.timeoutMs, authHeaders(cfg.apiKey),
-    );
-    // errorMessageFromText liefert `null` statt zu kuerzen — das Kuerzungsmass kennt nur der
-    // Aufrufer (error_body.ts:79-80, :113). `bodyMayBeSuccess` bleibt hier und unten
-    // ungesetzt (Kit-Default `false`): der Waechter ist fuer Aufrufer gebaut, die noch nicht
-    // wissen, ob der Koerper ueberhaupt ein Fehler ist. Hier ist der Status != 2xx, unten hat
-    // die Content-Extraktion schon `null` geliefert — genau die beiden Situationen, fuer die
-    // das Kit den Default nennt (error_body.ts:56-57).
-    if (res.status < 200 || res.status >= 300) {
-      return { ok: false, error: errorMessageFromText(res.text) ?? res.text.slice(0, 300) };
+    if (!r.ok) {
+      // Abgeschnitten ohne Text: die Meldung muss das Limit nennen, nicht „leere Antwort“.
+      if (r.kind === "truncated") return { ok: false, error: "length", truncatedEmpty: true };
+      return { ok: false, error: r.detail };
     }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(res.text);
-    } catch {
-      return { ok: false, error: res.text.slice(0, 300) };
+    if (r.content.trim().length === 0) {
+      if (r.reasoning.trim().length > 0) return { ok: false, error: r.reasoning.slice(0, 300), thoughtOnly: true };
+      return { ok: false, error: "empty answer" };
     }
-
-    const truncated = extractFinishReason(parsed) === "length";
-    const content = extractChatContent(parsed);
-    if (content === null || content.trim().length === 0) {
-      if (truncated) return { ok: false, error: "length", truncatedEmpty: true };
-      const reasoning = extractReasoning(parsed, content ?? "");
-      if (reasoning !== null) return { ok: false, error: reasoning.slice(0, 300), thoughtOnly: true };
-      return { ok: false, error: errorMessageFromText(res.text) ?? res.text.slice(0, 300) };
-    }
-    return { ok: true, content, reasoning: extractReasoning(parsed, content), truncated };
+    return { ok: true, content: r.content, reasoning: r.reasoning !== "" ? r.reasoning : null, truncated: r.truncated };
   }
 
   async listModels(ep: EndpointConfig): Promise<string[]> {

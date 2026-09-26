@@ -1,5 +1,7 @@
 import { requestUrl } from "obsidian";
 import type { JsonTransport } from "../core/llm/client";
+import { createChatClient, type ChatClient } from "../vendor/kit-obsidian/chat-client";
+import { requestUrlTransport } from "../vendor/kit-obsidian/chat-transport";
 import { classifyEndpointStatus, type EndpointStatus } from "../vendor/kit/endpoint_diagnostics";
 import { normalizeEndpoint } from "../vendor/kit/endpoint";
 import { authHeaders, type EndpointConfig } from "../vendor/kit/endpoint_config";
@@ -39,13 +41,15 @@ async function send(
   return raced.timedOut ? { status: 0, text: "", timedOut: true, error: null } : raced.value;
 }
 
+/** Chat-Client fuer eine Anfrage OHNE Stream ueber `requestUrl` (Hauptprozess, kein Origin —
+ *  damit gibt es keine CORS-Weigerung, also auch keinen Fallback). Die Frist ist die ganze
+ *  Wartezeit: ohne Stream gibt es kein Lebenszeichen. Abbruch und Frist wirken ueber den
+ *  Signal-Weg des Clients; die Anfrage selbst laeuft im Hintergrund zu Ende, ihr Ergebnis verfaellt. */
+export function makeChatClient(timeoutMs: number): ChatClient {
+  return createChatClient({ transport: requestUrlTransport, nonStreamTimeoutMs: timeoutMs });
+}
+
 export const obsidianTransport: JsonTransport = {
-  postJson: async (url, body, timeoutMs, headers) => {
-    const res = await send(url, "POST", JSON.stringify(body), timeoutMs, headers);
-    if (res.timedOut) return { status: 0, text: "timeout" };
-    if (res.error !== null) return { status: 0, text: res.error };
-    return { status: res.status, text: res.text };
-  },
   getJson: async (url, timeoutMs, headers) => {
     const res = await send(url, "GET", undefined, timeoutMs, headers);
     if (res.timedOut) return { status: 0, text: "timeout" };

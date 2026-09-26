@@ -52,6 +52,7 @@ import { join } from "node:path";
 import { attachTo, Cdp, closeExtraLeaves, notices, pollUntil, releaseAlwaysOnTop, requireVisible, setPluginSetting }
   from "../../tools/obsidian-cdp/cdp.js";
 import { requireEigenerBuild } from "../../tools/obsidian-cdp/vault.js";
+import { LAB_API_VERSION } from "../src/vendor/kit-obsidian/lab-client";
 
 const PLUGIN_ID = "transmute";
 const VIEW_TYPE = "transmute-panel";
@@ -915,8 +916,9 @@ async function abschnittLlmLab(cdp: Cdp): Promise<void> {
       app.plugins.plugins["llm-lab"] = {
         __transmuteSmokeStub: true,
         api: {
-          apiVersion: 4,
-          status: () => ({ apiVersion: 4, recording: true }),
+          // Die Version kommt aus dem Client, den der Stub prueft — eine eigene Zahl altert mit ihm (Lesson 2026-09-25).
+          apiVersion: ${LAB_API_VERSION},
+          status: () => ({ apiVersion: ${LAB_API_VERSION}, recording: true }),
           log: (input) => { window.__transmuteLabSeen.push(input); return "smoke-" + window.__transmuteLabSeen.length; },
         },
       };

@@ -8,8 +8,8 @@ import { pickLang, setLang, t } from "./vendor/kit/i18n";
 import type { EndpointConfig } from "./vendor/kit/endpoint_config";
 import { findEndpointManager } from "./vendor/kit-obsidian/endpoint-source";
 import { EndpointResolver } from "./obsidian/endpoint";
-import { obsidianTransport, pingEndpoint } from "./obsidian/http";
-import { readLabApi } from "./obsidian/lab";
+import { makeChatClient, obsidianTransport, pingEndpoint } from "./obsidian/http";
+import { logToLab } from "./vendor/kit-obsidian/lab-client";
 import { TransmuteSettingTab } from "./obsidian/settings-tab";
 import { TransmuteView, VIEW_TYPE_TRANSMUTE } from "./obsidian/view";
 
@@ -28,6 +28,7 @@ export default class TransmutePlugin extends Plugin {
   resolver!: EndpointResolver;
   knownModels: string[] = [];
   private client!: RuleClient;
+  private labMismatchWarned = false;
   private sessionInstance!: TransmuteSession;
 
   async onload(): Promise<void> {
@@ -40,7 +41,7 @@ export default class TransmutePlugin extends Plugin {
       { manager: () => findEndpointManager(this.app), choice: () => this.settings.choice },
     );
 
-    this.client = new RuleClient(obsidianTransport, () => ({
+    this.client = new RuleClient(makeChatClient, obsidianTransport, () => ({
       endpoint: this.activeEndpoint.url,
       apiKey: this.activeEndpoint.apiKey,
       model: this.activeModel(),
@@ -169,29 +170,28 @@ export default class TransmutePlugin extends Plugin {
     promptTemplate: string;
     contextPaths: string[];
   }): void {
-    try {
-      const api = readLabApi(this.app);
-      if (api === null) return;
-      const id: unknown = api.log({
-        plugin: "transmute",
-        feature: input.feature,
-        model: input.model,
-        endpointUrl: input.endpointUrl,
-        messages: input.messages,
-        content: input.result.ok ? input.result.content : "",
-        ...(input.result.ok && input.result.reasoning !== null ? { reasoning: input.result.reasoning } : {}),
-        ...(input.result.ok && input.result.truncated ? { finishReason: "length" } : {}),
-        latencyMs: input.latencyMs,
-        ...(input.result.ok ? {} : { error: input.result.error }),
-        ...(input.apiKey ? { secrets: [input.apiKey] } : {}),
-        ...(input.contextPaths.length > 0 ? { contextPaths: input.contextPaths } : {}),
-        ...(input.promptTemplate !== "" ? { promptTemplate: input.promptTemplate } : {}),
-        turnId: input.turnId,
-      });
-      // Vertrag: log() gibt synchron eine id zurueck — ein fremdes Plugin bekommt trotzdem
-      // keinen blinden Vorschuss (Muster vault-rag/koda-agent).
-      void Promise.resolve(id).catch(() => undefined);
-    } catch { /* Telemetrie darf einen Lauf nie mitreissen. */ }
+    const lab = logToLab(this.app, {
+      plugin: "transmute",
+      feature: input.feature,
+      model: input.model,
+      endpointUrl: input.endpointUrl,
+      messages: input.messages,
+      content: input.result.ok ? input.result.content : "",
+      ...(input.result.ok && input.result.reasoning !== null ? { reasoning: input.result.reasoning } : {}),
+      ...(input.result.ok && input.result.truncated ? { finishReason: "length" } : {}),
+      latencyMs: input.latencyMs,
+      ...(input.result.ok ? {} : { error: input.result.error }),
+      ...(input.apiKey ? { secrets: [input.apiKey] } : {}),
+      ...(input.contextPaths.length > 0 ? { contextPaths: input.contextPaths } : {}),
+      ...(input.promptTemplate !== "" ? { promptTemplate: input.promptTemplate } : {}),
+      turnId: input.turnId,
+    });
+    // Ein Lab, das da ist, aber nicht antwortet wie erwartet (andere apiVersion), sah bisher aus
+    // wie „kein Lab“ — einmal je Sitzung melden.
+    if (!lab.ok && lab.reason === "version-mismatch" && !this.labMismatchWarned) {
+      this.labMismatchWarned = true;
+      console.warn(`Transmute: ${lab.detail} — Aufzeichnung im Lab ist aus`);
+    }
   }
 
   async saveSettings(): Promise<void> {
