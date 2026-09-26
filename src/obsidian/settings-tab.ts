@@ -4,6 +4,7 @@ import type { PresetDef, ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
 import { renderSettingDefinitions, settingBodyHost, refreshSettingsTab } from "../vendor/kit-obsidian/settings_walker";
 import { buildEndpointSourceSection, findEndpointManager } from "../vendor/kit-obsidian/endpoint-source";
+import { githubHelpUrls, helpSettingDefinition } from "../vendor/kit-obsidian/help-setting";
 import { buildEndpointList } from "./settings/endpoint-list";
 import { probeEndpoint } from "./http";
 
@@ -35,7 +36,18 @@ export class TransmuteSettingTab extends PluginSettingTab {
   }
 
   getSettingDefinitions(): SettingDefinitionItem[] {
-    const defs: GroupDef[] = [
+    // Hilfe-Zeile (UI-STANDARD §8): ERSTES Element, vor jeder Gruppe. Repo-Name, nicht Plugin-ID.
+    const help = helpSettingDefinition({
+      ...githubHelpUrls("obsidian-transmute"),
+      texts: {
+        name: t("help.name"),
+        desc: t("help.desc"),
+        openDocs: t("help.openDocs"),
+        reportIssue: t("help.reportIssue"),
+      },
+    });
+    const defs: (GroupDef | typeof help)[] = [
+      help,
       {
         type: "group",
         heading: t("set.groupConnection"),

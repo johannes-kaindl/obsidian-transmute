@@ -192,6 +192,17 @@ for m in clipboard folder-suggest settings_walker model-picker endpoint-source; 
   echo "vendored obsidian-kit@$VER/obsidian/$m.ts"
 done
 
+# help-setting.ts (Hilfe-Zeile, UI-STANDARD §8) laeuft auf EIGENEM Pin: Welle 10 zieht nur dieses
+# Modul auf 0.43.0, die uebrigen Module bleiben auf $VER. Ein Upgrade der uebrigen ist eine eigene Handlung.
+HELP_REF="${HELP_KIT_REF:-0.43.0}"
+git -C "$KIT" rev-parse --verify --quiet "$HELP_REF^{commit}" >/dev/null || {
+  echo "FEHLER: Ref '$HELP_REF' existiert nicht in $KIT." >&2; exit 2; }
+HELP_SHA=$(git -C "$KIT" rev-parse --short "$HELP_REF^{commit}")
+hole "$KIT" "$HELP_REF" "src/obsidian/help-setting.ts" "src/vendor/kit-obsidian/help-setting.ts" || {
+  echo "FEHLER: $HELP_REF:src/obsidian/help-setting.ts nicht lesbar" >&2; exit 2; }
+stamp "src/vendor/kit-obsidian/help-setting.ts" "src/obsidian/help-setting.ts" obsidian-kit "$HELP_REF"
+echo "vendored obsidian-kit@$HELP_REF/obsidian/help-setting.ts"
+
 mkdir -p tests/vendor/kit
 hole "$KIT" "$VER" "src/testing/obsidian-mock.ts" "tests/vendor/kit/obsidian-mock.ts" || {
   echo "FEHLER: $VER:src/testing/obsidian-mock.ts nicht lesbar" >&2; exit 2; }
@@ -224,7 +235,8 @@ cat > src/vendor/kit-obsidian/VENDOR.json <<JSON
   "version": "$VER",
   "sha": "$SHA",
   "vendored": "clipboard.ts, folder-suggest.ts, settings_walker.ts, model-picker.ts, endpoint-source.ts",
-  "note": "Verbatim snapshot. Never hand-edit. Re-vendor via tools/sync-kit.sh. version/sha gelten AUSSCHLIESSLICH fuer die unter \"vendored\" gelisteten Dateien. clipboard.ts, model-picker.ts und endpoint-source.ts tragen EINE mechanische Abweichung: kit-interne Importe (../pure/ bzw. ../vendor/code-kit/{pure,web}/) sind auf ../kit/ umgeschrieben (Vendor-Layout). Bei jedem Re-Vendoring reproduzieren; sonst darf nichts abweichen. Praezedenz: vim-dojo, markdown-presentation, vault-crews, kuro-gamification. Eigene Ablage neben src/vendor/kit/, weil diese Module \"obsidian\" importieren."
+  "extra": { "help-setting.ts": { "version": "$HELP_REF", "sha": "$HELP_SHA" } },
+  "note": "Verbatim snapshot. Never hand-edit. Re-vendor via tools/sync-kit.sh. version/sha gelten AUSSCHLIESSLICH fuer die unter \"vendored\" gelisteten Dateien; help-setting.ts steht auf eigenem Pin (extra). clipboard.ts, model-picker.ts und endpoint-source.ts tragen EINE mechanische Abweichung: kit-interne Importe (../pure/ bzw. ../vendor/code-kit/{pure,web}/) sind auf ../kit/ umgeschrieben (Vendor-Layout). Bei jedem Re-Vendoring reproduzieren; sonst darf nichts abweichen. Praezedenz: vim-dojo, markdown-presentation, vault-crews, kuro-gamification. Eigene Ablage neben src/vendor/kit/, weil diese Module \"obsidian\" importieren."
 }
 JSON
 echo "VENDOR.json → $VER ($SHA)"

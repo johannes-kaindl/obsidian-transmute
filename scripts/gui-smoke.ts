@@ -1142,6 +1142,27 @@ async function abschnittManager(cdp: Cdp): Promise<void> {
   }
 }
 
+/** H1: Die Hilfe-Zeile ist die ERSTE Zeile im Einstellungs-Tab (UI-STANDARD §8), mit Text-Knopf
+ *  und bug-Icon. Gezeichnet ueber `display()`, den Fallback-Renderer derselben Definitionen. */
+async function abschnittHilfe(cdp: Cdp): Promise<void> {
+  const r = await cdp.evaluate<{ tab: boolean; name: string; buttons: number; bug: boolean } | null>(`
+    const tab = (app.setting?.pluginTabs ?? []).find((x) => x.id === ${JSON.stringify(PLUGIN_ID)});
+    if (!tab) return null;
+    tab.display();
+    const first = tab.containerEl.querySelector(".setting-item");
+    if (!first) return { tab: true, name: "", buttons: 0, bug: false };
+    return {
+      tab: true,
+      name: first.querySelector(".setting-item-name")?.textContent ?? "",
+      buttons: first.querySelectorAll("button").length,
+      bug: first.querySelector(".clickable-icon svg.bug, .clickable-icon [data-icon='bug'], .clickable-icon .lucide-bug") !== null,
+    };
+  `);
+  if (r === null) { skipped("H1 Hilfe-Zeile ist die erste Zeile der Einstellungen", "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden"); return; }
+  const ok = (r.name === "Help" || r.name === "Hilfe") && r.buttons === 1 && r.bug;
+  record("H1 Hilfe-Zeile ist die erste Zeile der Einstellungen", ok, `erste Zeile „${r.name}“, ${r.buttons} Text-Knopf, bug-Icon ${r.bug ? "da" : "fehlt"}`);
+}
+
 // --- Abschnitt: i18n ---------------------------------------------------------
 
 /** Sprache des Panels — fuer die Knoepfe, deren Beschriftung gelesen werden muss. */
@@ -1287,6 +1308,7 @@ async function main(): Promise<void> {
     await abschnitt("Setter", () => abschnittSetter(cdp));
     await abschnitt("llm-lab", () => abschnittLlmLab(cdp));
     await abschnitt("Manager", () => abschnittManager(cdp));
+    await abschnitt("Hilfe", () => abschnittHilfe(cdp));
     await abschnitt("i18n", () => abschnittI18n(cdp));
   } finally {
     // Nimmt zurueck, was `requireVisible` in seiner letzten Stufe gesetzt haben kann —

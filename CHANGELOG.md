@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Help row at the top of the settings with links to the documentation and the issue tracker.
+- Documentation index (`docs/README.md`) and a troubleshooting page that lists the plugin's messages with cause and fix.
+
+### Fixed
+
+- Documentation named the button "Generate" and listed two scopes; it is "Preview" and there are three (note, selection, vault).
+
 ## [0.6.1] — 2026-09-26
 
 ### Fixed
