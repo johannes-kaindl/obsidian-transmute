@@ -34,11 +34,11 @@ pasted block, a table — rather than the whole document.
 1. Select the text you want to affect in the editor.
 2. Open the Transmute panel (ribbon icon "Transmute").
 3. Click the **"Selection"** button in the scope switch at the top of the panel.
-4. Describe the change and click **"Generate"** as usual.
+4. Describe the change and click **"Preview"** as usual.
 
 The instruction, the sample sent to the model, the preview, and the final "Apply" all
 operate on the selected text only — nothing outside the selection is touched. If you
-change your selection in the editor after generating a preview, re-run "Generate" (or
+change your selection in the editor after generating a preview, re-run "Preview" (or
 "Refine") so the plugin reads the new selection; the preview does not follow editor
 changes automatically.
 
@@ -173,7 +173,7 @@ running. To move forward:
 
 1. Rephrase the instruction to be more specific about what should and shouldn't match —
    vague instructions are more likely to produce an unsafe generalization.
-2. Click **"Generate"** again (or **"Refine"** if you already had a working rule and
+2. Click **"Preview"** again (or **"Refine"** if you already had a working rule and
    this happened during a refinement).
 3. If it keeps happening for the same kind of instruction, try breaking it into two
    simpler rules applied one after another instead of one broad rule.
@@ -191,7 +191,7 @@ required JSON object, or wrap it in something the parser can't recover. Transmut
 already retries once automatically with the parse error sent back to the model before
 showing this message — so if you see it, the retry also failed.
 
-1. Click **"Generate"** (or **"Refine"**) again; a second independent attempt often
+1. Click **"Preview"** (or **"Refine"**) again; a second independent attempt often
    succeeds, especially with models that sample with some randomness.
 2. If it fails consistently, try a larger or more instruction-following model — the
    JSON contract has no hard schema enforcement on the server side (deliberately, to
@@ -211,7 +211,7 @@ what was found so far."* rather than hanging indefinitely.
 1. Open **Settings → Community plugins → Transmute**, under **"Behaviour" → "Time
    budget for running the pattern (ms)"**.
 2. Raise the value (for example to `5000` for five seconds).
-3. Re-run **"Generate"**.
+3. Re-run **"Preview"**.
 
 Note that this setting only affects line-by-line execution. Multi-line patterns (using
 an `s`/`m` flag, or containing a literal `\n`) run once against the whole text and are

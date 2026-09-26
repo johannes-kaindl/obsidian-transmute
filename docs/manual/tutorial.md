@@ -80,11 +80,11 @@ In the instruction box, type:
 turn dates from DD.MM.YYYY into YYYY-MM-DD
 ```
 
-Then click **"Generate"**.
+Then click **"Preview"**.
 
 ## Step 6 — Watch it think, then review the preview
 
-The panel shows **"Asking the model…"** briefly while the request is in flight. When it
+The panel shows "The model is writing the pattern. Nothing in the note changes until you press Apply." while the request is in flight. When it
 returns, you'll see:
 
 - The generated pattern, shown as `/…/…` with its flags.

@@ -16,7 +16,7 @@ It would be technically simpler to let the model's pattern run and rewrite the n
 one step. Transmute deliberately does not do that, and this is the single decision the
 rest of the architecture bends around.
 
-Consider what actually happens between "Generate" and "Apply". The session state
+Consider what actually happens between "Preview" and "Apply". The session state
 machine (`src/core/session.ts`) only ever moves into a `preview` phase — never
 `applied` — and that preview phase carries the full list of matches (`Hit[]`) plus a
 parallel `selected: boolean[]` array, all ticked by default. Nothing about generating a

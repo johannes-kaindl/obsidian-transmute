@@ -1,15 +1,15 @@
 # Transmute
 
-> 🇬🇧 English · [🇩🇪 Deutsch](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/README.de.md)
+> 🇬🇧 English · [🇩🇪 Deutsch](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/README.de.md)
 
 **Describe what to replace in plain language — a local LLM writes the regular expression, and you review every match before anything is written.**
 
-[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/LICENSE)
-[![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-lightgrey.svg)](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/LICENSE-DOCS)
-[![Release](https://img.shields.io/gitea/v/release/jkaindl/obsidian-transmute?gitea_url=https%3A%2F%2Fgit.jkaindl.de&label=release)](https://git.jkaindl.de/jkaindl/obsidian-transmute/releases)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/LICENSE)
+[![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-lightgrey.svg)](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/LICENSE-DOCS)
+[![Release](https://img.shields.io/github/v/release/johannes-kaindl/obsidian-transmute?label=release)](https://github.com/johannes-kaindl/obsidian-transmute/releases)
 ![Platform](https://img.shields.io/badge/platform-Obsidian%201.8.7%2B%20·%20desktop%20%26%20mobile-7c3aed)
 
-<p align="center"><img src="https://git.jkaindl.de/jkaindl/obsidian-transmute/raw/branch/main/docs/images/preview.png" width="600" alt="The Transmute panel next to a note: the pattern, the replacement, and every match shown before and after, each with its own checkbox"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/johannes-kaindl/obsidian-transmute/main/docs/images/preview.png" width="600" alt="The Transmute panel next to a note: the pattern, the replacement, and every match shown before and after, each with its own checkbox"></p>
 
 ## Features
 
@@ -19,7 +19,7 @@
 - **Iterative refinement.** Not quite right? Type a follow-up such as "but not inside code blocks" and click **"Refine"** — the plugin sends the conversation history *and* the actual matches found so far back to the model, so it can see what it got wrong.
 - **Scope control, up to the whole vault.** Run on the current note, on your selection, or across every note — filtered by folder, tag and a frontmatter property. The preview does not change with the scope: every affected file and every match is shown before anything is written, grouped by file and collapsed, so a rule touching 340 files is still 340 lines you can go through.
 
-<img src="https://git.jkaindl.de/jkaindl/obsidian-transmute/raw/branch/main/docs/images/vault-scope.png" width="512" alt="Scope set to the whole vault, filtered by folder, with the matches grouped per file and one file expanded">
+<img src="https://raw.githubusercontent.com/johannes-kaindl/obsidian-transmute/main/docs/images/vault-scope.png" width="512" alt="Scope set to the whole vault, filtered by folder, with the matches grouped per file and one file expanded">
 
 - **A snapshot before every vault-wide replacement.** The affected files are copied before the first change, and one button puts them back. If the snapshot cannot be written, nothing is written. A file you edited after the replacement is left alone and named, rather than silently overwritten.
 - **A history you can go back through.** Refining is trial and error, and the third attempt can be worse than the first. Every round is kept: from the second one on, the panel lists them with their instruction and match count, and one click returns to any earlier version — the later ones stay. Refining from an earlier version continues *that* one.
@@ -27,7 +27,7 @@
 - **Model and thinking switchable from the panel.** Both also live in settings, but noticing mid-try that another model fits better shouldn't cost two dialogs. A model the endpoint no longer offers is reported rather than silently swapped, and a model that always thinks (gpt-oss, harmony) shows a locked toggle instead of pretending it can be turned off.
 - **Edit the pattern yourself.** Regex, replacement and flags are editable right in the panel, and the preview recomputes after a short typing pause. An edited rule becomes its own history entry ("Edited by hand"), so the model's version stays and remains one click away. `g` is shown but not offered — it is always on, and a switch that switches nothing would be a lie.
 
-<img src="https://git.jkaindl.de/jkaindl/obsidian-transmute/raw/branch/main/docs/images/rule-editor.png" width="512" alt="Pattern, replacement and flags as editable fields, with the built-in regex cheat sheet open below them">
+<img src="https://raw.githubusercontent.com/johannes-kaindl/obsidian-transmute/main/docs/images/rule-editor.png" width="512" alt="Pattern, replacement and flags as editable fields, with the built-in regex cheat sheet open below them">
 
 - **A way in without the model at all.** "or write the pattern yourself" opens the same preview with an empty pattern, for when you already know what you want and don't feel like waiting for a model. No separate mode, no second tab.
 - **A cheat sheet where you're typing.** A collapsible regex reference sits right under the fields — no model, no network — and stays open while you work.
@@ -59,7 +59,7 @@ Search for **Transmute** in **Settings → Community plugins → Browse**, then 
 
 ### Manual
 
-Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://git.jkaindl.de/jkaindl/obsidian-transmute/releases) and place them in `<vault>/.obsidian/plugins/transmute/`, then enable the plugin under **Settings → Community plugins**.
+Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/johannes-kaindl/obsidian-transmute/releases) and place them in `<vault>/.obsidian/plugins/transmute/`, then enable the plugin under **Settings → Community plugins**.
 
 ### From source
 
@@ -89,7 +89,7 @@ Then copy `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/p
 
 Open **Settings → Community plugins → Transmute**. Settings are grouped under **"Connection"** and **"Behaviour"**.
 
-<img src="https://git.jkaindl.de/jkaindl/obsidian-transmute/raw/branch/main/docs/images/settings.png" width="600" alt="The plugin settings: the endpoint list with a reachability status per row, model selection, and the behaviour options">
+<img src="https://raw.githubusercontent.com/johannes-kaindl/obsidian-transmute/main/docs/images/settings.png" width="600" alt="The plugin settings: the endpoint list with a reachability status per row, model selection, and the behaviour options">
 
 
 | Setting | Default | Effect |
@@ -115,16 +115,16 @@ Before the generated pattern ever runs, a static heuristic screens it for constr
 
 Nothing is written to your note until you click **"Apply"**. At that point, only the checked matches are applied — in reverse order, so earlier replacements never shift the offsets of later ones — and the result is written through Obsidian's editor API (`editor.replaceRange`), which is what puts the change on the normal undo stack.
 
-## Manual
+## Documentation
 
-The full documentation follows the [Diátaxis](https://diataxis.fr) framework — see [docs/manual/index.md](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/docs/manual/index.md):
+New here? Start with [Getting started](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/docs/manual/tutorial.md). Something not working? See [Troubleshooting](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/docs/troubleshooting.md). The [documentation index](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/docs/README.md) lists everything; it follows the [Diátaxis](https://diataxis.fr) framework:
 
 - **Tutorial** — get from zero to your first applied replacement.
 - **How-to guides** — task-focused recipes (multiple endpoints, refining a rule, undoing, handling an unsafe-pattern error).
 - **Reference** — settings, commands, error messages, the JSON contract.
 - **Explanation** — why preview-before-apply is the core of the design, why there is no separate snapshot system, and why the safety guard has no web worker to lean on.
 
-See the [changelog](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/CHANGELOG.md) for release notes.
+See the [changelog](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/CHANGELOG.md) for release notes.
 
 ## Related
 
@@ -132,11 +132,11 @@ See the [changelog](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch
 
 ## Contributing
 
-Contributions are welcome. Please read [CONTRIBUTING.md](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/CONTRIBUTING.md) for the workflow (test-driven, `main` always green, feature work in `feat/<name>`, Conventional Commits) and [AGENTS.md](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/AGENTS.md) for the architecture and module conventions. The canonical repository lives on [Forgejo](https://git.jkaindl.de/jkaindl/obsidian-transmute); GitHub (`johannes-kaindl/obsidian-transmute`) is a mirror.
+Contributions are welcome. Please read [CONTRIBUTING.md](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/CONTRIBUTING.md) for the workflow (test-driven, `main` always green, feature work in `feat/<name>`, Conventional Commits) and [AGENTS.md](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/AGENTS.md) for the architecture and module conventions. The canonical repository lives on [Forgejo](https://git.jkaindl.de/jkaindl/obsidian-transmute); GitHub (`johannes-kaindl/obsidian-transmute`) is a mirror.
 
 ## License
 
-- **Code:** [AGPL-3.0-or-later](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/LICENSE). A commercial dual-license is available on request if the AGPL copyleft does not fit your use case.
-- **Documentation and text:** [CC BY-SA 4.0](https://git.jkaindl.de/jkaindl/obsidian-transmute/src/branch/main/LICENSE-DOCS).
+- **Code:** [AGPL-3.0-or-later](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/LICENSE). A commercial dual-license is available on request if the AGPL copyleft does not fit your use case.
+- **Documentation and text:** [CC BY-SA 4.0](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/LICENSE-DOCS).
 
 Copyright © 2026 Johannes Kaindl.

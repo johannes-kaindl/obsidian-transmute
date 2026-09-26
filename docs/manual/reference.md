@@ -1,6 +1,6 @@
 # Reference
 
-Dry, exhaustive reference for **Transmute** (plugin id `transmute`, version 0.1.0,
+Dry, exhaustive reference for **Transmute** (plugin id `transmute`, version 0.6.1,
 minimum Obsidian 1.8.7, Desktop and Mobile). For the source-level architecture and
 module layout, see [AGENTS.md](../../AGENTS.md).
 
@@ -20,7 +20,7 @@ panel").
 | `open-panel` | "Open panel" | Opens the Transmute panel in the right sidebar, or reveals it if already open. No default hotkey is assigned. |
 
 The command name itself is not run through the i18n layer and stays "Open panel" in
-both languages; the panel's internal buttons ("Generate"/"Erzeugen",
+both languages; the panel's internal buttons ("Preview"/"Vorschau",
 "Refine"/"Nachschärfen", "Apply"/"Anwenden") are separate, localized UI strings, listed
 under [Panel](#panel) below.
 
@@ -38,14 +38,14 @@ under [Panel](#panel) below.
 The panel is opened via the ribbon icon or the **"Open panel"** command and appears as
 a view in the right sidebar. Its layout, top to bottom:
 
-1. **Scope switch** — two buttons, **"Whole note"** and **"Selection"** (`view.scope.file` /
-   `view.scope.selection`). The active one is highlighted. Starts at the configured
+1. **Scope switch** — three buttons, **"Whole note"**, **"Selection"** and **"Whole vault"**
+   (`view.scope.file` / `view.scope.selection` / `view.scope.vault`). The active one is highlighted. Starts at the configured
    [default scope](#settings).
 2. **Instruction box** — a text area (placeholder: *"e.g. turn dates from DD.MM.YYYY
-   into YYYY-MM-DD"*) plus a **"Generate"** button.
+   into YYYY-MM-DD"*) plus a **"Preview"** button.
 3. **Result area** — its content depends on the session phase:
    - *Idle* — empty.
-   - *Generating* — a spinner and "Asking the model…".
+   - *Generating* — "The model is writing the pattern. Nothing in the note changes until you press Apply."
    - *Preview* — see [Preview](#preview) below.
    - *Error* — a plain-language message (see [Error messages](#error-messages) and
      [Risk messages](#risk-messages)), with an expandable **"Show the model's raw
@@ -59,7 +59,7 @@ Shown once a rule has been generated and executed against the scope text:
 - The model's one-sentence plain-language explanation, if it provided one.
 - A warning if execution was stopped by the [time budget](#settings) — *"Stopped after
   the time budget at line N. Showing what was found so far."*
-- Either *"No matches. Try refining the instruction."*, or a match count (*"N
+- Either *"The pattern found nothing in this text. Check that the note still contains what you are looking for — or refine the instruction."*, or a match count (*"N
   matches"*) with **"Select all"** / **"Select none"** links, followed by one row per
   match: a checkbox, the 1-based line number, and a before/after view of the line with
   the matched span highlighted.
@@ -137,7 +137,7 @@ or an escaped `\(a+\)+` (not a capturing group at all).
 
 | Message key | Text (EN) | When it appears |
 | --- | --- | --- |
-| `error.noEditor` | "Open a note first." | "Generate"/"Refine"/"Apply" clicked with no active Markdown editor. |
+| `error.noEditor` | "Open a note first." | "Preview"/"Refine"/"Apply" clicked with no active Markdown editor. |
 | `error.noSelection` | "Nothing selected." | Scope is "Selection" but the editor selection is empty. |
 | `error.noJson` | "The model did not answer with JSON." | The model's answer (after stripping `<think>` and code fences) contains no balanced JSON object, even after the one automatic retry. |
 | `error.badSchema` | "The model's answer was missing the pattern." | The parsed JSON has no non-empty `regex` string field. |
