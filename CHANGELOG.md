@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- README: the snapshot location no longer uses an angle-bracket placeholder (`<config dir>`), which the Community Store scan flagged as unfilled placeholder text.
+
 ## [0.6.0] — 2026-09-25
 
 ### Added

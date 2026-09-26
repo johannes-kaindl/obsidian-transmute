@@ -101,7 +101,7 @@ Open **Settings → Community plugins → Transmute**. Settings are grouped unde
 | **Text sample sent to the model** | `2000` (characters) | How much of the scope text is sent along with the instruction, so the model can see what it is matching against. |
 | **Time budget for running the pattern (ms)** | `2000` | A pattern that runs longer than this on a line-by-line scan is stopped, and the matches found so far are shown with a notice. |
 | **Ask before this many files** | `50` | A vault-wide replacement affecting at least this many files asks once more before writing. |
-| **Snapshots to keep** | `5` | How many snapshot folders are kept under `<config dir>/plugins/transmute/snapshots/`. Older ones are removed after each replacement. |
+| **Snapshots to keep** | `5` | How many snapshot folders are kept in the plugin's folder inside your vault's config directory (`.obsidian/plugins/transmute/snapshots/` by default). Older ones are removed after each replacement. |
 | **Show a separate "replace with" field** | `false` | Adds a second, optional input for the target pattern. Off by default — many instructions ("strip trailing whitespace", "make headings one level deeper") have no target pattern at all. |
 | **Ask reasoning models to skip thinking** | `true` | Sends reasoning-suppression parameters to the endpoint (and strips `<think>` blocks from the answer either way) so reasoning-capable local models answer faster and more reliably. Measured on this task: ~1.7 s and 5/5 correct with suppression, 26–56 s and 4/5 without. Also switchable from the panel. |
 
