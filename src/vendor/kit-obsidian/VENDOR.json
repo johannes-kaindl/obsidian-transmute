@@ -1,8 +1,8 @@
 {
   "source": "obsidian-kit",
-  "version": "0.43.0",
-  "sha": "bcd1805",
-  "vendored": "clipboard.ts, folder-suggest.ts, settings_walker.ts, model-picker.ts, endpoint-source.ts, chat-client.ts (obsidian-kit@0.44.0, 127c3a8), chat-transport.ts, clock.ts, lab-client.ts, help-setting.ts",
+  "version": "0.46.0",
+  "sha": "886bea5",
+  "vendored": "clipboard.ts, folder-suggest.ts, settings_walker.ts, model-picker.ts, endpoint-source.ts, chat-client.ts, chat-transport.ts, shortcuts-bridge.ts, clock.ts, lab-client.ts, help-setting.ts",
   "extra": {
     "help-setting.ts": {
       "version": "0.43.0",
