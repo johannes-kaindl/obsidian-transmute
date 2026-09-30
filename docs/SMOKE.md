@@ -79,6 +79,12 @@ die Timer-Kette des Fensters und meldet die Bedingungen im Ergebnis mit.
 
 ## Durchläufe
 
+### 2026-10-01 — Obsidian 1.14.3, Welle 14 (Apple-Intelligence-Endpunkt) · **39 grün · 0 rot · 1 übersprungen von 40**
+
+Vorher (frischer Prozess nach Aufwärmlauf): 34 grün · 0 rot · 1 übersprungen von 35. Neu sind S1–S5: S1 der Fake-Manager liefert den Apple-Endpunkt nur bei Opt-in (misst den Fake selbst), S2 das Dropdown zeigt „Apple Intelligence (on-device)“, S3 die Wahl macht `isShortcutsEndpoint()` wahr und der Hinweis zu den Grenzen steht im Tab, S4 ein Lauf öffnet die `shortcuts://`-URL mit dem Namen und dem Nutzertext (`window.open` **vor** dem Anstoß gestubbt, im `finally` zurückgebaut), S5 die Zeitüberschreitung (Kurzbefehl-Frist 3 s, kein Callback) endet im Fehlerzustand mit dem Schlüssel `error.shortcut.timeout`.
+
+Gegenprobe: ohne `transports: ["http", "shortcuts"]` im Settings-Tab sind S2–S5 **rot** (35 grün · 4 rot), S1 bleibt grün. Ein echter Rundlauf (die Kurzbefehle-App antwortet) ist nur am Gerät möglich und bewusst kein Prüfpunkt. Der eine übersprungene Punkt („Renderer atmet“) ist der Vorbestand der Baseline.
+
 ### 2026-08-16 — Obsidian 1.13.7, Vault mit 12.002 Notizen · **25/25**
 
 Erster Lauf des Treibers. **Zwei echte Fehler gefunden, die 403 grüne Unit-Tests nicht
