@@ -23,6 +23,7 @@ setup notes in the [README](../../README.md).
 9. [Recover from "the model did not answer with JSON"](#recover-from-the-model-did-not-answer-with-json)
 10. [Raise the time budget for a large note](#raise-the-time-budget-for-a-large-note)
 11. [Turn off reasoning suppression](#turn-off-reasoning-suppression)
+12. [Use the Apple Intelligence endpoint](#use-the-apple-intelligence-endpoint)
 
 ---
 
@@ -232,6 +233,28 @@ change correctness — only response latency and, for some models, answer qualit
    reasoning models to skip thinking"**.
 2. Toggle it off if you are using a non-reasoning model (where the setting has no
    effect) or if you specifically want a reasoning model to think before answering.
+
+---
+
+## Use the Apple Intelligence endpoint
+
+Transmute can ask Apple's on-device model to write the pattern instead of a server. The request runs through an Apple Shortcut, so nothing leaves your device and no server has to run.
+
+1. Install the **LLM Endpoint Manager** plugin, version 0.4.0 or newer, and set up its endpoint **Apple Intelligence (on-device)**. The endpoint and the shortcut it calls are created there; the setup is described at <https://uplink.jkaindl.de/apple-shortcuts>.
+2. Open **Settings → Community plugins → Transmute**.
+3. In the **Endpoint** dropdown, pick **Apple Intelligence (on-device)**.
+4. Leave the **Model** field empty. The shortcut decides which model answers.
+
+A note below the dropdown repeats the limits. What to expect:
+
+- The answer arrives **all at once**; there is no stream (Transmute never streamed the rule anyway).
+- The answer is limited to about **4096 tokens**.
+- The **Shortcuts app comes to the front** for a moment and then returns to Obsidian.
+- Only **one request at a time** runs.
+- The endpoint cannot call tools. Transmute does not need them.
+- The wait is bounded by the timeout of the shortcut, set in the LLM Endpoint Manager. Transmute waits at least that long plus ten seconds, so the shortcut can report its own timeout first.
+
+If the model's answer is not usable JSON, the usual recovery applies: [Recover from "the model did not answer with JSON"](#recover-from-the-model-did-not-answer-with-json). If the shortcut itself fails, see [Troubleshooting](../troubleshooting.md#the-apple-intelligence-shortcut-fails).
 
 ---
 

@@ -109,6 +109,34 @@ Each entry starts with the message you see, exactly as the plugin shows it (Engl
 
 **Fix:** Add the key, or check the endpoint, in the manager's settings.
 
+## The Apple Intelligence shortcut fails
+
+The endpoint **Apple Intelligence (on-device)** answers through an Apple Shortcut. See [Use the Apple Intelligence endpoint](manual/how-to.md#use-the-apple-intelligence-endpoint) for how it works.
+
+> The Apple Intelligence shortcut did not answer in time. Check that the shortcut exists and is named exactly as set in the LLM Endpoint Manager.
+
+**Cause:** the shortcut did not report back within its timeout. A shortcut that was deleted or renamed never answers.
+
+**Fix:** check the name of the shortcut in the LLM Endpoint Manager against the Shortcuts app, run it once by hand, and raise its timeout there if the model is slow.
+
+> Another Apple Intelligence request is still running. Wait for it, then try again.
+
+**Cause:** only one request runs at a time.
+
+**Fix:** wait for the running request to end.
+
+> The Apple Intelligence shortcut failed: {message}
+
+**Cause:** the shortcut reported an error, the message is the one it gave.
+
+**Fix:** open the shortcut in the Shortcuts app and run it with some text.
+
+> The Apple Intelligence shortcut was cancelled.
+
+**Cause:** the shortcut was cancelled on the device.
+
+**Fix:** generate again and let it finish.
+
 ## The model list stays empty, or the model is "no longer offered"
 
 **Cause:** The dropdown reads `GET /v1/models` from the active endpoint. The message "The endpoint no longer offers "…". Pick another model." means the saved model is not loaded any more.
