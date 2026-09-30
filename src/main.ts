@@ -9,6 +9,7 @@ import type { EndpointConfig } from "./vendor/kit/endpoint_config";
 import { findEndpointManager } from "./vendor/kit-obsidian/endpoint-source";
 import { EndpointResolver } from "./obsidian/endpoint";
 import { makeChatClient, obsidianTransport, pingEndpoint } from "./obsidian/http";
+import { createShortcutsBridge, type ShortcutsBridge } from "./vendor/kit-obsidian/shortcuts-bridge";
 import { logToLab } from "./vendor/kit-obsidian/lab-client";
 import { TransmuteSettingTab } from "./obsidian/settings-tab";
 import { TransmuteView, VIEW_TYPE_TRANSMUTE } from "./obsidian/view";
@@ -28,6 +29,8 @@ export default class TransmutePlugin extends Plugin {
   resolver!: EndpointResolver;
   knownModels: string[] = [];
   private client!: RuleClient;
+  /** Bruecke zu Apples on-device-Modell (Kurzbefehl) — im Konsumenten gebaut, der Manager-Vertrag exponiert keine. */
+  private shortcutsBridge!: ShortcutsBridge;
   private labMismatchWarned = false;
   private sessionInstance!: TransmuteSession;
 
@@ -41,12 +44,14 @@ export default class TransmutePlugin extends Plugin {
       { manager: () => findEndpointManager(this.app), choice: () => this.settings.choice },
     );
 
-    this.client = new RuleClient(makeChatClient, obsidianTransport, () => ({
+    this.shortcutsBridge = createShortcutsBridge(this, { protocolAction: "transmute-shortcut" });
+    this.client = new RuleClient((ms, via) => makeChatClient(ms, via, this.shortcutsBridge), obsidianTransport, () => ({
       endpoint: this.activeEndpoint.url,
       apiKey: this.activeEndpoint.apiKey,
       model: this.activeModel(),
       timeoutMs: this.settings.timeoutMs,
       suppressReasoning: this.settings.suppressReasoning,
+      ...(this.resolver.last?.transport === "shortcuts" && this.resolver.last.shortcut ? { via: { transport: "shortcuts" as const, shortcut: this.resolver.last.shortcut } } : {}),
     }));
 
     this.sessionInstance = new TransmuteSession(
@@ -140,6 +145,9 @@ export default class TransmutePlugin extends Plugin {
   }
 
   private activeEndpoint: EndpointConfig = { url: "" };
+
+  /** Kurzbefehl-Endpunkt (Apple Intelligence)? Der Settings-Tab zeigt dazu den Hinweis auf die Grenzen. */
+  isShortcutsEndpoint(): boolean { return this.resolver.last?.transport === "shortcuts"; }
 
   /** Modell fuer den naechsten Aufruf: mit Manager die aufgeloeste Schreibweise (Wahl →
    *  Standard des Endpunkts, Alias aufgeloest), sonst die lokale Einstellung wie bisher. */

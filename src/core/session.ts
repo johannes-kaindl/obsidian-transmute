@@ -369,6 +369,9 @@ export class TransmuteSession {
       if (res.truncatedEmpty === true) {
         return { ok: false, messageKey: "error.truncatedEmpty", args: [], raw: null, problem: "truncated, no usable text" };
       }
+      if (res.shortcutReason !== undefined) {
+        return { ok: false, messageKey: `error.shortcut.${res.shortcutReason}`, args: [res.error], raw: null, problem: res.error };
+      }
       return { ok: false, messageKey: "error.endpoint", args: [res.error], raw: null, problem: res.error };
     }
 
@@ -445,7 +448,9 @@ export class TransmuteSession {
       const failed: Diagnosis =
         res.thoughtOnly === true
           ? { kind: "failed", messageKey: "error.thoughtOnly", args: [] }
-          : { kind: "failed", messageKey: "error.endpoint", args: [res.error] };
+          : res.shortcutReason !== undefined
+            ? { kind: "failed", messageKey: `error.shortcut.${res.shortcutReason}`, args: [res.error] }
+            : { kind: "failed", messageKey: "error.endpoint", args: [res.error] };
       this.settleDiagnosis(index, regex, failed);
       return;
     }

@@ -1,7 +1,10 @@
 import { requestUrl } from "obsidian";
 import type { JsonTransport } from "../core/llm/client";
 import { createChatClient, type ChatClient } from "../vendor/kit-obsidian/chat-client";
-import { requestUrlTransport } from "../vendor/kit-obsidian/chat-transport";
+import { createShortcutsChatTransport, requestUrlTransport, transportFor, type TransportChoice } from "../vendor/kit-obsidian/chat-transport";
+import type { ShortcutsBridge } from "../vendor/kit-obsidian/shortcuts-bridge";
+import type { ClockPort } from "../vendor/kit-obsidian/clock";
+import type { ChatVia } from "../core/llm/client";
 import { classifyEndpointStatus, type EndpointStatus } from "../vendor/kit/endpoint_diagnostics";
 import { normalizeEndpoint } from "../vendor/kit/endpoint";
 import { authHeaders, type EndpointConfig } from "../vendor/kit/endpoint_config";
@@ -45,8 +48,35 @@ async function send(
  *  damit gibt es keine CORS-Weigerung, also auch keinen Fallback). Die Frist ist die ganze
  *  Wartezeit: ohne Stream gibt es kein Lebenszeichen. Abbruch und Frist wirken ueber den
  *  Signal-Weg des Clients; die Anfrage selbst laeuft im Hintergrund zu Ende, ihr Ergebnis verfaellt. */
-export function makeChatClient(timeoutMs: number): ChatClient {
-  return createChatClient({ transport: requestUrlTransport, nonStreamTimeoutMs: timeoutMs });
+/** Puffer auf die Kurzbefehl-Frist: die Bruecke meldet ihr Timeout selbst (408), der Client darf
+ *  nicht vorher abbrechen, waehrend sie noch wartet. */
+export const SHORTCUT_CLIENT_SLACK_MS = 10_000;
+
+/** Transportwahl und Frist fuer einen aufgeloesten Endpunkt. HTTP: `requestUrl` ohne Fallback.
+ *  Kurzbefehl (Apple Intelligence): one-shot ueber die Bruecke; die Frist ist mindestens
+ *  Kurzbefehl-Frist plus Puffer. Wirft, wenn ein Shortcuts-Endpunkt ohne Bruecke oder ohne
+ *  Kurzbefehl-Angabe ankommt (Konfigurationsfehler, kein stiller HTTP-Rueckfall). */
+export function chatSetupFor(
+  timeoutMs: number, via: ChatVia | undefined, bridge: Pick<ShortcutsBridge, "run"> | null,
+): { choice: TransportChoice; nonStreamMs: number } {
+  const shortcut = via?.shortcut;
+  const choice = transportFor(via ?? {}, {
+    http: requestUrlTransport,
+    ...(bridge && shortcut ? { shortcuts: createShortcutsChatTransport({ bridge, shortcut }) } : {}),
+  });
+  const nonStreamMs = via?.transport === "shortcuts" && shortcut ? Math.max(timeoutMs, shortcut.timeoutMs + SHORTCUT_CLIENT_SLACK_MS) : timeoutMs;
+  return { choice, nonStreamMs };
+}
+
+export function makeChatClient(
+  timeoutMs: number, via: ChatVia | undefined, bridge: Pick<ShortcutsBridge, "run"> | null,
+  deps: { clock?: ClockPort } = {},
+): ChatClient {
+  const { choice, nonStreamMs } = chatSetupFor(timeoutMs, via, bridge);
+  return createChatClient({
+    transport: choice.primary, ...(choice.fallback ? { fallbackTransport: choice.fallback } : {}),
+    nonStreamTimeoutMs: nonStreamMs, ...(deps.clock ? { clock: deps.clock } : {}),
+  });
 }
 
 export const obsidianTransport: JsonTransport = {

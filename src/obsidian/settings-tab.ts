@@ -194,6 +194,7 @@ export class TransmuteSettingTab extends PluginSettingTab {
       containerEl: host,
       capability: "chat",
       caller: "transmute",
+      transports: ["http", "shortcuts"],
       choice: () => this.plugin.settings.choice,
       setChoice: async (c) => {
         this.plugin.settings.choice = c;
@@ -223,6 +224,7 @@ export class TransmuteSettingTab extends PluginSettingTab {
         this.refreshUi();
       },
     });
+    if (this.plugin.isShortcutsEndpoint()) new Setting(host).setDesc(t("src.appleHint"));
   }
 
   private renderLocalEndpointList(host: HTMLElement): void {
