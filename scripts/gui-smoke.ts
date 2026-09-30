@@ -1144,6 +1144,151 @@ async function abschnittManager(cdp: Cdp): Promise<void> {
   }
 }
 
+// --- Abschnitt: Apple-Intelligence-Endpunkt ---------------------------------------
+
+const APPLE_ENDPOINT_ID = "fake-apple";
+const APPLE_LABEL = "Apple Intelligence (on-device)";
+const APPLE_SHORTCUT = "Smoke Apple LLM";
+/** Kurz, damit der Timeout-Pfad (S5) in Sekunden laeuft — die Client-Frist richtet sich nach ihr (+10 s). */
+const APPLE_SHORTCUT_TIMEOUT_MS = 3000;
+
+/** Fake-Manager mit ZWEI Endpunkten (HTTP und Apple, Transport `shortcuts`). `list(filter)` filtert
+ *  wie der echte Manager nach `filter.transports` mit Default `["http"]` (Spiegel von
+ *  llm-endpoint-manager/scripts/gui-smoke.ts G2) — S1 misst das am Fake selbst, damit S2 nicht
+ *  gruen wird, ohne dass das Opt-in je gebraucht wurde. */
+async function fakeAppleManagerEin(cdp: Cdp, httpUrl: string): Promise<void> {
+  await cdp.evaluate(`
+    if (!("__smokeVorherManager" in window)) window.__smokeVorherManager = app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}] ?? null;
+    const http = { id: "fake-http", label: "Fake HTTP Endpoint", url: ${JSON.stringify(httpUrl)}, provider: "openai", capabilities: ["chat"], defaultModel: ${JSON.stringify(MANAGER_DEFAULT_MODEL)}, enabled: true, hasSecret: false };
+    const shortcut = { name: ${JSON.stringify(APPLE_SHORTCUT)}, timeoutMs: ${APPLE_SHORTCUT_TIMEOUT_MS} };
+    const apple = { id: ${JSON.stringify(APPLE_ENDPOINT_ID)}, label: ${JSON.stringify(APPLE_LABEL)}, url: "apple-shortcuts://on-device", provider: "apple-shortcuts", transport: "shortcuts", shortcut, capabilities: ["chat"], enabled: true, hasSecret: false };
+    const all = [http, apple];
+    const geloest = (e) => e.id === apple.id
+      ? { id: e.id, label: e.label, config: { url: e.url, model: "" }, transport: "shortcuts", shortcut }
+      : { id: e.id, label: e.label, config: { url: e.url, model: ${JSON.stringify(MANAGER_DEFAULT_MODEL)} }, defaultModel: ${JSON.stringify(MANAGER_DEFAULT_MODEL)} };
+    app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}] = { api: {
+      version: 1,
+      list: (filter) => { const ts = (filter && filter.transports) || ["http"]; return all.filter((e) => ts.includes(e.transport || "http")); },
+      get: (id) => all.find((e) => e.id === id) ?? null,
+      resolve: async () => geloest(http),
+      materialize: async (id) => { const e = all.find((x) => x.id === id); return e ? geloest(e) : { error: "not-found" }; },
+      models: async (id) => (id === http.id ? [${JSON.stringify(MANAGER_DEFAULT_MODEL)}] : []),
+      importEndpoints: async (eps) => ({ added: [], merged: [], skipped: eps.map((e) => e.url) }),
+      on: () => () => {},
+    } };
+    return true;
+  `);
+}
+
+/** S1–S5: Auswahl im Baustein, Transportwahl, Kurzbefehl-URL, Fehlerpfad. Ein echter Rundlauf (die
+ *  Kurzbefehle-App antwortet) ist nur am Geraet moeglich — ehrliche Grenze, kein Pruefpunkt;
+ *  `window.open` ist gestubbt, damit die Zweitinstanz die App nie oeffnet. */
+async function abschnittApple(cdp: Cdp): Promise<void> {
+  const NAMEN = [
+    "S1 Fake-Manager liefert den Apple-Endpunkt nur bei Opt-in",
+    "S2 Dropdown zeigt „Apple Intelligence (on-device)“",
+    "S3 Wahl → Quelle traegt transport shortcuts",
+    "S4 Lauf oeffnet die shortcuts://-URL mit dem gefalteten Prompt",
+    "S5 Zeitueberschreitung des Kurzbefehls zeigt die Kurzbefehl-Meldung",
+  ];
+  if (await cdp.evaluate<boolean>(`return !!app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}];`)) {
+    for (const n of NAMEN) skipped(n, "ein llm-endpoint-manager ist im Vault aktiv; die Fake-API wuerde ihn verdecken");
+    return;
+  }
+  const http = await startFakeEndpoint({ regex: "foo", flags: "", replacement: "bar", explanation: "e" });
+  const vor = await cdp.evaluate<{ endpoints: unknown; choice: unknown; model: string }>(
+    `const s = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings; return { endpoints: s.endpoints, choice: s.choice, model: s.model };`,
+  );
+  let stubGesetzt = false;
+  try {
+    await fakeAppleManagerEin(cdp, http.url);
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.choice = {};
+      await p.saveSettings();
+      p.resolver.invalidate();
+      return true;
+    `);
+    const listen = await cdp.evaluate<{ ohne: string[]; mit: string[] }>(`
+      const api = app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}].api;
+      return { ohne: api.list({ capability: "chat" }).map((e) => e.id), mit: api.list({ capability: "chat", transports: ["http", "shortcuts"] }).map((e) => e.id) };
+    `);
+    record(NAMEN[0]!, listen.ohne.length === 1 && !listen.ohne.includes(APPLE_ENDPOINT_ID) && listen.mit.includes(APPLE_ENDPOINT_ID),
+      `ohne Opt-in ${JSON.stringify(listen.ohne)}, mit Opt-in ${JSON.stringify(listen.mit)}`);
+
+    // S2/S3 — der Baustein bietet Apple an (transports-Option); Wahl wie ein Nutzer: Dropdown setzen, change ausloesen
+    const optionen = await cdp.evaluate<string[] | null>(`
+      const tab = (app.setting?.pluginTabs ?? []).find((x) => x.id === ${JSON.stringify(PLUGIN_ID)});
+      if (!tab) return null;
+      tab.display();
+      await new Promise((r) => setTimeout(r, 500));
+      return [...tab.containerEl.querySelectorAll("select option")].map((o) => o.textContent || "");
+    `);
+    if (optionen === null) {
+      skipped(NAMEN[1]!, "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden");
+      skipped(NAMEN[2]!, "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden");
+    } else {
+      record(NAMEN[1]!, optionen.some((o) => o.includes(APPLE_LABEL)), `Optionen: ${JSON.stringify(optionen)}`);
+      const hinweis = await cdp.evaluate<{ ok: boolean; hinweis: boolean }>(`
+        const tab = (app.setting?.pluginTabs ?? []).find((x) => x.id === ${JSON.stringify(PLUGIN_ID)});
+        const sel = [...tab.containerEl.querySelectorAll("select")].find((s) => [...s.options].some((o) => (o.textContent || "").includes(${JSON.stringify(APPLE_LABEL)})));
+        if (!sel) return { ok: false, hinweis: false };
+        const opt = [...sel.options].find((o) => (o.textContent || "").includes(${JSON.stringify(APPLE_LABEL)}));
+        sel.value = opt.value;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+        const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+        for (let i = 0; i < 32 && !p.isShortcutsEndpoint(); i += 1) await new Promise((r) => setTimeout(r, 250));
+        tab.display();
+        await new Promise((r) => setTimeout(r, 500));
+        return { ok: p.isShortcutsEndpoint(), hinweis: (tab.containerEl.textContent || "").includes("4096") };
+      `);
+      record(NAMEN[2]!, hinweis.ok, hinweis.ok
+        ? `isShortcutsEndpoint() wahr; Hinweis zur Grenze im Tab: ${hinweis.hinweis ? "da" : "FEHLT"}`
+        : "Quelle blieb HTTP — die Dropdown-Wahl kam nicht an");
+    }
+
+    // S4/S5 — ein Lauf. `window.open`-Stub VOR dem Anstoss, Rueckbau im finally.
+    await cdp.evaluate(`
+      window.__smokeOpenUrls = [];
+      window.__smokeOrigOpen = window.open;
+      window.open = (u) => { window.__smokeOpenUrls.push(String(u)); return null; };
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      void p.sessionInstance.generate("Smoke-Test: ersetze foo", "foo bar");
+      return true;
+    `);
+    stubGesetzt = true;
+    const url = await pollUntil<{ u: string }>(cdp, `const u = window.__smokeOpenUrls[0]; return u ? { u } : null;`, 15_000, 250);
+    const dekodiert = url ? decodeURIComponent(url.u) : "";
+    record(NAMEN[3]!, url !== null && url.u.startsWith("shortcuts://") && dekodiert.includes(APPLE_SHORTCUT) && dekodiert.includes("foo bar"),
+      url ? `${url.u.slice(0, 60)}… (${url.u.length} Zeichen), Name ${dekodiert.includes(APPLE_SHORTCUT) ? "da" : "fehlt"}, Nutzertext ${dekodiert.includes("foo bar") ? "da" : "fehlt"}` : "window.open wurde nicht aufgerufen");
+
+    const ende = await pollUntil<{ phase: string; key: string }>(cdp, `
+      const st = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].sessionInstance.state;
+      return st.phase === "error" ? { phase: st.phase, key: st.messageKey } : null;
+    `, 60_000, 500);
+    record(NAMEN[4]!, ende !== null && ende.key.startsWith("error.shortcut."), ende ? `Phase ${ende.phase}, Meldungsschluessel ${ende.key}` : "Sitzung erreichte keinen Fehlerzustand");
+  } catch (e) {
+    for (const n of NAMEN) {
+      if (!checks.some((c) => c.name === n)) skipped(n, `Messung abgebrochen: ${(e as Error).message}`);
+    }
+  } finally {
+    if (stubGesetzt) {
+      await cdp.evaluate(`window.open = window.__smokeOrigOpen; delete window.__smokeOrigOpen; delete window.__smokeOpenUrls; return true;`).catch(() => undefined);
+    }
+    await fakeManagerAus(cdp).catch(() => undefined);
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = ${JSON.stringify(vor.endpoints)};
+      p.settings.choice = ${JSON.stringify(vor.choice)};
+      p.settings.model = ${JSON.stringify(vor.model)};
+      await p.saveSettings();
+      p.resolver.invalidate();
+      return true;
+    `).catch(() => undefined);
+    await http.close();
+  }
+}
+
 /** H1: Die Hilfe-Zeile ist die ERSTE Zeile im Einstellungs-Tab (UI-STANDARD §8), mit Text-Knopf
  *  und bug-Icon. Gezeichnet ueber `display()`, den Fallback-Renderer derselben Definitionen. */
 async function abschnittHilfe(cdp: Cdp): Promise<void> {
@@ -1310,6 +1455,7 @@ async function main(): Promise<void> {
     await abschnitt("Setter", () => abschnittSetter(cdp));
     await abschnitt("llm-lab", () => abschnittLlmLab(cdp));
     await abschnitt("Manager", () => abschnittManager(cdp));
+    await abschnitt("Apple Intelligence", () => abschnittApple(cdp));
     await abschnitt("Hilfe", () => abschnittHilfe(cdp));
     await abschnitt("i18n", () => abschnittI18n(cdp));
   } finally {
