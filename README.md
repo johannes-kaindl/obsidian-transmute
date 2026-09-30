@@ -38,7 +38,7 @@ Search for **Transmute** in **Settings → Community plugins → Browse**, then 
 
 ### Manual
 
-Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/johannes-kaindl/obsidian-transmute/releases) and place them in `<vault>/.obsidian/plugins/transmute/`, then enable the plugin under **Settings → Community plugins**.
+Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/johannes-kaindl/obsidian-transmute/releases) and place them in `<vault>/.obsidian/plugins/transmute/`, then enable the plugin under **Settings → Community plugins**. Or download `transmute.zip` from the release — it contains exactly these files — and unpack it into `.obsidian/plugins/`; `checksums.sha256` lets you verify the download.
 
 ### From source
 

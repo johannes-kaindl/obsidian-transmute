@@ -40,7 +40,7 @@ Alle Funktionen im Einzelnen: [Funktionen und Verwendung](https://github.com/joh
 
 ### Manuell
 
-`main.js`, `manifest.json` und `styles.css` aus dem [letzten Release](https://github.com/johannes-kaindl/obsidian-transmute/releases) nach `<vault>/.obsidian/plugins/transmute/` legen, dann unter **Settings → Community plugins** aktivieren.
+`main.js`, `manifest.json` und `styles.css` aus dem [letzten Release](https://github.com/johannes-kaindl/obsidian-transmute/releases) nach `<vault>/.obsidian/plugins/transmute/` legen, dann unter **Settings → Community plugins** aktivieren. Oder lade `transmute.zip` aus dem Release — es enthält genau diese Dateien — und entpacke es nach `.obsidian/plugins/`; mit `checksums.sha256` prüfst du den Download.
 
 ### From source
 
