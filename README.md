@@ -24,6 +24,8 @@
 
 All features in detail: [Features and usage](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/docs/manual/features-and-usage.md).
 
+<img src="https://raw.githubusercontent.com/johannes-kaindl/obsidian-transmute/main/docs/images/vault-scope.png" width="512" alt="Scope set to the whole vault, filtered by folder, with the matches grouped per file and one file expanded">
+
 ## Requirements
 
 - **Obsidian 1.8.7+** (desktop or mobile).
@@ -65,6 +67,9 @@ The full walkthrough, the vault-scope differences and every setting: [Features a
 ## Configuration
 
 Open **Settings → Community plugins → Transmute**; the settings are grouped under **"Connection"** and **"Behaviour"**. The ones you will touch first:
+
+<img src="https://raw.githubusercontent.com/johannes-kaindl/obsidian-transmute/main/docs/images/settings.png" width="600" alt="The plugin settings: the endpoint list with a reachability status per row, model selection, and the behaviour options">
+
 
 - **Endpoints** — an ordered list of OpenAI-compatible servers (local or hosted, each with an optional API key); the first reachable one is used. With the **LLM Endpoint Manager** plugin installed, endpoints and keys come from there. Enter the base URL without a trailing `/v1`.
 - **Model** — empty lets the server pick whatever is loaded; a dropdown is filled from the endpoint's `/v1/models`.

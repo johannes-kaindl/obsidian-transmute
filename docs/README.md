@@ -19,4 +19,4 @@ The [README](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/REA
 
 ---
 
-`docs/SMOKE.md` and `docs/transmute-repo-spec.md` are maintainer material and not user documentation.
+`docs/SMOKE.md` is maintainer material and not user documentation.

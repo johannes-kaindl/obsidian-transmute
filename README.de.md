@@ -11,6 +11,8 @@
 
 <p align="center"><img src="https://raw.githubusercontent.com/johannes-kaindl/obsidian-transmute/main/docs/images/preview.png" width="600" alt="Das Transmute-Panel neben einer Notiz: Muster, Ersetzung und jeder Treffer mit Vorher- und Nachher-Zeile, jeder einzeln abwählbar"></p>
 
+<img src="https://raw.githubusercontent.com/johannes-kaindl/obsidian-transmute/main/docs/images/vault-scope.png" width="512" alt="Bereich „Ganzer Vault“, nach Ordner gefiltert, mit den Treffern nach Datei gruppiert und einer aufgeklappten Datei">
+
 ## Funktionen
 
 - **Suchen & Ersetzen in natürlicher Sprache.** Beschreibe die Änderung in eigenen Worten; ein lokales OpenAI-kompatibles LLM macht daraus einen regulären Ausdruck, eine Ersetzung und eine Klartext-Erklärung.

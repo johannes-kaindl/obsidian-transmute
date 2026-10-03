@@ -285,7 +285,7 @@ die er abfangen sollte.)
 
 ## Offene Entscheidungen
 
-Aus `docs/transmute-repo-spec.md` §9 — nach Workspace-Standard bereits **entschieden**:
+Aus der Repo-Spec (Vault-Cockpit `_SDD/transmute-repo-spec.md`) §9 — nach Workspace-Standard bereits **entschieden**:
 
 - **Repo-Slug bleibt `obsidian-transmute`** (konsistent mit `obsidian-letterhead`/`obsidian-paperize`);
   manifest-`id` `transmute`, Anzeigename „Transmute". Der Store verbietet „Obsidian" im *Plugin*-Namen,
@@ -296,7 +296,7 @@ Aus `docs/transmute-repo-spec.md` §9 — nach Workspace-Standard bereits **ents
   leeren Remote keinen Workflow). Einrichtung über den Dach-Skill `plugin-release-setup`.
 - **Lizenz: AGPL-3.0 (`LICENSE`) + CC BY-SA 4.0 (`LICENSE-DOCS`)** — Workspace-Konsistenz.
 
-- **Modellagnostisch, mit dem was lokal da ist** (Jay-Entscheidung 2026-07-25) — kein Modell wird
+- **Modellagnostisch, mit dem was lokal da ist** (Entscheidung Johannes 2026-07-25) — kein Modell wird
   für dieses Plugin nachgeladen, kein Modellname wird hartkodiert. Die Spec-Frage „4-bit vs. 8-bit"
   ist damit gegenstandslos: Referenz-Setup ist die vorhandene **LM-Studio-Instanz auf `:1234`**
   (Bestand 2026-07-25: `qwen/qwen3.6-35b-a3b` — der Spec-Kandidat, MoE also schnell —
@@ -305,7 +305,7 @@ Aus `docs/transmute-repo-spec.md` §9 — nach Workspace-Standard bereits **ents
   Embedding-Modell, MLX `:8080` läuft nicht — beides bleibt trotzdem über die Endpunkt-Liste
   ansprechbar.
 
-Offen für Jay:
+Offen für Johannes:
 
 - **Nichts Blockierendes.** Die verbleibende empirische Frage — hält der NL→Regex-Prompt über
   *mehrere* der vorhandenen Modelle? — ist eine Mess-, keine Entscheidungsaufgabe (TaskNote im
