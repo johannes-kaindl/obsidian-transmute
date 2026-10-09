@@ -1,5 +1,6 @@
-// vendored from obsidian-kit@0.46.0, src/pure/endpoint-source.ts — do not hand-edit; re-vendor via tools/sync-kit.sh
-import { resolveActiveEndpointConfig, type EndpointConfig } from "./endpoint_config";
+// vendored from obsidian-kit@0.51.1, src/pure/endpoint-source.ts — do not hand-edit; re-vendor via tools/sync-kit.sh
+import { hydrateEndpointSecrets, resolveActiveEndpointConfig, type EndpointConfig } from "./endpoint_config";
+import type { SecretStore } from "./secrets";
 import { familyFromName, type BackendId, type FamilyId, type ModelFamilyId } from "./sampling-profiles";
 
 /** Öffentlicher Vertrag des Plugins `llm-endpoint-manager` (dessen `src/core/api-types.ts` ist
@@ -63,6 +64,15 @@ export type SourceKind = "manager" | "local";
 export interface EndpointSourceInput {
   manager?: LlmEndpointManagerApi | null;
   local: EndpointConfig[];
+  /** Schlüsselbund der LOKALEN Liste: ist er gesetzt, trägt die aufgelöste Config den Schlüssel
+   *  als `apiKey` (hydriert aus `secretId`), damit `authHeaders` ihn sieht. Nur der lokale Pfad;
+   *  der Manager hat seinen eigenen Schlüsselbund. Obsidian-Konsumenten rufen dafür
+   *  `prepareLocalEndpoints` (migriert und hydriert) und lassen dieses Feld leer. */
+  secrets?: Pick<SecretStore, "get"> | null;
+  /** Namensraum der Schlüssel in `secrets` (z. B. `<pluginId>-ep`), Pflicht zusammen mit `secrets`:
+   *  gelesen wird nur eine `secretId` im Raum `<secretPrefix>-` (code-kit 0.15.0). Fehlt er, wird nicht
+   *  hydriert — die Config trägt dann keinen Schlüssel, es wird aber auch nie ein fremder gelesen. */
+  secretPrefix?: string;
   localModel?: string;
   capability: Capability;
   choice?: EndpointChoice;
@@ -154,7 +164,7 @@ export async function resolveEndpointSource(
 ): Promise<EndpointSourceResult> {
   const { manager } = input;
   if (!manager) {
-    const config = await resolveActiveEndpointConfig(input.local, ping);
+    const config = await resolveActiveEndpointConfig(input.secrets && input.secretPrefix ? hydrateEndpointSecrets(input.local, input.secrets, input.secretPrefix) : input.local, ping);
     return finish({ kind: "local", config, model: config ? localModelOf(input.choice, config, input.localModel) : "" }, input, null);
   }
   const opts = input.caller ? { caller: input.caller } : undefined;

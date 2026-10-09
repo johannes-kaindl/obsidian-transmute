@@ -1,11 +1,11 @@
 {
   "source": "code-kit",
-  "version": "0.9.0",
-  "sha": "dd17974",
+  "version": "0.15.0",
+  "sha": "561a184",
   "code_kit_version": "0.7.0",
-  "vendored": "cooperative-yield.ts, endpoint.ts, endpoint_config.ts, endpoint_diagnostics.ts, error_body.ts, i18n.ts, model-choice.ts, reasoning.ts, run-state.ts, sampling-profiles.ts, settings.ts, sse.ts, think-splitter.ts, timeout.ts, clipboard.ts",
+  "vendored": "backend-probe.ts, capabilities.ts, cooperative-yield.ts, endpoint.ts, endpoint_config.ts, endpoint_diagnostics.ts, error_body.ts, i18n.ts, model-choice.ts, model-list-cache.ts, reasoning.ts, redact.ts, run-state.ts, sampling-profiles.ts, secrets.ts, settings.ts, sse.ts, think-splitter.ts, timeout.ts, clipboard.ts",
   "note": "Verbatim snapshot aus ZWEI Quellen (obsidian-kit + code-kit); welche Datei woher stammt, sagt ihr eigener Kopf. Never hand-edit. Pins in tools/kit-sync.json, re-vendor via tools/sync-kit.sh (zentrales kit-sync im Dach). version/sha gelten AUSSCHLIESSLICH fuer die unter \"vendored\" gelisteten Dateien. kit-obsidian/ siehe dortige VENDOR.json.",
-  "obsidian_kit_version": "0.46.0",
-  "obsidian_kit_sha": "886bea5",
+  "obsidian_kit_version": "0.51.1",
+  "obsidian_kit_sha": "be153cc",
   "obsidian_kit_vendored": "endpoint-source.ts"
 }
