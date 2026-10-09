@@ -1,6 +1,6 @@
 {
   "sources": {
-    "obsidian-kit": { "ref": "0.51.1" },
+    "obsidian-kit": { "ref": "0.51.2" },
     "code-kit": { "ref": "0.15.0" }
   },
   "targets": [
@@ -24,7 +24,7 @@
     },
     {
       "dir": "tests/vendor/kit", "source": "obsidian-kit", "from": "src/testing",
-      "modules": ["obsidian-mock"]
+      "modules": ["kit-css", "obsidian-mock"]
     }
   ]
 }

