@@ -1,5 +1,6 @@
 import { Plugin, getLanguage, type WorkspaceLeaf } from "obsidian";
 import { toCompleteResult, type CompleteResult } from "./core/llm/client";
+import { labView } from "./core/llm/lab-view";
 import { TransmuteSession, type CompleteFeature } from "./core/session";
 import { DEFAULT_SETTINGS, loadSettings, MAX_HITS, type TransmuteSettings } from "./core/settings";
 import type { ChatMessage } from "./core/types";
@@ -86,7 +87,6 @@ export default class TransmutePlugin extends Plugin {
             messages,
             latencyMs: Date.now() - started,
             turnId,
-            promptTemplate: messages.find((m) => m.role === "system")?.content ?? "",
             contextPaths: this.currentNotePath(),
           });
           return res;
@@ -185,24 +185,26 @@ export default class TransmutePlugin extends Plugin {
     messages: ChatMessage[];
     latencyMs: number;
     turnId: string;
-    promptTemplate: string;
     contextPaths: string[];
   }): void {
     const apiKey = input.source.config?.apiKey;
+    // Das Lab bekommt den GESENDETEN Text (Platzhalter), nicht die Originale — das Log soll dem Draht entsprechen.
+    const sent = labView(input.messages, input.result.ok ? input.result.content : "", input.result.ok ? input.result.reasoning : null);
+    const promptTemplate = sent.messages.find((m) => m.role === "system")?.content ?? "";
     const lab = logToLab(this.app, {
       plugin: "transmute",
       feature: input.feature,
       model: input.source.sentModel || input.source.model,
       endpointUrl: input.source.config?.url ?? "",
-      messages: input.messages,
-      content: input.result.ok ? input.result.content : "",
-      ...(input.result.ok && input.result.reasoning !== null ? { reasoning: input.result.reasoning } : {}),
+      messages: sent.messages,
+      content: sent.content,
+      ...(sent.reasoning !== null ? { reasoning: sent.reasoning } : {}),
       ...(input.result.ok && input.result.truncated ? { finishReason: "length" } : {}),
       latencyMs: input.latencyMs,
       ...(input.result.ok ? {} : { error: input.result.error }),
       ...(apiKey ? { secrets: [apiKey] } : {}),
       ...(input.contextPaths.length > 0 ? { contextPaths: input.contextPaths } : {}),
-      ...(input.promptTemplate !== "" ? { promptTemplate: input.promptTemplate } : {}),
+      ...(promptTemplate !== "" ? { promptTemplate } : {}),
       turnId: input.turnId,
     });
     // Ein Lab, das da ist, aber nicht antwortet wie erwartet (andere apiVersion), sah bisher aus

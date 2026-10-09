@@ -12,6 +12,7 @@ All notable changes to this project are documented here. The format follows
 - **Longer wait for the first answer.** The request now waits up to 15 minutes for an answer (was 2 minutes), so a model that is still loading no longer runs into a timeout. An Apple Shortcut keeps its own limit plus a margin.
 - **One client per endpoint**, and the backend (LM Studio, Ollama, …) is detected once per endpoint and remembered for 30 seconds.
 - **Secrets are redacted before sending, and restored in the answer.** Keys of well-known providers, `Bearer` tokens (16 characters or more) and private-key blocks in the text sample go to the model as placeholders (`[redacted-token-1]`); if the model repeats one in its rule, the rule you see and apply carries the original. The server never sees the secret.
+- **The llm-lab log shows the text that was sent**, with the placeholders, not the originals. A secret in your text never reaches the lab log.
 - **API keys move to Obsidian's keychain.** An existing key in `data.json` is moved on the first run; afterwards `data.json` holds only a reference. Needs Obsidian 1.11.4 or newer (`minAppVersion` was 1.8.7).
 - **The endpoint's model choice only counts with the LLM Endpoint Manager.** Without it, an old manager choice can no longer override the model of the local list.
 
