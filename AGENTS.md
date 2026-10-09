@@ -68,6 +68,7 @@ kam fertig aus dem Ökosystem, neu gebaut wurde im Wesentlichen die Regex-Domän
     `model-choice.ts`, `sampling-profiles.ts`, `endpoint-source.ts`.
   - `src/vendor/kit-obsidian/` (importiert `obsidian`): `clipboard.ts`, `folder-suggest.ts`,
     `settings_walker.ts`, `model-picker.ts`, `endpoint-source.ts`.
+  - Seit Welle 15 (obsidian-kit 0.51.2, code-kit 0.15.0) dazu die Verbindung: `llm-connection`, `llm-connection-strings`, `backend-probe`, `collapsible`, `endpoint-list`, `endpoint-secrets`, `request-section`, `request-session`, `secrets` (obsidian-kit) und `backend-probe`, `capabilities`, `model-list-cache`, `redact`, `secrets` (code-kit). Die `*_CSS`-Konstanten stehen wortgleich in `styles.css`; `tests/kit-css.test.ts` bewacht das.
   - `tests/vendor/kit/obsidian-mock.ts` — der Obsidian-Mock (seit 0.6.0 gestempelt aus dem Kit-Tag, vorher eine ungestempelte Kopie von 0.15.0); `tests/__mocks__/obsidian.ts` re-exportiert nur.
 - **Aus Nachbar-Plugins übernommen:** Endpoint-Zeilen-Editor + pure Editor-Model
   (`yijing-oracle`), EndpointResolver/Probe/Modell-Liste (`vim-dojo`), Chat-Response-Auswertung
@@ -99,7 +100,7 @@ src/
 │   ├── session.ts    Zustandsmaschine inkl. Handpfad
 │   └── settings.ts   Typ + defaults (mergeSettings aus dem Kit) · MAX_HITS
 ├── obsidian/         main · settings-tab · view · view-render · vault-render ·
-│                     http · editor-io · vault-io · snapshot-io · confirm-modal
+│                     editor-io · vault-io · snapshot-io · confirm-modal
 ├── vendor/kit/       gevendorte Kit-Module (pure) — nie von Hand ändern
 └── vendor/kit-obsidian/
                       gevendorte Kit-Module, die `obsidian` importieren — nie von Hand
@@ -157,25 +158,14 @@ die er abfangen sollte.)
   `npx tsc --noEmit` separat laufen lassen (vitest ≠ tsc).
 - **UI:** `../UI-STANDARD.md` ist verbindlich (Obsidian-nativ first, ein Frontend pro Plugin, nur
   Theme-CSS-Variablen) — **vor** jeder View-/Modal-/Settings-Arbeit lesen.
-- **i18n:** nutzersichtbare Strings via `t()`, EN kanonisch, EN/DE (PROF-OBS-07). Achtung: das
-  Kit-Feld `EndpointStatus.klartext` ist **hart deutsch** → in i18n-Plugins eigene Statuskeys
-  (`statusKindKey`-Muster aus `yijing-oracle`).
+- **i18n:** nutzersichtbare Strings via `t()`, EN kanonisch, EN/DE (PROF-OBS-07). Die Endpunkt-Texte (Status, Rolle, Anfrage-Abschnitt) kommen seit Welle 15 aus den zweisprachigen Kit-Texten von `renderSettings({ lang })`; eigene Statuskeys gibt es nicht mehr.
 - **Commits:** Conventional Commits, deutsche Beschreibung erlaubt. **Nur berührte Dateien stagen.**
   Trailer bei substanziellem AI-Beitrag:
   `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`.
 
 ## Gotchas (antizipiert — aus Nachbar-Plugins geerbt, bevor sie hier weh tun)
 
-- **`EndpointResolver.resolve()` cacht den ersten erreichbaren Endpunkt fuer die
-  Session-Laufzeit** (`src/obsidian/endpoint.ts`) — richtig fuer den Normalbetrieb (ein
-  lokaler Endpunkt wandert selten mitten in einer Sitzung), falsch fuer einen GUI-Smoke, der
-  `settings.endpoints` zur Laufzeit auf einen Stub-Server umbiegt: hat ein frueherer
-  Abschnitt (Modell-Liste laden, Settings-Tab) schon aufgeloest, ignoriert der Cache den
-  neuen Wert stillschweigend — die Anfrage geht an den alten (ggf. echten) Endpunkt und
-  haengt in „generating", ohne dass der Stub je einen Request sieht (gemessen am
-  llm-lab-Meldestrecke-Punkt, Welle 7). Treiber, die einen Endpunkt zur Laufzeit tauschen,
-  rufen danach `p.resolver.invalidate()`.
-  Mit dem LLM Endpoint Manager (seit 0.6.0) gilt das nur fuer den lokalen Pfad: der Manager-Pfad wird nie gecacht, und `resolver.last` haelt Quelle/Modell/Grund des letzten Durchlaufs. Das Modell im Manager-Fall ist `last.sentModel`, nicht `settings.model` — ein Treiber, der das Modell prueft, liest also den Stub-Server, nicht die Einstellung (Abschnitt „Manager" im Smoke).
+- **Die LLM-Anbindung ist `createLlmConnection` aus dem Kit (`this.llm` in `main.ts`, seit Welle 15), keine eigene Resolver-/Client-Schicht mehr.** Sie merkt sich die Auflösung des lokalen Endpunkts bis `llm.invalidate()` (der Manager wird nie gemerkt) — ein GUI-Smoke, der `settings.endpoints` zur Laufzeit auf einen Stub-Server umbiegt, ruft danach `p.llm.invalidate()`, sonst geht die Anfrage still an den alten Endpunkt und hängt in „generating“. Das Modell im Manager-Fall steht in `llm.complete(…).source.sentModel`, nicht in `settings.model`. Der Kurzbefehl-Endpunkt erkennt sich an `(await llm.resolve()).transport === "shortcuts"`. Transmute fragt `stream: false` über `requestUrlTransport` (`fallback: "none"`; der Standard wäre der XHR-Stream), im Modus `structured`, `truncated: "error"` und `restoreContent: "json"` (die Regel wird als JSON aus `content` geparst, ein geschwärzter mehrzeiliger Platzhalter wäre sonst ungültiges JSON). `temperature: 0` geht je Aufruf über `overrides` hinaus (die Regel „gleiche Eingabe, gleiche Regel“); der Anfrage-Abschnitt der Settings zeigt trotzdem die Profil-Temperatur des Modus. Das Panel-Schalterpaar „Denken“ bedient `settings.request.thinking.structured`. Der Abschnitt der Settings braucht einen eigenen Host-Container, weil die Verbindung ihn bei jedem Neuzeichnen leert (`renderConnection` in `settings-tab.ts`).
 - **Das eingebaute Preset „Zeilenumbrueche in Absaetzen entfernen" (`src/core/presets/remove-newlines.ts`)
   erkennt nur ZWEI benachbarte Zeilen, kein „bin ich innerhalb eines Codeblocks" ueber mehrere
   Zeilen hinweg.** Die Fence-Zeilen selbst (` ``` `) bleiben stehen, Zeilen DAZWISCHEN wuerden
@@ -275,13 +265,7 @@ die er abfangen sollte.)
 
 ## UI-Abweichungen
 
-- **endpoint-list** — Grund: `src/obsidian/settings/endpoint-list.ts` ist die eigene
-  "guter Schnitt"-Fassung (Vorbild `yijing-oracle`, vor der Kit-Extraktion 0.26.0
-  entstanden), nicht die konsolidierte Kit-Komponente aus `src/vendor/kit-obsidian/` —
-  die Migration ist eine eigene Consumer-Umstellung mit mehreren dokumentierten Fallen
-  (hide()/cache.clear(), Render-Index darf Handler nicht ueberleben, zwei getrennte
-  i18n-`strings`-Objekte bei zwei Aufrufstellen) und kein Nebenschritt.
-  — gilt-solange: `src/obsidian/settings/endpoint-list.ts` enthaelt-nicht `kit-obsidian/endpoint-list`
+Keine. Die eigene Endpunkt-Liste (`endpoint-list`) ist mit dem Verbindungs-Tausch der Welle 15 entfallen; Endpunkte, Modell und Anfrage-Abschnitt kommen aus `createLlmConnection.renderSettings`.
 
 ## Offene Entscheidungen
 

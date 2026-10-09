@@ -79,9 +79,9 @@ Settings tab heading in Obsidian: **Transmute**, with two groups: **"Connection"
 
 | Name (verbatim) | Description | Default |
 | --- | --- | --- |
-| "Endpoints" | Ordered list of OpenAI-compatible servers. The plugin pings them in order and uses the **first reachable** one. The settings tab renders a dynamic field per entry; an empty trailing field is the "add new" slot, committed on blur (not on every keystroke). Each row shows a reachability icon (loader / check / cross, with an accessible label) and, where applicable, a non-blocking input warning (missing scheme, malformed URL, missing port, placeholder IP). Two one-click preset buttons add `http://localhost:1234` (LM Studio) or `http://localhost:11434` (Ollama); a "Test connections" button re-probes every row. | `["http://127.0.0.1:1234"]` |
-| "Model" | Which model id to request. A dropdown populated from the active endpoint's `/v1/models`, plus a reload button (`refresh-cw`). The top option, "(let the server choose)", sends an empty `model` field. | `""` (empty) |
-| "Request timeout (ms)" | How long to wait for the model to answer a chat-completion request before giving up. Minimum enforced value: `1000`. | `120000` |
+| "Endpoints" | Ordered list of OpenAI-compatible servers, each with an optional API key. The plugin pings them in order and uses the **first reachable** one. Each row shows a reachability status and, where applicable, a non-blocking input warning. API keys are stored in Obsidian's keychain, not in `data.json`. Two one-click preset buttons add LM Studio or Ollama; "Test connection" re-probes every row. With the LLM Endpoint Manager installed, an endpoint picker replaces the list. | `["http://127.0.0.1:1234"]` |
+| "global model" (per row) | Which model id to request when a row has none of its own. A dropdown populated from the endpoint's `/v1/models`, plus a reload button. The top option sends an empty `model` field. | `""` (empty) |
+| "Request" | Collapsible section: the sampling values and the thinking level that are sent, per mode. Transmute asks in the **Structured** mode (the answer is a JSON contract). The temperature is always sent as `0` so that the same input gives the same rule, whatever this section shows. The first answer may take up to 15 minutes while a model loads; there is no timeout setting. | thinking off |
 
 ### Behaviour
 
@@ -90,7 +90,6 @@ Settings tab heading in Obsidian: **Transmute**, with two groups: **"Connection"
 | "Default scope" | Which scope ("Whole note" / "Selection") a freshly opened panel starts on. Switchable per session in the panel itself. | `file` (Whole note) |
 | "Text sample sent to the model" | How many characters of the scope text are included with the instruction/refinement, so the model can see what it is matching against. Text longer than this is truncated with a trailing `…`. Minimum enforced value: `200`. | `2000` |
 | "Time budget for running the pattern (ms)" | Wall-clock budget for a line-by-line pattern run. Execution is checked between lines (via a supplied clock, `performance.now()` in the running plugin); exceeding the budget stops the scan and returns the matches found so far, plus the line index it stopped at. Does not apply to multi-line patterns (see [Multi-line execution](#multi-line-execution)). Minimum enforced value: `200`. | `2000` |
-| "Ask reasoning models to skip thinking" | When on, sends reasoning-suppression request parameters to the endpoint (`reasoning_effort: "none"`, `chat_template_kwargs.enable_thinking: false`, `reasoning_budget: 0`) — a union of the parameter names used by different local servers, so unrecognized ones are simply ignored. Independent of this setting, any `<think>…</think>` block in the raw answer is always stripped before JSON parsing. | `true` |
 
 ## The JSON contract
 

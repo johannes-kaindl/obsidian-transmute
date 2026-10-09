@@ -121,7 +121,7 @@ everywhere.
    server, e.g. `http://192.168.178.27:1234`.
 4. Press Tab or click away (the row commits on blur, not on every keystroke). A
    reachability icon appears next to the new row.
-5. Click **"Test connections"** to re-check every row at once.
+5. Click **"Test connection"** to re-check every row at once.
 
 Notes:
 

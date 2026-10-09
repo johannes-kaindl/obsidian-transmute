@@ -43,13 +43,13 @@ Transmute schließt eine Lücke, die Obsidian offen lässt: Die eingebaute Suche
 
 | Einstellung | Default | Wirkung |
 |---|---|---|
-| **Endpoints** | `["http://127.0.0.1:1234"]` | Geordnete Liste OpenAI-kompatibler Server, der Reihe nach probiert; der erste erreichbare wird genutzt. Ein-Klick-Presets für LM Studio und Ollama, dazu ein Erreichbarkeits-Status pro Zeile und ein „Verbindungen testen"-Button. |
-| **Model** | `""` (leer) | Welches Modell angefragt wird. Leer lässt den Server entscheiden, welches geladene Modell genutzt wird. Ein Dropdown wird aus `/v1/models` des aktiven Endpunkts gefüllt; über den Reload-Button aktualisierbar. |
-| **Request timeout (ms)** | `120000` | Wie lange auf die Antwort des Modells gewartet wird, bevor abgebrochen wird. |
+| **Endpoints** | `["http://127.0.0.1:1234"]` | Geordnete Liste OpenAI-kompatibler Server, der Reihe nach probiert; der erste erreichbare wird genutzt. Ein-Klick-Presets für LM Studio und Ollama, dazu ein Erreichbarkeits-Status pro Zeile und ein „Test connection"-Button. API-Schlüssel liegen im Schlüsselbund von Obsidian, nicht in der `data.json`. |
+| **global model** (je Endpunkt-Zeile) | `""` (leer) | Welches Modell angefragt wird. Leer lässt den Server entscheiden, welches geladene Modell genutzt wird. Ein Dropdown wird aus `/v1/models` des aktiven Endpunkts gefüllt; über den Reload-Button aktualisierbar. |
+| **Request** | Denken aus | Einklappbarer Abschnitt mit den Sampling-Werten und der Denkstufe, die gesendet werden, je Modus. Transmute nutzt den Modus **Structured**. Die Temperatur geht immer mit `0` hinaus, unabhängig davon, was dieser Abschnitt zeigt. Die erste Antwort darf bis zu 15 Minuten dauern, solange ein Modell lädt; ein Zeitlimit gibt es nicht mehr als Einstellung. |
 | **Default scope** | `file` (Ganze Notiz) | Mit welchem Bereich eine neue Regel startet — „Ganze Notiz" oder „Auswahl". Pro Lauf im Panel umschaltbar. |
 | **Text sample sent to the model** | `2000` (Zeichen) | Wie viel Text des Bereichs zusammen mit der Anweisung mitgeschickt wird, damit das Modell sieht, worauf es trifft. |
 | **Time budget for running the pattern (ms)** | `2000` | Ein Muster, das beim zeilenweisen Durchlauf länger als dieses Budget läuft, wird abgebrochen; die bis dahin gefundenen Treffer werden mit einem Hinweis angezeigt. |
-| **Ask reasoning models to skip thinking** | `true` | Schickt Reasoning-Unterdrückungs-Parameter an den Endpunkt (und trennt `<think>`-Blöcke aus der Antwort ohnehin ab) — Reasoning-fähige lokale Modelle antworten dadurch schneller und zuverlässiger. |
+| **Thinking** (Abschnitt Request, Schalter im Panel) | aus | Ob Reasoning-fähige lokale Modelle vor der Antwort denken. Aus schickt die Unterdrückungs-Parameter der Modellfamilie (und trennt `<think>`-Blöcke aus der Antwort ohnehin ab) — die Modelle antworten dadurch schneller und zuverlässiger. Auch im Panel umschaltbar. |
 
 **Endpoint-Tipp:** die Base-URL **ohne** abschließendes `/v1` eintragen — der Client hängt `/v1` selbst an (ein abschließendes `/v1` wird ohnehin automatisch entfernt, beide Formen funktionieren also).
 

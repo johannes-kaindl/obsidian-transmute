@@ -8,9 +8,9 @@ Each entry starts with the message you see, exactly as the plugin shows it (Engl
 
 **Fix:**
 1. Make sure the server is running and a chat-capable model is loaded.
-2. In **Settings → Community plugins → Transmute**, press **Test connections**. The row shows one of *Reachable*, *Connection refused*, *Unknown host*, *No answer in time*, *Answers, but not like an OpenAI-compatible API* or *Access denied — key missing or invalid*.
+2. In **Settings → Community plugins → Transmute**, press **Test connection**. The row shows one of *Connected*, *Connection refused*, *Unknown host*, *Timed out*, *Answers, but is not an OpenAI-compatible endpoint* or *Access denied — API key missing or invalid*.
 3. *Connection refused* / *Unknown host*: the address is wrong or the server is not running. Enter the base URL without a trailing `/v1`.
-4. *No answer in time*: raise **Request timeout (ms)**, or pick a smaller model.
+4. *Timed out*: check that the server is reachable from this machine. While a model is loading, the first answer can take up to 15 minutes before the request gives up.
 5. *Access denied — key missing or invalid*: add the API key on that endpoint's row.
 
 ## The model did not answer with JSON.
@@ -23,7 +23,7 @@ Each entry starts with the message you see, exactly as the plugin shows it (Engl
 
 **Cause:** A reasoning model spent its whole token budget on thinking and returned nothing.
 
-**Fix:** Switch **Ask reasoning models to skip thinking** on (or use the **Thinking off** toggle in the panel). A model that always thinks (shown as **Always thinks**) needs a different model.
+**Fix:** Set the thinking level of the **Structured** mode to *off* under **Request** in the settings (or use the **Thinking off** toggle in the panel). A model that always thinks (shown as **Always thinks**) needs a different model.
 
 ## The model's answer was cut off at its token limit before anything usable came back. …
 

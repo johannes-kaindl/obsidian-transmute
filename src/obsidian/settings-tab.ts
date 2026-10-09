@@ -3,10 +3,8 @@ import type TransmutePlugin from "../main";
 import type { PresetDef, ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
 import { renderSettingDefinitions, settingBodyHost, refreshSettingsTab } from "../vendor/kit-obsidian/settings_walker";
-import { buildEndpointSourceSection, findEndpointManager } from "../vendor/kit-obsidian/endpoint-source";
+import { getLang } from "../vendor/kit/i18n";
 import { githubHelpUrls, helpSettingDefinition } from "../vendor/kit-obsidian/help-setting";
-import { buildEndpointList } from "./settings/endpoint-list";
-import { probeEndpoint } from "./http";
 
 type ControlDef = {
   type: "text" | "textarea" | "toggle" | "dropdown" | "number";
@@ -52,21 +50,13 @@ export class TransmuteSettingTab extends PluginSettingTab {
         type: "group",
         heading: t("set.groupConnection"),
         items: [
+          // Endpunkte, Modell, Anfrage-Abschnitt (Sampling, Denken): alles aus der Kit-Verbindung.
+          // Eigener Host, weil die Verbindung ihren Container bei jedem Neuzeichnen leert.
           {
-            name: t("set.endpoints"),
-            desc: t("set.endpointsDesc"),
             render: (setting) => {
-              this.renderEndpoints(setting);
+              this.renderConnection(setting);
             },
           },
-          {
-            name: t("set.model"),
-            desc: t("set.modelDesc"),
-            render: (setting) => {
-              this.renderModel(setting);
-            },
-          },
-          { name: t("set.timeout"), desc: t("set.timeoutDesc"), control: { type: "number", key: "timeoutMs", min: 1000 } },
         ],
       },
       {
@@ -90,7 +80,6 @@ export class TransmuteSettingTab extends PluginSettingTab {
           { name: t("set.budgetMs"), desc: t("set.budgetMsDesc"), control: { type: "number", key: "budgetMs", min: 200 } },
           { name: t("set.confirmThreshold"), desc: t("set.confirmThresholdDesc"), control: { type: "number", key: "confirmThreshold", min: 1 } },
           { name: t("set.snapshotKeep"), desc: t("set.snapshotKeepDesc"), control: { type: "number", key: "snapshotKeep", min: 0 } },
-          { name: t("set.suppressReasoning"), desc: t("set.suppressReasoningDesc"), control: { type: "toggle", key: "suppressReasoning" } },
           { name: t("set.showTargetField"), desc: t("set.showTargetFieldDesc"), control: { type: "toggle", key: "showTargetField" } },
         ],
       },
@@ -186,89 +175,21 @@ export class TransmuteSettingTab extends PluginSettingTab {
     );
   }
 
-  private renderEndpoints(setting: Setting): void {
+  private renderConnection(setting: Setting): void {
     const host = settingBodyHost(setting);
-    // Manager da → Kit-Baustein (Wahl, Modell, Import); sonst der eigene Listen-Editor.
-    buildEndpointSourceSection({
-      app: this.app,
-      containerEl: host,
-      capability: "chat",
-      caller: "transmute",
-      transports: ["http", "shortcuts"],
-      choice: () => this.plugin.settings.choice,
-      setChoice: async (c) => {
-        this.plugin.settings.choice = c;
-        await this.plugin.saveSettings();
-        await this.plugin.resolver.resolve();
-      },
-      local: () => this.plugin.settings.endpoints,
-      strings: {
-        managed: t("src.managed"),
-        managedDesc: t("src.managedDesc"),
-        openManager: t("src.openManager"),
-        pickEndpoint: t("src.pickEndpoint"),
-        automatic: t("src.automatic"),
-        model: t("set.model"),
-        importLocal: t("src.importLocal"),
-        imported: (r) => t("src.imported", String(r.added.length), String(r.merged.length)),
-        importFailed: t("src.importFailed"),
-        modelHint: (key) => (key === "" ? "" : t(`src.modelHint.${key}`)),
-        savedSuffix: t("src.saved"),
-        refreshModels: t("set.modelReload"),
-        saveFailed: t("src.saveFailed"),
-      },
-      renderLocalList: () => {
-        this.renderLocalEndpointList(host);
-      },
-      rerender: () => {
-        this.refreshUi();
-      },
-    });
-    if (this.plugin.isShortcutsEndpoint()) new Setting(host).setDesc(t("src.appleHint"));
+    // Zwei Geschwister: die Verbindung leert ihren Container bei jedem Neuzeichnen, der Hinweis darf das nicht verlieren.
+    const connectionEl = host.createDiv({ cls: "transmute-connection" });
+    const hintEl = host.createDiv({ cls: "transmute-connection-hint" });
+    this.plugin.llm.renderSettings(connectionEl, { lang: getLang() });
+    // Der Kurzbefehl-Hinweis haengt an der aufgeloesten Quelle (asynchron, die Verbindung merkt sie sich).
+    void this.plugin.llm.resolve().then((src) => {
+      if (src.transport === "shortcuts" && hintEl.isConnected) new Setting(hintEl).setDesc(t("src.appleHint"));
+    }).catch(() => undefined);
   }
 
-  private renderLocalEndpointList(host: HTMLElement): void {
-    buildEndpointList(host, {
-      list: this.plugin.settings.endpoints,
-      setList: (next) => {
-        this.plugin.settings.endpoints = next;
-      },
-      probe: (ep) => probeEndpoint(ep, 5000),
-      commit: () => {
-        void this.plugin.saveSettings().then(() => {
-          this.plugin.resolver.invalidate();
-          this.refreshUi();
-        });
-      },
-    });
-  }
-
-  private renderModel(setting: Setting): void {
-    if (findEndpointManager(this.app) !== null) {
-      setting.setDesc(t("src.modelManaged"));
-      return;
-    }
-    const host = settingBodyHost(setting);
-    const row = new Setting(host).setName(t("set.model")).setDesc(t("set.modelDesc"));
-    row.addDropdown((d) => {
-      d.addOption("", t("set.modelAuto"));
-      for (const id of this.plugin.knownModels) d.addOption(id, id);
-      d.setValue(this.plugin.settings.model);
-      d.onChange((value) => {
-        this.plugin.settings.model = value;
-        void this.plugin.saveSettings();
-      });
-    });
-    row.addExtraButton((b) =>
-      b
-        .setIcon("refresh-cw")
-        .setTooltip(t("set.modelReload"))
-        .onClick(() => {
-          void this.plugin.reloadModels().then(() => {
-            this.refreshUi();
-          });
-        }),
-    );
+  /** Die Verbindung haelt Modell-Listen fuer den Tab — beim Schliessen verwerfen. */
+  hide(): void {
+    this.plugin.llm.hideSettings();
   }
 
   /** Auf ≥1.13 rendert das Framework deklarativ und ruft display() nie. */
@@ -297,10 +218,6 @@ export class TransmuteSettingTab extends PluginSettingTab {
   getControlValue(key: string): string | number | boolean | undefined {
     const s = this.plugin.settings;
     switch (key) {
-      case "model":
-        return s.model;
-      case "timeoutMs":
-        return s.timeoutMs;
       case "defaultScope":
         return s.defaultScope;
       case "sampleChars":
@@ -311,8 +228,6 @@ export class TransmuteSettingTab extends PluginSettingTab {
         return s.confirmThreshold;
       case "snapshotKeep":
         return s.snapshotKeep;
-      case "suppressReasoning":
-        return s.suppressReasoning;
       case "showTargetField":
         return s.showTargetField;
       default:
@@ -327,12 +242,6 @@ export class TransmuteSettingTab extends PluginSettingTab {
       return Number.isFinite(parsed) ? parsed : fallback;
     };
     switch (key) {
-      case "model":
-        s.model = String(value);
-        break;
-      case "timeoutMs":
-        s.timeoutMs = Math.max(1000, asInt(s.timeoutMs));
-        break;
       case "defaultScope": {
         // Vollstaendig ueber die Union gehen: ein Vergleich auf eine einzelne Variante
         // laesst jede spaeter hinzugekommene still auf "file" zurueckfallen.
@@ -352,9 +261,6 @@ export class TransmuteSettingTab extends PluginSettingTab {
         break;
       case "snapshotKeep":
         s.snapshotKeep = Math.max(0, asInt(s.snapshotKeep));
-        break;
-      case "suppressReasoning":
-        s.suppressReasoning = Boolean(value);
         break;
       case "showTargetField":
         s.showTargetField = Boolean(value);

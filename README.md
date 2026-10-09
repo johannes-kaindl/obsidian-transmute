@@ -72,10 +72,10 @@ Open **Settings → Community plugins → Transmute**; the settings are grouped 
 
 
 - **Endpoints** — an ordered list of OpenAI-compatible servers (local or hosted, each with an optional API key); the first reachable one is used. With the **LLM Endpoint Manager** plugin installed, endpoints and keys come from there. Enter the base URL without a trailing `/v1`.
-- **Model** — empty lets the server pick whatever is loaded; a dropdown is filled from the endpoint's `/v1/models`.
-- **Request timeout (ms)** — how long to wait for the model to answer (default `120000`).
+- **Global model** (per endpoint row) — empty lets the server pick whatever is loaded; a dropdown is filled from the endpoint's `/v1/models`.
+- **Request** — the sampling values and the thinking level that are sent (collapsible).
 - **Default scope** — "Whole note", "Selection" or "Whole vault".
-- **Ask reasoning models to skip thinking** — on by default; faster and more reliable answers from reasoning-capable local models.
+- **Thinking** (in the **Request** section, also a toggle in the panel) — off by default; faster and more reliable answers from reasoning-capable local models.
 
 Every setting with its default and effect: [settings table](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/docs/manual/features-and-usage.md#configuration).
 

@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The model connection now comes from obsidian-kit 0.51.2** (`createLlmConnection`) and code-kit 0.15.0 instead of a local resolver and client. The settings tab shows the kit's endpoint list and a new collapsible **Request** section (sampling values and thinking level per mode, with a note on what is actually sent).
+- **Longer wait for the first answer.** The request now waits up to 15 minutes for an answer (was 2 minutes), so a model that is still loading no longer runs into a timeout. An Apple Shortcut keeps its own limit plus a margin.
+- **One client per endpoint**, and the backend (LM Studio, Ollama, …) is detected once per endpoint and remembered for 30 seconds.
+- **Secrets are redacted before sending, and restored in the answer.** Keys of well-known providers, `Bearer` tokens (16 characters or more) and private-key blocks in the text sample go to the model as placeholders (`[redacted-token-1]`); if the model repeats one in its rule, the rule you see and apply carries the original. The server never sees the secret.
+- **API keys move to Obsidian's keychain.** An existing key in `data.json` is moved on the first run; afterwards `data.json` holds only a reference. Needs Obsidian 1.11.4 or newer (`minAppVersion` was 1.8.7).
+- **The endpoint's model choice only counts with the LLM Endpoint Manager.** Without it, an old manager choice can no longer override the model of the local list.
+
+### Removed
+
+- The setting **Request timeout (ms)**: the limits come from the connection now (see above).
+- The setting **Ask reasoning models to skip thinking**: use the thinking level of the **Structured** mode in the **Request** section instead, or the **Thinking** toggle in the panel (off = off, on = the last level you chose, "low" at first). An existing "off" stays off; an existing "on" becomes the level "low".
+- The separate **Model** row in the settings: the model is chosen per endpoint row ("global model") or, with the manager, in the endpoint section.
+
+### Notes
+
+- The temperature stays `0` for every request, so the same text and instruction give the same rule. The **Request** section shows the mode's profile temperature (0.1) for information; it does not apply here.
+
 ## [0.9.1] — 2026-10-03
 
 ### Changed

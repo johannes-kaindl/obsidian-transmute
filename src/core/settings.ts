@@ -1,6 +1,7 @@
 import { mergeSettings } from "../vendor/kit/settings";
 import { migrateEndpointList, type EndpointConfig } from "../vendor/kit/endpoint_config";
 import type { EndpointChoice } from "../vendor/kit/endpoint-source";
+import { onLevelFor, sanitizeRequestSettings, type RequestSettings } from "../vendor/kit/sampling-profiles";
 import { removeNewlinesPreset } from "./presets/remove-newlines";
 
 export type ScopeKind = "file" | "selection" | "vault";
@@ -22,8 +23,9 @@ export type TransmuteSettings = {
    *  solange der Manager installiert ist — sonst zaehlen `endpoints` und `model`. */
   choice: EndpointChoice;
   model: string;
-  timeoutMs: number;
-  suppressReasoning: boolean;
+  /** Anfrage-Parameter und Denkstufe je Modus (Kit-Abschnitt „Request“). Transmute fragt im Modus
+   *  `structured`: die Antwort ist ein JSON-Vertrag. */
+  request: RequestSettings;
   sampleChars: number;
   budgetMs: number;
   defaultScope: ScopeKind;
@@ -52,8 +54,7 @@ export const DEFAULT_SETTINGS: TransmuteSettings = {
   endpoints: [{ url: "http://127.0.0.1:1234" }],
   choice: {},
   model: "",            // modellagnostisch: kommt aus GET /v1/models
-  timeoutMs: 120000,
-  suppressReasoning: true,
+  request: { overrides: {}, thinking: {}, lastOnLevel: {}, levelPickerInChat: false },
   sampleChars: 2000,
   budgetMs: 2000,
   defaultScope: "file",
@@ -64,7 +65,10 @@ export const DEFAULT_SETTINGS: TransmuteSettings = {
 };
 
 export function loadSettings(raw: unknown): TransmuteSettings {
-  const merged = mergeSettings(DEFAULT_SETTINGS, raw);
+  // Die beiden abgeloesten Schluessel (timeoutMs, suppressReasoning) ueberleben mergeSettings als
+  // Fremdfelder — hier raus, migrateRequest liest sie aus `raw`.
+  const { timeoutMs: _timeoutMs, suppressReasoning: _suppressReasoning, ...merged } =
+    mergeSettings(DEFAULT_SETTINGS, raw) as TransmuteSettings & { timeoutMs?: unknown; suppressReasoning?: unknown };
   // mergeSettings ist ein shallow, typ-blinder Merge: `endpoints` kann aus einer data.json
   // von vor 0.5.0 noch string[] sein. migrateEndpointList ist die einzige Stelle, die das
   // geradezieht — danach ist der Typ im ganzen Repo verlässlich.
@@ -82,5 +86,18 @@ export function loadSettings(raw: unknown): TransmuteSettings {
         ...(rawChoice.model ? { model: String(rawChoice.model) } : {}),
       }
     : {};
-  return { ...merged, endpoints: migrateEndpointList(undefined, rawList), presets, choice };
+  return { ...merged, endpoints: migrateEndpointList(undefined, rawList), presets, choice, request: migrateRequest(raw) };
+}
+
+/** `request` aus der data.json — und die beiden Einstellungen, die der Verbindungs-Tausch (Welle 15) abloest:
+ *  `timeoutMs` faellt weg (die Fristen kommen aus der Verbindung), `suppressReasoning: false`
+ *  wird zur Denkstufe des Modus `structured` (der Default des Modus ist „off“, `true` war also
+ *  schon die Voreinstellung). Nur wenn der Nutzer `request.thinking.structured` nicht selbst gesetzt hat. */
+function migrateRequest(raw: unknown): RequestSettings {
+  const obj = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+  const { settings } = sanitizeRequestSettings(obj.request);
+  if (obj.suppressReasoning === false && settings.thinking.structured === undefined) {
+    settings.thinking.structured = onLevelFor(settings, "structured");
+  }
+  return settings;
 }

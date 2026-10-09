@@ -37,3 +37,37 @@ describe("loadSettings — Endpunkt-Wahl (choice)", () => {
     expect(loadSettings({ choice: "quatsch" }).choice).toEqual({});
   });
 });
+
+describe("loadSettings — Anfrage-Block (request)", () => {
+  it("Default ist ein frischer Block, kein geteiltes Objekt", () => {
+    const a = loadSettings({}).request;
+    expect(a).toEqual({ overrides: {}, thinking: {}, lastOnLevel: {}, levelPickerInChat: false });
+    a.thinking.structured = "high";
+    expect(loadSettings({}).request.thinking).toEqual({});
+    expect(DEFAULT_SETTINGS.request.thinking).toEqual({});
+  });
+
+  it("behaelt gueltige Werte und verwirft ungueltige", () => {
+    const out = loadSettings({ request: { thinking: { structured: "low", agent: "wild" }, overrides: { structured: { unknown: { temperature: 0.3, top_p: 5 } } } } }).request;
+    expect(out.thinking).toEqual({ structured: "low" });
+    expect(out.overrides.structured?.unknown).toEqual({ temperature: 0.3 });
+  });
+
+  it("suppressReasoning: false wird zur Denkstufe des Modus structured", () => {
+    expect(loadSettings({ suppressReasoning: false }).request.thinking.structured).toBe("low");
+  });
+
+  it("suppressReasoning: true bleibt beim Default (aus)", () => {
+    expect(loadSettings({ suppressReasoning: true }).request.thinking).toEqual({});
+  });
+
+  it("eine ausdrueckliche Stufe des Nutzers gewinnt gegen die alte Einstellung", () => {
+    expect(loadSettings({ suppressReasoning: false, request: { thinking: { structured: "high" } } }).request.thinking.structured).toBe("high");
+  });
+
+  it("nimmt die abgeloesten Schluessel nicht ins Ergebnis mit", () => {
+    const out = loadSettings({ suppressReasoning: false, timeoutMs: 5000 }) as Record<string, unknown>;
+    expect("suppressReasoning" in out).toBe(false);
+    expect("timeoutMs" in out).toBe(false);
+  });
+});

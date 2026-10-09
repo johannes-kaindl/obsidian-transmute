@@ -79,6 +79,12 @@ die Timer-Kette des Fensters und meldet die Bedingungen im Ergebnis mit.
 
 ## Durchläufe
 
+### 2026-10-09 — Obsidian 1.14.4, Welle 15 (Verbindungs-Tausch auf `createLlmConnection`) · **43 grün · 0 rot · 1 übersprungen von 44**
+
+Vorher (frischer Prozess nach Aufwärmlauf): 39 grün · 0 rot · 1 übersprungen von 40. Der Aufwärmlauf im selben Fenster direkt nach dem Vertrauensdialog zeigte 31 grün · 5 rot (Bestätigungsdialog, Anwenden, Snapshot, Rückgängig) und zählt nicht. Neu sind V1–V4: V1 der Transport sieht den Platzhalter statt `Bearer …`, die Regel kommt im Original an (der Fake-Endpunkt spiegelt den Platzhalter in `regex`), V2 der Schlüssel steht nach `resolve({ force: true })` nicht mehr in `data.json` (stattdessen `secretId`) und erreicht den Server trotzdem als `Authorization`-Kopf, V3 die Anfrage trägt `stream: false` und `temperature: 0`, V4 derselbe Weg mit einem mehrzeiligen PEM-Block, `JSON.parse` gelingt und das Original ist da.
+
+Gegenprobe: mit `restoreContent: "text"` statt `"json"` ist V4 **rot** (`JSON.parse: Bad control character in string literal`), V1–V3 bleiben grün. Der Treiber ruft `p.llm.invalidate()` und `p.llm.resolve()` statt der alten `p.resolver`/`isShortcutsEndpoint()`. Der eine übersprungene Punkt („Renderer atmet“) ist der Vorbestand der Baseline.
+
 ### 2026-10-01 — Obsidian 1.14.3, Welle 14 (Apple-Intelligence-Endpunkt) · **39 grün · 0 rot · 1 übersprungen von 40**
 
 Vorher (frischer Prozess nach Aufwärmlauf): 34 grün · 0 rot · 1 übersprungen von 35. Neu sind S1–S5: S1 der Fake-Manager liefert den Apple-Endpunkt nur bei Opt-in (misst den Fake selbst), S2 das Dropdown zeigt „Apple Intelligence (on-device)“, S3 die Wahl macht `isShortcutsEndpoint()` wahr und der Hinweis zu den Grenzen steht im Tab, S4 ein Lauf öffnet die `shortcuts://`-URL mit dem Namen und dem Nutzertext (`window.open` **vor** dem Anstoß gestubbt, im `finally` zurückgebaut), S5 die Zeitüberschreitung (Kurzbefehl-Frist 3 s, kein Callback) endet im Fehlerzustand mit dem Schlüssel `error.shortcut.timeout`.

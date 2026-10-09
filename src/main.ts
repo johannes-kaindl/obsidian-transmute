@@ -1,14 +1,14 @@
 import { Plugin, getLanguage, type WorkspaceLeaf } from "obsidian";
-import { RuleClient, type CompleteResult } from "./core/llm/client";
+import { toCompleteResult, type CompleteResult } from "./core/llm/client";
 import { TransmuteSession, type CompleteFeature } from "./core/session";
 import { DEFAULT_SETTINGS, loadSettings, MAX_HITS, type TransmuteSettings } from "./core/settings";
 import type { ChatMessage } from "./core/types";
 import "./core/i18n/strings";
-import { pickLang, setLang, t } from "./vendor/kit/i18n";
-import type { EndpointConfig } from "./vendor/kit/endpoint_config";
+import { getLang, pickLang, setLang, t } from "./vendor/kit/i18n";
+import { onLevelFor, thinkingFor } from "./vendor/kit/sampling-profiles";
 import { findEndpointManager } from "./vendor/kit-obsidian/endpoint-source";
-import { EndpointResolver } from "./obsidian/endpoint";
-import { makeChatClient, obsidianTransport, pingEndpoint } from "./obsidian/http";
+import { createLlmConnection, type LlmConnection, type LlmResult } from "./vendor/kit-obsidian/llm-connection";
+import { createShortcutsChatTransport, requestUrlTransport } from "./vendor/kit-obsidian/chat-transport";
 import { createShortcutsBridge, type ShortcutsBridge } from "./vendor/kit-obsidian/shortcuts-bridge";
 import { logToLab } from "./vendor/kit-obsidian/lab-client";
 import { TransmuteSettingTab } from "./obsidian/settings-tab";
@@ -26,9 +26,8 @@ function safeGetLanguage(): string | null {
 
 export default class TransmutePlugin extends Plugin {
   settings: TransmuteSettings = DEFAULT_SETTINGS;
-  resolver!: EndpointResolver;
-  knownModels: string[] = [];
-  private client!: RuleClient;
+  /** Die ganze LLM-Anbindung: Endpunkt-Quelle, Modellliste, Anfrage-Parameter, Client, Settings-Abschnitte. */
+  llm!: LlmConnection;
   /** Bruecke zu Apples on-device-Modell (Kurzbefehl) — im Konsumenten gebaut, der Manager-Vertrag exponiert keine. */
   private shortcutsBridge!: ShortcutsBridge;
   private labMismatchWarned = false;
@@ -38,43 +37,53 @@ export default class TransmutePlugin extends Plugin {
     setLang(pickLang(safeGetLanguage()));
     this.settings = loadSettings(await this.loadData());
 
-    this.resolver = new EndpointResolver(
-      () => this.settings.endpoints,
-      (endpoint) => pingEndpoint(endpoint, 5000),
-      { manager: () => findEndpointManager(this.app), choice: () => this.settings.choice },
-    );
-
     this.shortcutsBridge = createShortcutsBridge(this, { protocolAction: "transmute-shortcut" });
-    this.client = new RuleClient((ms, via) => makeChatClient(ms, via, this.shortcutsBridge), obsidianTransport, () => ({
-      endpoint: this.activeEndpoint.url,
-      apiKey: this.activeEndpoint.apiKey,
-      model: this.activeModel(),
-      timeoutMs: this.settings.timeoutMs,
-      suppressReasoning: this.settings.suppressReasoning,
-      ...(this.resolver.last?.transport === "shortcuts" && this.resolver.last.shortcut ? { via: { transport: "shortcuts" as const, shortcut: this.resolver.last.shortcut } } : {}),
-    }));
+    this.llm = createLlmConnection({
+      app: this.app,
+      pluginId: this.manifest.id,
+      caller: "transmute",
+      capability: "chat",
+      // Die Antwort ist ein JSON-Vertrag (Regel, Ersetzung, Erklaerung): Modus „structured“.
+      mode: "structured",
+      // Ohne Stream, wie bisher: `requestUrl` (Hauptprozess, kein Origin, keine CORS-Weigerung) statt
+      // des XHR-Streams; der Kurzbefehl (Apple Intelligence) liefert ohnehin eine volle Completion.
+      stream: false,
+      // Die Antwort wird als JSON aus `content` geparst: ein geschwaerzter, mehrzeiliger Platzhalter
+      // (PEM) muss JSON-escaped zurueckkommen, sonst waere das JSON nach der Restaurierung ungueltig.
+      restoreContent: "json",
+      transports: {
+        http: requestUrlTransport,
+        fallback: "none",
+        shortcuts: (shortcut) => createShortcutsChatTransport({ bridge: this.shortcutsBridge, shortcut }),
+      },
+      // „Am Limit ohne Text“ ist hier eine eigene Fehlerart (error.truncatedEmpty), kein Ergebnis.
+      truncated: "error",
+      lang: () => getLang(),
+      getSettings: () => ({
+        endpoints: this.settings.endpoints,
+        choice: this.settings.choice,
+        model: this.settings.model,
+        request: this.settings.request,
+      }),
+      // Erst in die Settings schreiben, dann speichern: die Endpunkt-Liste liest ihre Zeilen danach zurueck.
+      persist: (patch) => {
+        Object.assign(this.settings, patch);
+        return this.saveSettings();
+      },
+    });
 
     this.sessionInstance = new TransmuteSession(
       {
         complete: async (messages, feature, turnId) => {
-          // Endpunkt einmal pro Session aufloesen, nicht pro Anfrage.
-          const resolved = await this.resolver.resolve();
-          if (resolved !== null) this.activeEndpoint = resolved;
-          // Der Manager entscheidet allein — kein stiller Rueckfall auf einen alten Endpunkt.
-          // Ein fehlender Schluessel liegt im Manager-Plugin, nicht in der lokalen Liste.
-          else if (this.resolver.last?.kind === "manager") {
-            return { ok: false, error: t(this.resolver.last.reason === "secret-missing" ? "error.secretMissing" : "error.managerNoEndpoint") } satisfies CompleteResult;
-          }
-          const endpoint = this.activeEndpoint;
           const started = Date.now();
-          const res = await this.client.complete(messages);
+          // Eine Regel soll bei gleicher Eingabe gleich ausfallen: Temperatur 0 je Aufruf, das Profil gaebe 0.1.
+          const r = await this.llm.complete({ messages }, { overrides: { temperature: 0 } });
+          const res = this.toResult(r);
           this.reportToLab({
             feature,
-            model: this.activeModel(),
-            endpointUrl: endpoint.url,
-            apiKey: endpoint.apiKey,
-            messages,
             result: res,
+            source: r.source,
+            messages,
             latencyMs: Date.now() - started,
             turnId,
             promptTemplate: messages.find((m) => m.role === "system")?.content ?? "",
@@ -95,10 +104,7 @@ export default class TransmutePlugin extends Plugin {
           session: () => this.sessionInstance,
           defaultScope: () => this.settings.defaultScope,
           showTargetField: () => this.settings.showTargetField,
-          listModels: async () => {
-            await this.reloadModels();
-            return this.knownModels;
-          },
+          listModels: async () => (await this.llm.models({ force: true })).models,
           // Im Manager-Fall ist `settings.model` nur der Rueckfall fuer die lokale Liste — die
           // Modellwahl gehoert dann in `choice`, sonst aendert das Panel-Feld nichts.
           getModel: () => (findEndpointManager(this.app) !== null ? (this.settings.choice.model ?? "") : this.settings.model),
@@ -107,9 +113,14 @@ export default class TransmutePlugin extends Plugin {
             else this.settings.model = model;
             void this.saveSettings();
           },
-          getSuppressReasoning: () => this.settings.suppressReasoning,
+          // Der Schalter im Panel bedient die Denkstufe des Modus „structured“ (Settings → Request):
+          // aus = „off“, an = die zuletzt gewaehlte Stufe.
+          getSuppressReasoning: () => thinkingFor(this.settings.request, "structured") === "off",
           setSuppressReasoning: (value: boolean) => {
-            this.settings.suppressReasoning = value;
+            const req = this.settings.request;
+            const current = thinkingFor(req, "structured");
+            if (current !== "off") req.lastOnLevel.structured = current;
+            req.thinking.structured = value ? "off" : onLevelFor(req, "structured");
             void this.saveSettings();
           },
           runOptions: () => ({
@@ -144,16 +155,17 @@ export default class TransmutePlugin extends Plugin {
     // nichts zu tun
   }
 
-  private activeEndpoint: EndpointConfig = { url: "" };
-
-  /** Kurzbefehl-Endpunkt (Apple Intelligence)? Der Settings-Tab zeigt dazu den Hinweis auf die Grenzen. */
-  isShortcutsEndpoint(): boolean { return this.resolver.last?.transport === "shortcuts"; }
-
-  /** Modell fuer den naechsten Aufruf: mit Manager die aufgeloeste Schreibweise (Wahl →
-   *  Standard des Endpunkts, Alias aufgeloest), sonst die lokale Einstellung wie bisher. */
-  private activeModel(): string {
-    const last = this.resolver.last;
-    return last?.kind === "manager" ? last.sentModel : this.settings.model;
+  /** `LlmResult` der Verbindung → `CompleteResult`. Ohne Endpunkt: mit Manager nennt die Meldung den
+   *  Manager (Schluessel fehlt oder kein nutzbarer Endpunkt), ohne ihn die lokale Liste. */
+  private toResult(r: LlmResult): CompleteResult {
+    const shortcuts = r.source.transport === "shortcuts";
+    if (!r.ok && r.kind === "no-endpoint" && !shortcuts) {
+      if (r.source.kind === "manager") {
+        return { ok: false, error: t(r.detail === "secret-missing" ? "error.secretMissing" : "error.managerNoEndpoint") };
+      }
+      return { ok: false, error: t("error.noEndpoint") };
+    }
+    return toCompleteResult(r, shortcuts);
   }
 
   /** Die zurzeit bearbeitete Notiz, falls eine offen ist — fail-open: bleibt leer, greift
@@ -168,28 +180,27 @@ export default class TransmutePlugin extends Plugin {
    *  einen Lauf nie mitreissen — Muster koda-agent 004e329/vault-rag `reportToLab`. */
   private reportToLab(input: {
     feature: CompleteFeature;
-    model: string;
-    endpointUrl: string;
-    apiKey?: string;
-    messages: ChatMessage[];
     result: CompleteResult;
+    source: LlmResult["source"];
+    messages: ChatMessage[];
     latencyMs: number;
     turnId: string;
     promptTemplate: string;
     contextPaths: string[];
   }): void {
+    const apiKey = input.source.config?.apiKey;
     const lab = logToLab(this.app, {
       plugin: "transmute",
       feature: input.feature,
-      model: input.model,
-      endpointUrl: input.endpointUrl,
+      model: input.source.sentModel || input.source.model,
+      endpointUrl: input.source.config?.url ?? "",
       messages: input.messages,
       content: input.result.ok ? input.result.content : "",
       ...(input.result.ok && input.result.reasoning !== null ? { reasoning: input.result.reasoning } : {}),
       ...(input.result.ok && input.result.truncated ? { finishReason: "length" } : {}),
       latencyMs: input.latencyMs,
       ...(input.result.ok ? {} : { error: input.result.error }),
-      ...(input.apiKey ? { secrets: [input.apiKey] } : {}),
+      ...(apiKey ? { secrets: [apiKey] } : {}),
       ...(input.contextPaths.length > 0 ? { contextPaths: input.contextPaths } : {}),
       ...(input.promptTemplate !== "" ? { promptTemplate: input.promptTemplate } : {}),
       turnId: input.turnId,
@@ -204,17 +215,6 @@ export default class TransmutePlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
-  }
-
-  async reloadModels(): Promise<void> {
-    // Mit Manager entscheidet er allein; der lokale Rueckfall gilt nur ohne ihn.
-    const managed = findEndpointManager(this.app) !== null;
-    const resolved = (await this.resolver.resolve()) ?? (managed ? undefined : this.settings.endpoints[0]);
-    if (!resolved || resolved.url.trim().length === 0) {
-      this.knownModels = [];
-      return;
-    }
-    this.knownModels = await this.client.listModels(resolved);
   }
 
   private async activatePanel(): Promise<void> {

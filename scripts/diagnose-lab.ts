@@ -21,7 +21,11 @@
  *   npm run lab:diagnose -- --note "$VAULT/_transmute-smoke/0.4.0-testtext.md"
  */
 import { readFileSync } from "node:fs";
-import { RuleClient, type JsonTransport } from "../src/core/llm/client";
+import { toCompleteResult } from "../src/core/llm/client";
+import { normalizeEndpoint } from "../src/vendor/kit/endpoint";
+import { authHeaders } from "../src/vendor/kit/endpoint_config";
+import { extractModelIds } from "../src/vendor/kit/endpoint_diagnostics";
+import { suppressParams } from "../src/vendor/kit/reasoning";
 import { createChatClient, type SseTransport } from "../src/vendor/kit-obsidian/chat-client";
 import { buildDiagnosePrompt } from "../src/core/llm/prompt";
 import { parseDiagnoseResponse } from "../src/core/llm/response";
@@ -81,12 +85,17 @@ const nodeClock = {
   setTimeout: (fn: () => void, ms: number) => globalThis.setTimeout(fn, ms) as unknown as number,
   clearTimeout: (id: number) => globalThis.clearTimeout(id as unknown as ReturnType<typeof setTimeout>),
 };
-const transport: JsonTransport = {
-  async getJson(url, timeoutMs, headers) {
-    const res = await fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
-    return { status: res.status, text: await res.text() };
-  },
-};
+
+/** Modell-Liste per fetch (das Plugin laedt sie ueber die Verbindung, die es ohne Obsidian nicht gibt). */
+async function listModels(endpoint: string, apiKey: string | undefined): Promise<string[]> {
+  const res = await fetch(`${normalizeEndpoint(endpoint)}/v1/models`, { headers: authHeaders(apiKey), signal: AbortSignal.timeout(180000) });
+  if (!res.ok) return [];
+  try {
+    return extractModelIds(JSON.parse(await res.text()));
+  } catch {
+    return [];
+  }
+}
 
 function flag(name: string): string | null {
   const at = process.argv.indexOf(`--${name}`);
@@ -105,16 +114,22 @@ async function main(): Promise<void> {
   // beim echten Modell auch ankommt.
   setLang(lang);
 
-  const client = new RuleClient((timeoutMs) => createChatClient({ transport: chatTransport, clock: nodeClock, nonStreamTimeoutMs: timeoutMs }), transport, () => ({
-    endpoint,
-    apiKey,
-    model: flag("model") ?? "",
-    timeoutMs: 180000,
-    suppressReasoning: !thinking,
-  }));
+  const chatClient = createChatClient({ transport: chatTransport, clock: nodeClock, nonStreamTimeoutMs: 180000 });
+  const client = {
+    complete: async (messages: ReturnType<typeof buildDiagnosePrompt>, model: string) =>
+      toCompleteResult(
+        await chatClient.complete({
+          endpoint: { url: endpoint, ...(apiKey ? { apiKey } : {}) },
+          model,
+          messages,
+          params: { temperature: 0, ...suppressParams(!thinking) },
+          stream: false,
+        }),
+        false,
+      ),
+  };
 
-  const models =
-    flag("model") !== null ? [flag("model") as string] : await client.listModels({ url: endpoint, apiKey });
+  const models = flag("model") !== null ? [flag("model") as string] : await listModels(endpoint, apiKey);
   const chat = models.filter((id) => !id.includes("embed"));
   if (chat.length === 0) {
     console.log(`Kein Modell erreichbar unter ${endpoint} — läuft der Server?`);
@@ -143,7 +158,7 @@ async function main(): Promise<void> {
       console.log(`   Sonden: ${ok ? "OK" : "ABWEICHUNG"}  erwartet [${testCase.expect.join(", ")}]  bekommen [${seen}]`);
 
       const started = Date.now();
-      const res = await client.complete(buildDiagnosePrompt(testCase.rule, findings, text, ""));
+      const res = await client.complete(buildDiagnosePrompt(testCase.rule, findings, text, ""), model);
       const secs = ((Date.now() - started) / 1000).toFixed(1);
 
       if (!res.ok) {

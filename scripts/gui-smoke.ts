@@ -834,16 +834,19 @@ async function abschnittSetter(cdp: Cdp): Promise<void> {
 /**
  * Ein eigener HTTP-Server statt des konfigurierten Endpunkts — derselbe Grund wie bei
  * koda-agent Punkt 40/41: ein Smoke, der an einem echten Modell haengt, misst das Modell
- * mit statt die Meldestrecke. `requestUrl` (der Transport dieses Plugins, `obsidian/http.ts`)
+ * mit statt die Meldestrecke. `requestUrl` (Transport der Verbindung: `requestUrlTransport` aus dem Kit)
  * umgeht CORS — die OPTIONS/CORS-Antwort ist trotzdem eingebaut (REGISTRY GUI-Smoke-Zeile,
  * Befund koda), defensiv fuer den Fall, dass der Renderer den Request je ueber `fetch`
  * schickt statt ueber `requestUrl`.
  */
 async function startFakeEndpoint(
   draft: { regex: string; flags: string; replacement: string; explanation: string },
-): Promise<{ url: string; close: () => Promise<void>; chatCalls: () => number; lastModel: () => string }> {
+  opts: { echoPlaceholder?: boolean } = {},
+): Promise<{ url: string; close: () => Promise<void>; chatCalls: () => number; lastModel: () => string; lastBody: () => string; lastAuth: () => string }> {
   let chatCalls = 0;
   let lastModel = "";
+  let lastBody = "";
+  let lastAuth = "";
   const server: Server = createServer((req, res) => {
     if (req.method === "OPTIONS") {
       res.writeHead(204, {
@@ -860,10 +863,16 @@ async function startFakeEndpoint(
       req.on("data", (c: Buffer) => teile.push(c));
       req.on("end", () => {
         chatCalls += 1;
-        try { lastModel = String((JSON.parse(Buffer.concat(teile).toString("utf8")) as { model?: unknown }).model ?? ""); } catch { lastModel = "?"; }
+        lastBody = Buffer.concat(teile).toString("utf8");
+        lastAuth = String(req.headers.authorization ?? "");
+        try { lastModel = String((JSON.parse(lastBody) as { model?: unknown }).model ?? ""); } catch { lastModel = "?"; }
+        // Schwaerzung: das Modell sieht Platzhalter `[redacted-<art>-<n>]`; spiegelt es einen in `regex`
+        // zurueck, muss das Plugin das Original sehen (umkehrbar).
+        const platzhalter = opts.echoPlaceholder === true ? /\[redacted-[a-z-]+-\d+\]/.exec(lastBody)?.[0] : undefined;
+        const antwort = platzhalter !== undefined ? { ...draft, regex: platzhalter } : draft;
         res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
         res.end(JSON.stringify({
-          choices: [{ message: { content: JSON.stringify(draft) }, finish_reason: "stop" }],
+          choices: [{ message: { content: JSON.stringify(antwort) }, finish_reason: "stop" }],
         }));
       });
       return;
@@ -882,6 +891,8 @@ async function startFakeEndpoint(
     close: () => new Promise<void>((resolve) => { server.close(() => { resolve(); }); }),
     chatCalls: () => chatCalls,
     lastModel: () => lastModel,
+    lastBody: () => lastBody,
+    lastAuth: () => lastAuth,
   };
 }
 
@@ -925,14 +936,13 @@ async function abschnittLlmLab(cdp: Cdp): Promise<void> {
       const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
       p.settings.endpoints = [{ url: ${JSON.stringify(fake.url)} }];
       await p.saveSettings();
-      // resolver.resolve() cacht den ersten erreichbaren Endpunkt fuer die Session-Laufzeit
-      // (EndpointResolver-Kopfkommentar). Hat ein frueherer Abschnitt (Modell-Liste laden,
-      // Settings-Tab) bereits aufgeloest — z. B. auf den echten Default ":1234" — wuerde
-      // dieser Cache den Stub-Endpunkt sonst stillschweigend ignorieren und die Anfrage
-      // ginge an einen echten, moeglicherweise langsamen/inkompatiblen Server: „generating"
-      // haengt dann unbegrenzt, ohne dass der Stub je einen Request sieht (gemessen an
-      // genau diesem Punkt, Welle 7).
-      p.resolver.invalidate();
+      // Die Verbindung merkt sich die Aufloesung des lokalen Endpunkts bis invalidate(). Hat ein
+      // frueherer Abschnitt (Modell-Liste laden, Settings-Tab) bereits aufgeloest — z. B. auf den
+      // echten Default ":1234" —, wuerde dieser Merker den Stub-Endpunkt sonst stillschweigend
+      // ignorieren und die Anfrage ginge an einen echten, moeglicherweise langsamen/inkompatiblen
+      // Server: „generating" haengt dann unbegrenzt, ohne dass der Stub je einen Request sieht
+      // (gemessen an genau diesem Punkt, Welle 7).
+      p.llm.invalidate();
       // Direkter Aufruf der Sitzung — derselbe Pfad, den der Generieren-Knopf im Panel
       // ausloest (view.ts::generate() ruft nichts anderes). Kein DOM-Umweg noetig: eine
       // turnId misst der Port, keine Tastatureingabe.
@@ -975,7 +985,103 @@ async function abschnittLlmLab(cdp: Cdp): Promise<void> {
       const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
       p.settings.endpoints = ${JSON.stringify(vorEndpoints)};
       await p.saveSettings();
-      p.resolver.invalidate();
+      p.llm.invalidate();
+      return true;
+    `).catch(() => undefined);
+  }
+}
+
+// --- Abschnitt: Verbindung (Welle 15) -------------------------------------------
+
+/** Die Kit-Verbindung traegt drei Zusagen, die kein Unit-Test beruehrt: (V1) Schwaerzung — der
+ *  Transport sieht den Platzhalter, die Regel des Plugins das Original; (V2) der Schluessel liegt
+ *  im Schluesselbund, nicht in data.json, und kommt trotzdem als Authorization-Kopf an; (V3) die
+ *  Anfrage geht ohne Stream, mit Temperatur 0 und im Modus „structured“ (kein Denken). */
+async function abschnittVerbindung(cdp: Cdp): Promise<void> {
+  const NAMEN = [
+    "V1 Schwaerzung: der Transport sieht den Platzhalter, die Regel kommt im Original an",
+    "V2 Schluessel wandert in den Schluesselbund und erreicht den Server trotzdem",
+    "V3 Anfrage: ohne Stream, Temperatur 0, ohne Denken",
+    "V4 Schwaerzung mit PEM: das JSON bleibt gueltig, das mehrzeilige Original ist da",
+  ] as const;
+  const TOKEN = "Bearer Zk3QpWv8LmN2xY7aTb5RcD9e";
+  const fake = await startFakeEndpoint({ regex: "foo", flags: "", replacement: "bar", explanation: "e" }, { echoPlaceholder: true });
+  const vor = await cdp.evaluate<{ endpoints: unknown; model: unknown }>(
+    `const s = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings; return { endpoints: s.endpoints, model: s.model };`,
+  );
+  try {
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = [{ url: ${JSON.stringify(fake.url)}, apiKey: "smoke-secret-key-12345" }];
+      p.settings.model = "";
+      await p.saveSettings();
+      p.llm.invalidate();
+      await p.llm.resolve({ force: true });
+      void p.sessionInstance.generate("Smoke: ersetze das Token", "Kopfzeile\\nAuthorization: ${TOKEN}\\nFusszeile");
+      return true;
+    `);
+    const fertig = await pollUntil<{ phase: string; regex: string | null }>(
+      cdp,
+      `
+        const st = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].sessionInstance.state;
+        if (st.phase === "preview") return { phase: st.phase, regex: st.versions[st.active].rule.regex };
+        if (st.phase === "error") return { phase: st.phase, regex: null };
+        return null;
+      `,
+      15_000,
+    );
+    const body = fake.lastBody();
+    const tokenWert = TOKEN.slice("Bearer ".length);
+    record(
+      NAMEN[0],
+      fertig !== null && fertig.regex === TOKEN && !body.includes(tokenWert) && /\[redacted-[a-z-]+-\d+\]/.test(body),
+      fertig === null ? "keine Antwort innerhalb 15s"
+        : `Transport-Body ${body.includes(tokenWert) ? "TRAEGT DAS TOKEN" : "ohne Token"}, Platzhalter ${/\[redacted-/.test(body) ? "da" : "FEHLT"}; Regel „${fertig.regex ?? "(Fehler)"}“ ${fertig.regex === TOKEN ? "= Original" : "!= Original"}`,
+    );
+
+    const daten = await cdp.evaluate<string>(
+      `return await app.vault.adapter.read(app.vault.configDir + "/plugins/" + ${JSON.stringify(PLUGIN_ID)} + "/data.json");`,
+    );
+    const klartextWeg = !daten.includes("smoke-secret-key-12345");
+    record(
+      NAMEN[1],
+      klartextWeg && daten.includes("secretId") && fake.lastAuth() === "Bearer smoke-secret-key-12345",
+      `data.json ${klartextWeg ? "ohne" : "MIT"} Klartext-Schluessel, secretId ${daten.includes("secretId") ? "da" : "FEHLT"}; Authorization-Kopf am Server: ${fake.lastAuth() === "Bearer smoke-secret-key-12345" ? "ok" : `„${fake.lastAuth()}“`}`,
+    );
+
+    let b: Record<string, unknown> = {};
+    try { b = JSON.parse(body) as Record<string, unknown>; } catch { /* unten gemeldet */ }
+    const denken = b.reasoning_effort ?? b.chat_template_kwargs ?? b.enable_thinking ?? b.think ?? "(kein Feld)";
+    // V4 — direkt ueber die Verbindung (derselbe Aufruf wie die Sitzung): ein PEM-Block geht als Platzhalter
+    // hinaus; die Antwort spiegelt ihn in `regex`. Ohne `restoreContent: "json"` kaeme der Block mit echten
+    // Zeilenumbruechen in einen JSON-String zurueck — `JSON.parse` risse.
+    const PEM = "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\nabcdefghijklmnopqrstuvwxyz0123456789ABCD\n-----END PRIVATE KEY-----";
+    const pem = await cdp.evaluate<{ ok: boolean; regex: string | null; fehler: string | null; body: string }>(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      const r = await p.llm.complete({ messages: [{ role: "user", content: "Schluessel:\\n" + ${JSON.stringify(PEM)} }] }, { overrides: { temperature: 0 } });
+      if (!r.ok) return { ok: false, regex: null, fehler: r.kind + ": " + r.detail, body: "" };
+      try { return { ok: true, regex: JSON.parse(r.content).regex, fehler: null, body: "" }; }
+      catch (e) { return { ok: false, regex: null, fehler: "JSON.parse: " + e.message, body: r.content.slice(0, 120) }; }
+    `);
+    const pemBody = fake.lastBody();
+    record(
+      NAMEN[3],
+      pem.ok && pem.regex === PEM && !pemBody.includes("MIIEvQIBADANBgkq") && /\[redacted-[a-z-]+-\d+\]/.test(pemBody),
+      pem.ok
+        ? `Transport-Body ${pemBody.includes("MIIEvQIBADANBgkq") ? "TRAEGT DEN SCHLUESSEL" : "ohne Schluessel"}; Regel ${pem.regex === PEM ? "= Original (mehrzeilig)" : "!= Original"}`
+        : `Aufruf/Parse gescheitert: ${pem.fehler ?? "?"} ${pem.body}`,
+    );
+
+    record(NAMEN[2], b.stream === false && b.temperature === 0, `stream=${String(b.stream)}, temperature=${String(b.temperature)}, Denk-Feld: ${JSON.stringify(denken)}`);
+  } finally {
+    await fake.close();
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = ${JSON.stringify(vor.endpoints)};
+      p.settings.model = ${JSON.stringify(vor.model)};
+      await p.saveSettings();
+      p.llm.invalidate();
+      p.sessionInstance.reset?.();
       return true;
     `).catch(() => undefined);
   }
@@ -1035,7 +1141,7 @@ async function einstellungenText(cdp: Cdp): Promise<{ text: string; lokaleZeilen
     const tab = tabs.find((x) => x.id === ${JSON.stringify(PLUGIN_ID)});
     if (!tab) return null;
     tab.display();
-    return { text: tab.containerEl.textContent ?? "", lokaleZeilen: tab.containerEl.querySelectorAll(".transmute-ep-status").length };
+    return { text: tab.containerEl.textContent ?? "", lokaleZeilen: tab.containerEl.querySelectorAll(".okit-ep-status").length };
   `);
 }
 
@@ -1086,7 +1192,7 @@ async function abschnittManager(cdp: Cdp): Promise<void> {
       p.settings.endpoints = [{ url: ${JSON.stringify(lokal.url)} }];
       p.settings.model = ${JSON.stringify(LOCAL_MODEL)};
       await p.saveSettings();
-      p.resolver.invalidate();
+      p.llm.invalidate();
       return true;
     `);
 
@@ -1121,7 +1227,7 @@ async function abschnittManager(cdp: Cdp): Promise<void> {
       return true;
     `);
     await fakeManagerAus(cdp);
-    await cdp.evaluate(`app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].resolver.invalidate(); return true;`);
+    await cdp.evaluate(`app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].llm.invalidate(); return true;`);
     const ohne = await einstellungenText(cdp);
     const okM3 = await laufAnstossen(cdp, lokal);
     const zeigtLokal = ohne !== null && !MANAGED_TEXT.some((x) => ohne.text.includes(x)) && ohne.lokaleZeilen > 0;
@@ -1136,7 +1242,7 @@ async function abschnittManager(cdp: Cdp): Promise<void> {
       p.settings.choice = ${JSON.stringify(vor.choice)};
       p.settings.model = ${JSON.stringify(vor.model)};
       await p.saveSettings();
-      p.resolver.invalidate();
+      p.llm.invalidate();
       return true;
     `).catch(() => undefined);
     await mgr.close();
@@ -1206,7 +1312,7 @@ async function abschnittApple(cdp: Cdp): Promise<void> {
       const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
       p.settings.choice = {};
       await p.saveSettings();
-      p.resolver.invalidate();
+      p.llm.invalidate();
       return true;
     `);
     const listen = await cdp.evaluate<{ ohne: string[]; mit: string[] }>(`
@@ -1237,13 +1343,14 @@ async function abschnittApple(cdp: Cdp): Promise<void> {
         sel.value = opt.value;
         sel.dispatchEvent(new Event("change", { bubbles: true }));
         const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
-        for (let i = 0; i < 32 && !p.isShortcutsEndpoint(); i += 1) await new Promise((r) => setTimeout(r, 250));
+        const istKurzbefehl = async () => (await p.llm.resolve()).transport === "shortcuts";
+        for (let i = 0; i < 32 && !(await istKurzbefehl()); i += 1) await new Promise((r) => setTimeout(r, 250));
         tab.display();
         await new Promise((r) => setTimeout(r, 500));
-        return { ok: p.isShortcutsEndpoint(), hinweis: (tab.containerEl.textContent || "").includes("4096") };
+        return { ok: await istKurzbefehl(), hinweis: (tab.containerEl.textContent || "").includes("4096") };
       `);
       record(NAMEN[2]!, hinweis.ok, hinweis.ok
-        ? `isShortcutsEndpoint() wahr; Hinweis zur Grenze im Tab: ${hinweis.hinweis ? "da" : "FEHLT"}`
+        ? `Quelle traegt transport shortcuts; Hinweis zur Grenze im Tab: ${hinweis.hinweis ? "da" : "FEHLT"}`
         : "Quelle blieb HTTP — die Dropdown-Wahl kam nicht an");
     }
 
@@ -1282,7 +1389,7 @@ async function abschnittApple(cdp: Cdp): Promise<void> {
       p.settings.choice = ${JSON.stringify(vor.choice)};
       p.settings.model = ${JSON.stringify(vor.model)};
       await p.saveSettings();
-      p.resolver.invalidate();
+      p.llm.invalidate();
       return true;
     `).catch(() => undefined);
     await http.close();
@@ -1454,6 +1561,7 @@ async function main(): Promise<void> {
     await abschnitt("Abbruch", () => abschnittAbbruch(cdp, kandidaten));
     await abschnitt("Setter", () => abschnittSetter(cdp));
     await abschnitt("llm-lab", () => abschnittLlmLab(cdp));
+    await abschnitt("Verbindung", () => abschnittVerbindung(cdp));
     await abschnitt("Manager", () => abschnittManager(cdp));
     await abschnitt("Apple Intelligence", () => abschnittApple(cdp));
     await abschnitt("Hilfe", () => abschnittHilfe(cdp));
