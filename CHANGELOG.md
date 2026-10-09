@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-10-09
+
 ### Changed
 
 - **The model connection now comes from obsidian-kit 0.51.2** (`createLlmConnection`) and code-kit 0.15.0 instead of a local resolver and client. The settings tab shows the kit's endpoint list and a new collapsible **Request** section (sampling values and thinking level per mode, with a note on what is actually sent).
