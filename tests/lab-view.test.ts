@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { labView } from "../src/core/llm/lab-view";
+import { redactExchange } from "../src/vendor/kit-obsidian/chat-client";
+
+// Gleiches Verhalten wie der fruehere eigene `labView`: das Lab sieht den gesendeten Text.
+const labView = (messages: { role: string; content: string }[], content: string, reasoning: string | null) => {
+  const r = redactExchange({ messages, answer: content, reasoning });
+  return { messages: r.messages, content: r.answer, reasoning: r.reasoning };
+};
 
 const TOKEN = "Zk3QpWv8LmN2xY7aTb5RcD9e";
 

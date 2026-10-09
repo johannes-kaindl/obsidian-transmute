@@ -68,7 +68,7 @@ kam fertig aus dem Ökosystem, neu gebaut wurde im Wesentlichen die Regex-Domän
     `model-choice.ts`, `sampling-profiles.ts`, `endpoint-source.ts`.
   - `src/vendor/kit-obsidian/` (importiert `obsidian`): `clipboard.ts`, `folder-suggest.ts`,
     `settings_walker.ts`, `model-picker.ts`, `endpoint-source.ts`.
-  - Seit Welle 15 (obsidian-kit 0.51.2, code-kit 0.15.0) dazu die Verbindung: `llm-connection`, `llm-connection-strings`, `backend-probe`, `collapsible`, `endpoint-list`, `endpoint-secrets`, `request-section`, `request-session`, `secrets` (obsidian-kit) und `backend-probe`, `capabilities`, `model-list-cache`, `redact`, `secrets` (code-kit). Die `*_CSS`-Konstanten stehen wortgleich in `styles.css`; `tests/kit-css.test.ts` bewacht das.
+  - Seit Welle 15 (obsidian-kit 0.51.3, code-kit 0.15.4) dazu die Verbindung: `llm-connection`, `llm-connection-strings`, `backend-probe`, `collapsible`, `endpoint-list`, `endpoint-secrets`, `endpoint-secret-hook`, `request-section`, `request-session`, `secrets` (obsidian-kit) und `backend-probe`, `capabilities`, `model-list-cache`, `redact`, `secrets` (code-kit). Die `*_CSS`-Konstanten stehen wortgleich in `styles.css`; `tests/kit-css.test.ts` bewacht das.
   - `tests/vendor/kit/obsidian-mock.ts` — der Obsidian-Mock (seit 0.6.0 gestempelt aus dem Kit-Tag, vorher eine ungestempelte Kopie von 0.15.0); `tests/__mocks__/obsidian.ts` re-exportiert nur.
 - **Aus Nachbar-Plugins übernommen:** Endpoint-Zeilen-Editor + pure Editor-Model
   (`yijing-oracle`), EndpointResolver/Probe/Modell-Liste (`vim-dojo`), Chat-Response-Auswertung

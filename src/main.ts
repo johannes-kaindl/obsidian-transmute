@@ -1,6 +1,5 @@
 import { Plugin, getLanguage, type WorkspaceLeaf } from "obsidian";
 import { toCompleteResult, type CompleteResult } from "./core/llm/client";
-import { labView } from "./core/llm/lab-view";
 import { TransmuteSession, type CompleteFeature } from "./core/session";
 import { DEFAULT_SETTINGS, loadSettings, MAX_HITS, type TransmuteSettings } from "./core/settings";
 import type { ChatMessage } from "./core/types";
@@ -9,6 +8,7 @@ import { getLang, pickLang, setLang, t } from "./vendor/kit/i18n";
 import { onLevelFor, thinkingFor } from "./vendor/kit/sampling-profiles";
 import { findEndpointManager } from "./vendor/kit-obsidian/endpoint-source";
 import { createLlmConnection, type LlmConnection, type LlmResult } from "./vendor/kit-obsidian/llm-connection";
+import { redactExchange } from "./vendor/kit-obsidian/chat-client";
 import { createShortcutsChatTransport, requestUrlTransport } from "./vendor/kit-obsidian/chat-transport";
 import { createShortcutsBridge, type ShortcutsBridge } from "./vendor/kit-obsidian/shortcuts-bridge";
 import { logToLab } from "./vendor/kit-obsidian/lab-client";
@@ -189,7 +189,11 @@ export default class TransmutePlugin extends Plugin {
   }): void {
     const apiKey = input.source.config?.apiKey;
     // Das Lab bekommt den GESENDETEN Text (Platzhalter), nicht die Originale — das Log soll dem Draht entsprechen.
-    const sent = labView(input.messages, input.result.ok ? input.result.content : "", input.result.ok ? input.result.reasoning : null);
+    const sent = redactExchange({
+      messages: input.messages,
+      answer: input.result.ok ? input.result.content : "",
+      reasoning: input.result.ok ? input.result.reasoning : null,
+    });
     const promptTemplate = sent.messages.find((m) => m.role === "system")?.content ?? "";
     const lab = logToLab(this.app, {
       plugin: "transmute",
@@ -197,7 +201,7 @@ export default class TransmutePlugin extends Plugin {
       model: input.source.sentModel || input.source.model,
       endpointUrl: input.source.config?.url ?? "",
       messages: sent.messages,
-      content: sent.content,
+      content: sent.answer,
       ...(sent.reasoning !== null ? { reasoning: sent.reasoning } : {}),
       ...(input.result.ok && input.result.truncated ? { finishReason: "length" } : {}),
       latencyMs: input.latencyMs,
