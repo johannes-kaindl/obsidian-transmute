@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Documentation
+
+- Re-captured the settings screenshot to show the shared endpoint list and request section.
+
 ## [0.10.0] — 2026-10-09
 
 ### Changed
