@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-10-10
+
 ### Documentation
 
 - Re-captured the settings screenshot to show the shared endpoint list and request section.
