@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractChatContent, extractReasoning, parseDiagnoseResponse, parseRuleResponse } from "../src/core/llm/response";
+import { parseDiagnoseResponse, parseRuleResponse } from "../src/core/llm/response";
 
 const valid = '{"regex":"\\\\d+","flags":"g","replacement":"N","explanation":"Zahlen"}';
 
@@ -50,45 +50,6 @@ describe("parseRuleResponse", () => {
     const res = parseRuleResponse('{"regex":"a","flags":"","replacement":"b"}');
     expect(res).toMatchObject({ ok: true });
     if (res.ok) expect(res.draft.explanation).toBe("");
-  });
-});
-
-describe("extractChatContent", () => {
-  it("zieht den Content aus einer OpenAI-kompatiblen Antwort", () => {
-    expect(extractChatContent({ choices: [{ message: { content: "hi" } }] })).toBe("hi");
-  });
-
-  it("gibt null bei einem Fehlerbody", () => {
-    expect(extractChatContent({ error: { message: "boom" } })).toBeNull();
-  });
-});
-
-describe("extractReasoning", () => {
-  const body = (message: Record<string, unknown>) => ({ choices: [{ message }] });
-
-  it("nimmt reasoning_content, wenn der Server es liefert", () => {
-    expect(extractReasoning(body({ content: "{}", reasoning_content: "erst nachgedacht" }), "{}")).toBe("erst nachgedacht");
-  });
-
-  it("nimmt auch das kuerzere Feld reasoning", () => {
-    expect(extractReasoning(body({ content: "{}", reasoning: "kurz gedacht" }), "{}")).toBe("kurz gedacht");
-  });
-
-  it("faellt auf den think-Block im Content zurueck", () => {
-    const raw = "<think>laut gedacht</think>{}";
-    expect(extractReasoning(body({ content: raw }), raw)).toBe("laut gedacht");
-  });
-
-  it("liefert null, wenn nicht gedacht wurde", () => {
-    expect(extractReasoning(body({ content: "{}" }), "{}")).toBeNull();
-  });
-
-  it("wertet ein leeres Feld als nicht gedacht", () => {
-    expect(extractReasoning(body({ content: "{}", reasoning_content: "   " }), "{}")).toBeNull();
-  });
-
-  it("kommt mit einer kaputten Antwort zurecht", () => {
-    expect(extractReasoning(null, "{}")).toBeNull();
   });
 });
 

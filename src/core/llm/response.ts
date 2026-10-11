@@ -1,66 +1,9 @@
-import { stripThinkBlocks, ThinkSplitter } from "../../vendor/kit/think-splitter";
+import { stripThinkBlocks } from "../../vendor/kit/think-splitter";
 import type { RuleDraft } from "../types";
 
 export type ParseResult =
   | { ok: true; draft: RuleDraft }
   | { ok: false; reason: "no-json" | "bad-schema"; detail: string };
-
-/** Muster nach vault-crews/src/core/chat-response.ts */
-export function extractChatContent(res: unknown): string | null {
-  if (typeof res !== "object" || res === null) return null;
-  const choices = (res as { choices?: unknown }).choices;
-  if (!Array.isArray(choices) || choices.length === 0) return null;
-  const message = (choices[0] as { message?: unknown }).message;
-  if (typeof message !== "object" || message === null) return null;
-  const content = (message as { content?: unknown }).content;
-  return typeof content === "string" ? content : null;
-}
-
-/**
- * `finish_reason` des ersten Choices, oder null.
- *
- * "length" heisst: am Token-Limit abgeschnitten, noch im selben JSON, das ohnehin geparst
- * wird (Vorlage: image-to-markdown/src/vision_client.ts::transcribe, 2026-08-30).
- */
-export function extractFinishReason(res: unknown): string | null {
-  if (typeof res !== "object" || res === null) return null;
-  const choices = (res as { choices?: unknown }).choices;
-  if (!Array.isArray(choices) || choices.length === 0) return null;
-  const reason = (choices[0] as { finish_reason?: unknown }).finish_reason;
-  return typeof reason === "string" ? reason : null;
-}
-
-/** Der Gedankengang aus dem Nachrichtenobjekt, wo der Server ihn getrennt liefert. */
-function reasoningField(res: unknown): string | null {
-  if (typeof res !== "object" || res === null) return null;
-  const choices = (res as { choices?: unknown }).choices;
-  if (!Array.isArray(choices) || choices.length === 0) return null;
-  const message = (choices[0] as { message?: unknown }).message;
-  if (typeof message !== "object" || message === null) return null;
-  const msg = message as { reasoning_content?: unknown; reasoning?: unknown };
-  if (typeof msg.reasoning_content === "string") return msg.reasoning_content;
-  if (typeof msg.reasoning === "string") return msg.reasoning;
-  return null;
-}
-
-/**
- * Der Gedankengang einer Antwort, oder null.
- *
- * Zwei Quellen, weil die Server sich unterscheiden: ein eigenes Feld (LM Studio,
- * DeepSeek-Stil) oder ein <think>-Block mitten im Content. Fuer Letzteren der vendorte
- * Splitter statt einer zweiten Regex — er kennt bereits den Fall mit fehlendem
- * oeffnendem Tag.
- */
-export function extractReasoning(parsed: unknown, content: string): string | null {
-  const field = reasoningField(parsed);
-  if (field !== null && field.trim().length > 0) return field.trim();
-
-  const splitter = new ThinkSplitter();
-  const pushed = splitter.push(content);
-  const rest = splitter.flush();
-  const reasoning = (pushed.reasoning + rest.reasoning).trim();
-  return reasoning.length > 0 ? reasoning : null;
-}
 
 function stripThink(raw: string): string {
   return stripThinkBlocks(raw, { dropStrayClose: true });
