@@ -1,4 +1,4 @@
-import { ThinkSplitter } from "../../vendor/kit/think-splitter";
+import { stripThinkBlocks, ThinkSplitter } from "../../vendor/kit/think-splitter";
 import type { RuleDraft } from "../types";
 
 export type ParseResult =
@@ -63,7 +63,7 @@ export function extractReasoning(parsed: unknown, content: string): string | nul
 }
 
 function stripThink(raw: string): string {
-  return raw.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/^[\s\S]*?<\/think>/, "");
+  return stripThinkBlocks(raw, { dropStrayClose: true });
 }
 
 function stripFence(raw: string): string {

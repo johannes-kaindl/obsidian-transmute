@@ -6,7 +6,6 @@ import type { ChatMessage } from "./core/types";
 import "./core/i18n/strings";
 import { getLang, pickLang, setLang, t } from "./vendor/kit/i18n";
 import { onLevelFor, thinkingFor } from "./vendor/kit/sampling-profiles";
-import { findEndpointManager } from "./vendor/kit-obsidian/endpoint-source";
 import { createLlmConnection, type LlmConnection, type LlmResult } from "./vendor/kit-obsidian/llm-connection";
 import { redactExchange } from "./vendor/kit-obsidian/chat-client";
 import { createShortcutsChatTransport, requestUrlTransport } from "./vendor/kit-obsidian/chat-transport";
@@ -108,13 +107,11 @@ export default class TransmutePlugin extends Plugin {
           defaultScope: () => this.settings.defaultScope,
           showTargetField: () => this.settings.showTargetField,
           listModels: async () => (await this.llm.models({ force: true })).models,
-          // Im Manager-Fall ist `settings.model` nur der Rueckfall fuer die lokale Liste — die
-          // Modellwahl gehoert dann in `choice`, sonst aendert das Panel-Feld nichts.
-          getModel: () => (findEndpointManager(this.app) !== null ? (this.settings.choice.model ?? "") : (this.settings.model ?? "")),
+          // Die Modellwahl gehoert der Verbindung: mit Manager `choice.model`, ohne Manager das Modell der
+          // aktiven Zeile; „Server waehlt“ ist `setModel("")`.
+          getModel: () => this.llm.modelInUse(),
           setModel: (model: string) => {
-            if (findEndpointManager(this.app) !== null) this.settings.choice = { ...this.settings.choice, model: model || undefined };
-            else this.settings.model = model;
-            void this.saveSettings();
+            void this.llm.setModel(model);
           },
           // Der Schalter im Panel bedient die Denkstufe des Modus „structured“ (Settings → Request):
           // aus = „off“, an = die zuletzt gewaehlte Stufe.

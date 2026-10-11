@@ -22,10 +22,6 @@ export type TransmuteSettings = {
   /** Wahl gegenueber dem LLM Endpoint Manager (Endpunkt + Modell); leer = automatisch. Gilt nur,
    *  solange der Manager installiert ist — sonst zaehlt das Modell der Zeile. */
   choice: EndpointChoice;
-  /** Altfeld des globalen Modells: wird beim Laden in die Zeilen verschoben und nie gesetzt
-   *  oder gelesen. Bleibt als Typ nur, bis die Panel-Modellwahl auf `setModel` der Verbindung
-   *  (obsidian-kit 0.53.0) umgestellt ist. */
-  model?: string;
   /** Anfrage-Parameter und Denkstufe je Modus (Kit-Abschnitt „Request“). Transmute fragt im Modus
    *  `structured`: die Antwort ist ein JSON-Vertrag. */
   request: RequestSettings;
@@ -72,7 +68,7 @@ export function loadSettings(raw: unknown): TransmuteSettings {
   // Dazu das globale Modell (Welle 17): es geht einmal in die Zeilen ohne Modell und faellt aus dem Ergebnis,
   // sonst liefe die Migration bei jedem Start erneut und fuellte eine absichtlich geleerte Zeile wieder.
   const { timeoutMs: _timeoutMs, suppressReasoning: _suppressReasoning, model: legacyModel, ...merged } =
-    mergeSettings(DEFAULT_SETTINGS, raw) as TransmuteSettings & { timeoutMs?: unknown; suppressReasoning?: unknown };
+    mergeSettings(DEFAULT_SETTINGS, raw) as TransmuteSettings & { timeoutMs?: unknown; suppressReasoning?: unknown; model?: unknown };
   // mergeSettings ist ein shallow, typ-blinder Merge: `endpoints` kann aus einer data.json
   // von vor 0.5.0 noch string[] sein. migrateEndpointList ist die einzige Stelle, die das
   // geradezieht — danach ist der Typ im ganzen Repo verlässlich.

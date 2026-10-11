@@ -20,6 +20,12 @@ describe("parseRuleResponse", () => {
     expect(res.ok).toBe(true);
   });
 
+  it("viele offene think-Tags bleiben linear (kein quadratisches Regex-Backtracking)", () => {
+    const t0 = performance.now();
+    parseRuleResponse("<think>".repeat(50_000));
+    expect(performance.now() - t0).toBeLessThan(500);
+  });
+
   it("entfernt einen think-Block", () => {
     const res = parseRuleResponse("<think>hmm {\"nope\":1}</think>" + valid);
     expect(res).toMatchObject({ ok: true });
