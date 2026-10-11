@@ -1,4 +1,5 @@
 import { sameMatches } from "./anchor";
+import { EMPTY_ROUNDS, activeRound, pushRound, refineBase, selectRound, type Rounds } from "../vendor/kit/rounds";
 import {
   buildDiagnosePrompt,
   buildInitialPrompt,
@@ -14,10 +15,13 @@ import { probeRisky } from "./regex/probe";
 import { probeRelaxations } from "./regex/relax";
 import type { ChatMessage, Diagnosis, Hit, Round, RuleDraft, RuleProblem, Version } from "./types";
 
+/** Die Vorschau als `Rounds<Version>` des Kits — Auswahl und Anhaengen leben dort. */
+const asRounds = (p: { versions: readonly Version[]; active: number }): Rounds<Version> => ({ rounds: p.versions, active: p.active });
+
 export type SessionState =
   | { phase: "idle" }
   | { phase: "generating" }
-  | { phase: "preview"; versions: Version[]; active: number }
+  | { phase: "preview"; versions: readonly Version[]; active: number }
   | { phase: "error"; messageKey: string; args: string[]; raw: string | null };
 
 export type Revalidation = { kind: "ok"; hits: Hit[] } | { kind: "changed" };
@@ -82,7 +86,7 @@ type Attempt =
 export class TransmuteSession {
   private current: SessionState = { phase: "idle" };
   private readonly listeners: ((state: SessionState, reason: ChangeReason) => void)[] = [];
-  private versions: Version[] = [];
+  private versions: readonly Version[] = [];
 
   constructor(
     private readonly deps: SessionDeps,
@@ -104,7 +108,7 @@ export class TransmuteSession {
 
   /** Der Stand, der gerade gezeigt wird — oder null ausserhalb der Vorschau. */
   get activeVersion(): Version | null {
-    return this.current.phase === "preview" ? this.current.versions[this.current.active] : null;
+    return this.current.phase === "preview" ? activeRound(asRounds(this.current)) : null;
   }
 
   /**
@@ -115,8 +119,10 @@ export class TransmuteSession {
    */
   selectVersion(index: number): void {
     if (this.current.phase !== "preview") return;
-    if (index < 0 || index >= this.current.versions.length || index === this.current.active) return;
-    this.set({ ...this.current, active: index });
+    const before = asRounds(this.current);
+    const after = selectRound(before, index);
+    if (after === before) return;
+    this.set({ ...this.current, active: after.active });
   }
 
   /**
@@ -175,11 +181,7 @@ export class TransmuteSession {
     // bleibt die Anweisung leer, statt einen erfundenen Text zu tragen. Ein neu
     // angehaengter Stand ist eine eigene Nutzer-Handlung und bekommt deshalb eine eigene
     // turnId — anders als beim In-Place-Zweig oben, der denselben Stand weiter bearbeitet.
-    this.versions = [
-      ...state.versions,
-      { ...next, instruction: "", source: "manual", reasoning: null, truncated: false, diagnosis: null, turnId: this.deps.newTurnId() },
-    ];
-    this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 }, "edit");
+    this.append(state.versions, { ...next, instruction: "", source: "manual", reasoning: null, truncated: false, diagnosis: null, turnId: this.deps.newTurnId() }, "edit");
   }
 
   /**
@@ -306,7 +308,9 @@ export class TransmuteSession {
    */
   async refine(refinement: string, text: string, target = ""): Promise<void> {
     const sample = sampleForPrompt(text, this.options().sampleChars);
-    const base = this.current.phase === "preview" ? this.current.versions.slice(0, this.current.active + 1) : [];
+    const view = this.current.phase === "preview" ? asRounds(this.current) : EMPTY_ROUNDS;
+    const at = refineBase(view);
+    const base = at === null ? [] : view.rounds.slice(0, at + 1);
     const rounds: Round[] = base.map((version) => ({
       instruction: version.instruction,
       draft: version.rule,
@@ -343,24 +347,27 @@ export class TransmuteSession {
       return;
     }
 
-    this.versions = [
-      ...this.versions,
-      {
-        instruction,
-        rule: attempt.draft,
-        hits: res.hits,
-        selected: res.hits.map(() => true),
-        timedOutAtLine: res.timedOutAtLine,
-        source: "model",
-        riskAccepted: null,
-        problem: null,
-        reasoning: attempt.reasoning,
-        truncated: attempt.truncated,
-        diagnosis: null,
-        turnId,
-      },
-    ];
-    this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 });
+    this.append(this.versions, {
+      instruction,
+      rule: attempt.draft,
+      hits: res.hits,
+      selected: res.hits.map(() => true),
+      timedOutAtLine: res.timedOutAtLine,
+      source: "model",
+      riskAccepted: null,
+      problem: null,
+      reasoning: attempt.reasoning,
+      truncated: attempt.truncated,
+      diagnosis: null,
+      turnId,
+    });
+  }
+
+  /** Neuen Stand hinten anhaengen und aktivieren (Kit: `pushRound`); nichts wird abgeschnitten. */
+  private append(base: readonly Version[], version: Version, reason?: ChangeReason): void {
+    const next = pushRound({ rounds: base, active: -1 }, version);
+    this.versions = next.rounds;
+    this.set({ phase: "preview", versions: next.rounds, active: next.active }, reason);
   }
 
   private async ask(messages: ChatMessage[], turnId: string): Promise<Attempt> {
@@ -510,8 +517,7 @@ export class TransmuteSession {
       text,
     );
 
-    this.versions = [...state.versions, next];
-    this.set({ phase: "preview", versions: this.versions, active: this.versions.length - 1 });
+    this.append(state.versions, next);
   }
 
   /**

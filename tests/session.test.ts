@@ -213,6 +213,25 @@ describe("TransmuteSession — Verlauf", () => {
     expect(assistantTurns[0].content).not.toContain("#alt\\\\b");
   });
 
+  // Der Schnitt des Prompt-Verlaufs ist `slice(0, aktiv + 1)` — mit der Kit-Regel `refineBase` gleich.
+  it("schneidet den Prompt-Verlauf nach Rueckwahl in der Mitte bei drei Staenden am aktiven Stand ab", async () => {
+    const { session, complete } = await twoRounds();
+    complete.mockResolvedValueOnce(rule("#alt$"));
+    await session.refine("dritter", "Ein #alt Tag.");
+    session.selectVersion(1);
+    complete.mockResolvedValueOnce(rule("#alt!"));
+    await session.refine("vierter", "Ein #alt Tag.");
+
+    const messages = complete.mock.calls[3][0] as { role: string; content: string }[];
+    const assistantTurns = messages.filter((m) => m.role === "assistant").map((m) => m.content);
+    expect(assistantTurns).toHaveLength(2);
+    expect(assistantTurns.some((c) => c.includes("#alt$"))).toBe(false);
+    if (session.state.phase === "preview") {
+      expect(session.state.versions).toHaveLength(4);
+      expect(session.state.active).toBe(3);
+    }
+  });
+
   it("verwirft mit reset den ganzen Verlauf", async () => {
     const { session } = await twoRounds();
     session.reset();
