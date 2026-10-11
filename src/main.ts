@@ -36,7 +36,11 @@ export default class TransmutePlugin extends Plugin {
 
   async onload(): Promise<void> {
     setLang(pickLang(safeGetLanguage()));
-    this.settings = loadSettings(await this.loadData());
+    const stored: unknown = await this.loadData();
+    this.settings = loadSettings(stored);
+    // Das globale Modell ist in die Zeilen gewandert (loadSettings): einmal speichern, damit der Altschluessel
+    // aus der data.json verschwindet.
+    if (typeof stored === "object" && stored !== null && "model" in stored) await this.saveSettings();
 
     this.shortcutsBridge = createShortcutsBridge(this, { protocolAction: "transmute-shortcut" });
     this.llm = createLlmConnection({
@@ -63,7 +67,6 @@ export default class TransmutePlugin extends Plugin {
       getSettings: () => ({
         endpoints: this.settings.endpoints,
         choice: this.settings.choice,
-        model: this.settings.model,
         request: this.settings.request,
       }),
       // Erst in die Settings schreiben, dann speichern: die Endpunkt-Liste liest ihre Zeilen danach zurueck.
@@ -107,7 +110,7 @@ export default class TransmutePlugin extends Plugin {
           listModels: async () => (await this.llm.models({ force: true })).models,
           // Im Manager-Fall ist `settings.model` nur der Rueckfall fuer die lokale Liste — die
           // Modellwahl gehoert dann in `choice`, sonst aendert das Panel-Feld nichts.
-          getModel: () => (findEndpointManager(this.app) !== null ? (this.settings.choice.model ?? "") : this.settings.model),
+          getModel: () => (findEndpointManager(this.app) !== null ? (this.settings.choice.model ?? "") : (this.settings.model ?? "")),
           setModel: (model: string) => {
             if (findEndpointManager(this.app) !== null) this.settings.choice = { ...this.settings.choice, model: model || undefined };
             else this.settings.model = model;

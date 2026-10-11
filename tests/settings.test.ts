@@ -7,10 +7,6 @@ describe("loadSettings", () => {
     expect(loadSettings({ model: "x" }).budgetMs).toBe(DEFAULT_SETTINGS.budgetMs);
   });
 
-  it("startet ohne hartkodiertes Modell (Modellagnostik)", () => {
-    expect(DEFAULT_SETTINGS.model).toBe("");
-  });
-
   it("bringt Schwelle und Snapshot-Anzahl als Vorgabe mit", () => {
     expect(DEFAULT_SETTINGS.confirmThreshold).toBe(50);
     expect(DEFAULT_SETTINGS.snapshotKeep).toBe(5);

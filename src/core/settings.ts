@@ -1,5 +1,5 @@
 import { mergeSettings } from "../vendor/kit/settings";
-import { migrateEndpointList, type EndpointConfig } from "../vendor/kit/endpoint_config";
+import { fillMissingRowModels, migrateEndpointList, type EndpointConfig } from "../vendor/kit/endpoint_config";
 import type { EndpointChoice } from "../vendor/kit/endpoint-source";
 import { onLevelFor, sanitizeRequestSettings, type RequestSettings } from "../vendor/kit/sampling-profiles";
 import { removeNewlinesPreset } from "./presets/remove-newlines";
@@ -20,9 +20,12 @@ export type TransmuteSettings = {
    *  eigenen API-Schlüssel, damit lokale und gehostete Anbieter in EINER Liste stehen können. */
   endpoints: EndpointConfig[];
   /** Wahl gegenueber dem LLM Endpoint Manager (Endpunkt + Modell); leer = automatisch. Gilt nur,
-   *  solange der Manager installiert ist — sonst zaehlen `endpoints` und `model`. */
+   *  solange der Manager installiert ist — sonst zaehlt das Modell der Zeile. */
   choice: EndpointChoice;
-  model: string;
+  /** Altfeld des globalen Modells: wird beim Laden in die Zeilen verschoben und nie gesetzt
+   *  oder gelesen. Bleibt als Typ nur, bis die Panel-Modellwahl auf `setModel` der Verbindung
+   *  (obsidian-kit 0.53.0) umgestellt ist. */
+  model?: string;
   /** Anfrage-Parameter und Denkstufe je Modus (Kit-Abschnitt „Request“). Transmute fragt im Modus
    *  `structured`: die Antwort ist ein JSON-Vertrag. */
   request: RequestSettings;
@@ -53,7 +56,6 @@ export const MAX_HITS = 500;
 export const DEFAULT_SETTINGS: TransmuteSettings = {
   endpoints: [{ url: "http://127.0.0.1:1234" }],
   choice: {},
-  model: "",            // modellagnostisch: kommt aus GET /v1/models
   request: { overrides: {}, thinking: {}, lastOnLevel: {}, levelPickerInChat: false },
   sampleChars: 2000,
   budgetMs: 2000,
@@ -67,7 +69,9 @@ export const DEFAULT_SETTINGS: TransmuteSettings = {
 export function loadSettings(raw: unknown): TransmuteSettings {
   // Die beiden abgeloesten Schluessel (timeoutMs, suppressReasoning) ueberleben mergeSettings als
   // Fremdfelder — hier raus, migrateRequest liest sie aus `raw`.
-  const { timeoutMs: _timeoutMs, suppressReasoning: _suppressReasoning, ...merged } =
+  // Dazu das globale Modell (Welle 17): es geht einmal in die Zeilen ohne Modell und faellt aus dem Ergebnis,
+  // sonst liefe die Migration bei jedem Start erneut und fuellte eine absichtlich geleerte Zeile wieder.
+  const { timeoutMs: _timeoutMs, suppressReasoning: _suppressReasoning, model: legacyModel, ...merged } =
     mergeSettings(DEFAULT_SETTINGS, raw) as TransmuteSettings & { timeoutMs?: unknown; suppressReasoning?: unknown };
   // mergeSettings ist ein shallow, typ-blinder Merge: `endpoints` kann aus einer data.json
   // von vor 0.5.0 noch string[] sein. migrateEndpointList ist die einzige Stelle, die das
@@ -86,7 +90,7 @@ export function loadSettings(raw: unknown): TransmuteSettings {
         ...(rawChoice.model ? { model: String(rawChoice.model) } : {}),
       }
     : {};
-  return { ...merged, endpoints: migrateEndpointList(undefined, rawList), presets, choice, request: migrateRequest(raw) };
+  return { ...merged, endpoints: fillMissingRowModels(migrateEndpointList(undefined, rawList), legacyModel), presets, choice, request: migrateRequest(raw) };
 }
 
 /** `request` aus der data.json — und die beiden Einstellungen, die der Verbindungs-Tausch (Welle 15) abloest:
