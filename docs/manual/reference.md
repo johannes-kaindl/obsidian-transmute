@@ -80,7 +80,7 @@ Settings tab heading in Obsidian: **Transmute**, with two groups: **"Connection"
 | Name (verbatim) | Description | Default |
 | --- | --- | --- |
 | "Endpoints" | Ordered list of OpenAI-compatible servers, each with an optional API key. The plugin pings them in order and uses the **first reachable** one. Each row shows a reachability status and, where applicable, a non-blocking input warning. API keys are stored in Obsidian's keychain, not in `data.json`. Two one-click preset buttons add LM Studio or Ollama; "Test connection" re-probes every row. With the LLM Endpoint Manager installed, an endpoint picker replaces the list. | `["http://127.0.0.1:1234"]` |
-| "global model" (per row) | Which model id to request when a row has none of its own. A dropdown populated from the endpoint's `/v1/models`, plus a reload button. The top option sends an empty `model` field. | `""` (empty) |
+| Model (per endpoint row) | Which model id the row requests. Each row has its own; the panel's model dropdown writes into the active row, and "let the server choose" empties it. An empty row sends an empty `model` field. | `""` (empty) |
 | "Request" | Collapsible section: the sampling values and the thinking level that are sent, per mode. Transmute asks in the **Structured** mode (the answer is a JSON contract). The temperature is always sent as `0` so that the same input gives the same rule, whatever this section shows. The first answer may take up to 15 minutes while a model loads; there is no timeout setting. | thinking off |
 
 ### Behaviour

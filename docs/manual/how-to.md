@@ -149,16 +149,12 @@ Notes:
 
 ## Pick or pin a specific model
 
-By default the **"Model"** setting is empty, which lets the server use whichever model
-is currently loaded.
+Each endpoint row carries its own model. By default it is empty, which lets the server use whichever model is currently loaded.
 
-1. Open **Settings → Community plugins → Transmute**, under **"Connection" → "Model"**.
-2. Use the dropdown to pick a specific model id, populated from the active endpoint's
-   `/v1/models`.
-3. If you've since loaded a different model on the server, click the reload icon
-   (`refresh-cw`) next to the dropdown to refresh the list.
-4. To go back to "let the server choose", pick the empty option at the top of the
-   dropdown (labelled "(let the server choose)").
+1. Open the Transmute panel in the sidebar and use the model dropdown at the top. It is populated from the active endpoint's `/v1/models`; the choice is written into the active endpoint row.
+2. If you've since loaded a different model on the server, click the reload icon (`refresh-cw`) next to the dropdown to refresh the list.
+3. To go back to "let the server choose", pick the empty option at the top of the dropdown.
+4. You can also set the model per row under **Settings → Community plugins → Transmute → Connection**.
 
 ---
 
@@ -243,7 +239,7 @@ Transmute can ask Apple's on-device model to write the pattern instead of a serv
 1. Install the **LLM Endpoint Manager** plugin, version 0.4.0 or newer, and set up its endpoint **Apple Intelligence (on-device)**. The endpoint and the shortcut it calls are created there; the setup is described at <https://uplink.jkaindl.de/apple-shortcuts>.
 2. Open **Settings → Community plugins → Transmute**.
 3. In the **Endpoint** dropdown, pick **Apple Intelligence (on-device)**.
-4. Leave the **Model** field empty. The shortcut decides which model answers.
+4. Leave the row's model empty. The shortcut decides which model answers.
 
 A note below the dropdown repeats the limits. What to expect:
 

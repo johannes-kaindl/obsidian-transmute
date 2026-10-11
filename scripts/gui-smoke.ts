@@ -1006,14 +1006,13 @@ async function abschnittVerbindung(cdp: Cdp): Promise<void> {
   ] as const;
   const TOKEN = "Bearer Zk3QpWv8LmN2xY7aTb5RcD9e";
   const fake = await startFakeEndpoint({ regex: "foo", flags: "", replacement: "bar", explanation: "e" }, { echoPlaceholder: true });
-  const vor = await cdp.evaluate<{ endpoints: unknown; model: unknown }>(
-    `const s = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings; return { endpoints: s.endpoints, model: s.model };`,
+  const vor = await cdp.evaluate<{ endpoints: unknown }>(
+    `const s = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings; return { endpoints: s.endpoints };`,
   );
   try {
     await cdp.evaluate(`
       const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
       p.settings.endpoints = [{ url: ${JSON.stringify(fake.url)}, apiKey: "smoke-secret-key-12345" }];
-      p.settings.model = "";
       await p.saveSettings();
       p.llm.invalidate();
       await p.llm.resolve({ force: true });
@@ -1078,7 +1077,6 @@ async function abschnittVerbindung(cdp: Cdp): Promise<void> {
     await cdp.evaluate(`
       const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
       p.settings.endpoints = ${JSON.stringify(vor.endpoints)};
-      p.settings.model = ${JSON.stringify(vor.model)};
       await p.saveSettings();
       p.llm.invalidate();
       p.sessionInstance.reset?.();
@@ -1179,8 +1177,8 @@ async function abschnittManager(cdp: Cdp): Promise<void> {
   const draft = { regex: "foo", flags: "", replacement: "bar", explanation: "e" };
   const mgr = await startFakeEndpoint(draft);
   const lokal = await startFakeEndpoint(draft);
-  const vor = await cdp.evaluate<{ endpoints: unknown; choice: unknown; model: string }>(
-    `const s = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings; return { endpoints: s.endpoints, choice: s.choice, model: s.model };`,
+  const vor = await cdp.evaluate<{ endpoints: unknown; choice: unknown }>(
+    `const s = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings; return { endpoints: s.endpoints, choice: s.choice };`,
   );
   try {
     await fakeManagerEin(cdp, mgr.url);
@@ -1189,8 +1187,7 @@ async function abschnittManager(cdp: Cdp): Promise<void> {
       p.settings.choice = {};
       // Der lokale Weg zeigt auf den zweiten Stub, mit eigenem Modell — er darf im Manager-Fall
       // nie angefasst werden.
-      p.settings.endpoints = [{ url: ${JSON.stringify(lokal.url)} }];
-      p.settings.model = ${JSON.stringify(LOCAL_MODEL)};
+      p.settings.endpoints = [{ url: ${JSON.stringify(lokal.url)}, model: ${JSON.stringify(LOCAL_MODEL)} }];
       await p.saveSettings();
       p.llm.invalidate();
       return true;
@@ -1240,7 +1237,6 @@ async function abschnittManager(cdp: Cdp): Promise<void> {
       const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
       p.settings.endpoints = ${JSON.stringify(vor.endpoints)};
       p.settings.choice = ${JSON.stringify(vor.choice)};
-      p.settings.model = ${JSON.stringify(vor.model)};
       await p.saveSettings();
       p.llm.invalidate();
       return true;
@@ -1302,8 +1298,8 @@ async function abschnittApple(cdp: Cdp): Promise<void> {
     return;
   }
   const http = await startFakeEndpoint({ regex: "foo", flags: "", replacement: "bar", explanation: "e" });
-  const vor = await cdp.evaluate<{ endpoints: unknown; choice: unknown; model: string }>(
-    `const s = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings; return { endpoints: s.endpoints, choice: s.choice, model: s.model };`,
+  const vor = await cdp.evaluate<{ endpoints: unknown; choice: unknown }>(
+    `const s = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings; return { endpoints: s.endpoints, choice: s.choice };`,
   );
   let stubGesetzt = false;
   try {
@@ -1387,12 +1383,61 @@ async function abschnittApple(cdp: Cdp): Promise<void> {
       const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
       p.settings.endpoints = ${JSON.stringify(vor.endpoints)};
       p.settings.choice = ${JSON.stringify(vor.choice)};
-      p.settings.model = ${JSON.stringify(vor.model)};
       await p.saveSettings();
       p.llm.invalidate();
       return true;
     `).catch(() => undefined);
     await http.close();
+  }
+}
+
+/** G1: Das globale Modell ist abgeloest (Welle 17). Ein Altwert in der data.json steht nach dem Laden in der
+ *  Endpunkt-Zeile, der Altschluessel ist aus der Datei verschwunden, die Einstellungen kennen weder eine Zeile
+ *  „Model“ noch die Zeilenoption „global model“. Gegenprobe: mit dem Build von vor Welle 17 schlaegt er fehl. */
+async function abschnittGlobalesModell(cdp: Cdp): Promise<void> {
+  const NAME = "G1 Altwert wandert in die Zeile, kein globales Modell in den Einstellungen";
+  const ALTWERT = "smoke-altmodell";
+  const NAME2 = "G2 Panel-Modellwahl schreibt in die aktive Zeile, „Server waehlt“ leert sie";
+  const pfad = `.obsidian/plugins/${PLUGIN_ID}/data.json`;
+  const vor = await cdp.evaluate<string | null>(`
+    return (await app.vault.adapter.exists(${JSON.stringify(pfad)})) ? await app.vault.adapter.read(${JSON.stringify(pfad)}) : null;
+  `);
+  try {
+    const roh = vor === null ? {} : (JSON.parse(vor) as Record<string, unknown>);
+    const alt = { ...roh, endpoints: [{ url: "http://127.0.0.1:1234" }], model: ALTWERT };
+    const ergebnis = await cdp.evaluate<{ zeilenModell: unknown; hatAltschluessel: boolean; text: string; namen: string[] } | null>(`
+      await app.vault.adapter.write(${JSON.stringify(pfad)}, ${JSON.stringify(JSON.stringify(alt))});
+      await app.plugins.disablePlugin(${JSON.stringify(PLUGIN_ID)});
+      await app.plugins.enablePlugin(${JSON.stringify(PLUGIN_ID)});
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      const gespeichert = JSON.parse(await app.vault.adapter.read(${JSON.stringify(pfad)}));
+      const tab = (app.setting?.pluginTabs ?? []).find((x) => x.id === ${JSON.stringify(PLUGIN_ID)});
+      if (!tab) return null;
+      tab.display();
+      return { zeilenModell: p.settings.endpoints[0]?.model, hatAltschluessel: "model" in gespeichert || "model" in p.settings, text: tab.containerEl.textContent ?? "", namen: [...tab.containerEl.querySelectorAll(".setting-item-name")].map((n) => (n.textContent ?? "").trim()) };
+    `);
+    if (ergebnis === null) { skipped(NAME, "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden"); return; }
+    const keineOption = !/global model/i.test(ergebnis.text);
+    const keineZeile = !ergebnis.namen.includes("Model");
+    record(NAME, ergebnis.zeilenModell === ALTWERT && !ergebnis.hatAltschluessel && keineOption && keineZeile,
+      `Zeilen-Modell „${String(ergebnis.zeilenModell)}“ (erwartet „${ALTWERT}“), Altschluessel ${ergebnis.hatAltschluessel ? "noch da" : "weg"}, Option „global model“ ${keineOption ? "weg" : "noch da"}, Zeile „Model“ ${keineZeile ? "weg" : "noch da"}`);
+    const panel = await cdp.evaluate<{ gewaehlt: unknown; inUse: string; geleert: unknown; inUseLeer: string }>(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      await p.llm.setModel("panel-wahl-smoke");
+      const gewaehlt = p.settings.endpoints[0]?.model;
+      const inUse = p.llm.modelInUse();
+      await p.llm.setModel("");
+      return { gewaehlt, inUse, geleert: p.settings.endpoints[0]?.model, inUseLeer: p.llm.modelInUse() };
+    `);
+    record(NAME2, panel.gewaehlt === "panel-wahl-smoke" && panel.inUse === "panel-wahl-smoke" && (panel.geleert ?? "") === "",
+      `Zeile nach Wahl „${String(panel.gewaehlt)}“, modelInUse „${panel.inUse}“; nach „Server waehlt“ Zeile „${String(panel.geleert ?? "")}“, modelInUse „${panel.inUseLeer}“`);
+  } finally {
+    await cdp.evaluate(`
+      await app.vault.adapter.write(${JSON.stringify(pfad)}, ${JSON.stringify(vor ?? "{}")});
+      await app.plugins.disablePlugin(${JSON.stringify(PLUGIN_ID)});
+      await app.plugins.enablePlugin(${JSON.stringify(PLUGIN_ID)});
+      return true;
+    `).catch(() => undefined);
   }
 }
 
@@ -1565,6 +1610,7 @@ async function main(): Promise<void> {
     await abschnitt("Manager", () => abschnittManager(cdp));
     await abschnitt("Apple Intelligence", () => abschnittApple(cdp));
     await abschnitt("Hilfe", () => abschnittHilfe(cdp));
+    await abschnitt("Globales Modell", () => abschnittGlobalesModell(cdp));
     await abschnitt("i18n", () => abschnittI18n(cdp));
   } finally {
     // Nimmt zurueck, was `requireVisible` in seiner letzten Stufe gesetzt haben kann —

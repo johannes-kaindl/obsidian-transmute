@@ -44,7 +44,7 @@ Transmute schließt eine Lücke, die Obsidian offen lässt: Die eingebaute Suche
 | Einstellung | Default | Wirkung |
 |---|---|---|
 | **Endpoints** | `["http://127.0.0.1:1234"]` | Geordnete Liste OpenAI-kompatibler Server, der Reihe nach probiert; der erste erreichbare wird genutzt. Ein-Klick-Presets für LM Studio und Ollama, dazu ein Erreichbarkeits-Status pro Zeile und ein „Test connection"-Button. API-Schlüssel liegen im Schlüsselbund von Obsidian, nicht in der `data.json`. |
-| **global model** (je Endpunkt-Zeile) | `""` (leer) | Welches Modell angefragt wird. Leer lässt den Server entscheiden, welches geladene Modell genutzt wird. Ein Dropdown wird aus `/v1/models` des aktiven Endpunkts gefüllt; über den Reload-Button aktualisierbar. |
+| **Modell** (je Endpunkt-Zeile) | `""` (leer) | Welches Modell die Zeile anfragt. Leer lässt den Server entscheiden, welches geladene Modell genutzt wird. Das Modell-Dropdown im Panel (aus `/v1/models` des aktiven Endpunkts gefüllt) schreibt in die aktive Zeile. |
 | **Request** | Denken aus | Einklappbarer Abschnitt mit den Sampling-Werten und der Denkstufe, die gesendet werden, je Modus. Transmute nutzt den Modus **Structured**. Die Temperatur geht immer mit `0` hinaus, unabhängig davon, was dieser Abschnitt zeigt. Die erste Antwort darf bis zu 15 Minuten dauern, solange ein Modell lädt; ein Zeitlimit gibt es nicht mehr als Einstellung. |
 | **Default scope** | `file` (Ganze Notiz) | Mit welchem Bereich eine neue Regel startet — „Ganze Notiz" oder „Auswahl". Pro Lauf im Panel umschaltbar. |
 | **Text sample sent to the model** | `2000` (Zeichen) | Wie viel Text des Bereichs zusammen mit der Anweisung mitgeschickt wird, damit das Modell sieht, worauf es trifft. |

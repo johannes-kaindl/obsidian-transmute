@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The global *Model* setting is gone; each endpoint row carries its own model.** An existing value moves once into the rows that had none. The model dropdown in the panel now writes into the active row (with the LLM Endpoint Manager: into the choice), and "let the server choose" empties it. With the Manager, the panel now shows the model that is actually used, including the Manager's default, instead of only an explicit choice.
+- The connection now comes from obsidian-kit 0.53.0 and code-kit 0.21.1. A fenced Mermaid diagram in a model answer that could load remote content is shown as plain text.
+
+### Fixed
+
+- A model answer with tens of thousands of unclosed `<think>` tags no longer freezes the panel: stripping thinking blocks is now linear (50,000 tags took 2.5 s, now under a millisecond). With two or more stray `</think>` the text is cut after the last one.
+
 ## [0.10.1] — 2026-10-10
 
 ### Documentation

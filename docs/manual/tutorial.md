@@ -57,7 +57,7 @@ If you are using Ollama instead, click the **"Ollama"** preset button to add
 `http://localhost:11434` to the list — Transmute tries endpoints in order and uses the
 first one that answers, so you can keep both configured.
 
-You can leave **"Model"** empty — the server will use whichever model you loaded, and
+You can leave the endpoint row's model empty — the server will use whichever model you loaded, and
 the model that actually answered is what Transmute uses.
 
 ## Step 4 — Open the panel

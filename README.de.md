@@ -71,7 +71,7 @@ Der ganze Weg und alle Einstellungen: [Funktionen und Verwendung](https://github
 **Einstellungen → Community-Plugins → Transmute** öffnen; die Einstellungen sind unter **„Connection“** und **„Behaviour“** gruppiert. Die ersten, die du anfasst:
 
 - **Endpoints** — geordnete Liste OpenAI-kompatibler Server (lokal oder gehostet, je mit optionalem API-Schlüssel); der erste erreichbare wird genutzt. Ist das Plugin **LLM Endpoint Manager** installiert, kommen Endpunkte und Schlüssel von dort. Die Basis-URL ohne abschließendes `/v1` eintragen.
-- **Model** — leer lässt den Server das geladene Modell wählen; ein Dropdown wird aus `/v1/models` des Endpunkts gefüllt.
+- **Modell** (je Endpunkt-Zeile) — jede Zeile trägt ihr eigenes Modell; leer lässt den Server das geladene Modell wählen. Die Modellwahl im Panel schreibt in die aktive Zeile.
 - **Request timeout (ms)** — wie lange auf die Antwort des Modells gewartet wird (Standard `120000`).
 - **Default scope** — „Ganze Notiz“, „Auswahl“ oder „Ganzer Vault“.
 - **Reasoning-Modelle bitten, das Denken zu überspringen** — standardmäßig an.
