@@ -74,6 +74,10 @@ die Timer-Kette des Fensters und meldet die Bedingungen im Ergebnis mit.
 
 ## Durchläufe
 
+### 2026-10-12 — Obsidian 1.14.4, Welle 20 (B1: zentraler LLM-Stub und Fake-Manager, Brücke `fc71211`) · **48 grün · 0 rot · 2 übersprungen von 50**
+
+Der eigene HTTP-Server des Treibers (`startFakeEndpoint`) ist eine dünne Hülle über `startLlmStub`, der Fake-Manager des Abschnitts „Manager“ kommt aus `installFakeManager`/`entferneFakeManager`. Gleiche Lage wie vorher (Port 9392, frischer Prozess), Bilanz unverändert; die Detailzeilen aller V-, M-, S- und llm-lab-Punkte sind bis auf die turnId identisch. Ein erster Lauf zeigte „Renderer atmet“ als nichts gemessen („Lauf ist in 2 s nicht angelaufen“, Abschnitt vor jedem Stub); zwei Wiederholungen mit frischem Prozess lagen wieder bei „übersprungen: Lauf nach 110 ms durch“. Der Apple-Fake (zwei Endpunkte, Transport `shortcuts`) bleibt lokal, weil `FakeEndpunkt` weder `transport` noch `shortcut` noch den `list`-Filter `transports` kennt.
+
 ### 2026-10-12 — Obsidian 1.14.4, Welle 20 (Bibliothek-Tab im Hub) · **48 grün · 0 rot · 2 übersprungen von 50**
 
 Vorher (frischer Prozess nach Aufwärmlauf, Port 9392): 45 grün · 0 rot · 2 übersprungen von 47. Neu sind die drei Hub-Punkte T1–T3; sonst hat sich nichts verschoben (die zwei Übersprungenen sind weiter „Renderer atmet“/„Abbrechen“: der Lauf war nach 83 ms durch). Der erste Lauf mit T3 war **rot** (Muster- und Ersetzungsfeld leer nach „Ausführen“): `editRule` meldet „edit“ und zeichnet die Regel-Felder nicht neu; das gab es schon bei der alten Preset-Knopfzeile. Behoben mit einem Voll-Draw vor dem Tab-Wechsel, Unit-Test mit Mutationsprobe in beide Richtungen.

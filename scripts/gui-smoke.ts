@@ -37,12 +37,11 @@
  * Exit 0 gruen/uebersprungen, 1 bei Rot oder „nichts gemessen", 2 bei Abbruch.
  */
 
-import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 
-import { attachTo, bereiteInstanzVor, Cdp, closeExtraLeaves, notices, pollUntil, releaseAlwaysOnTop, requireVisible, setPluginSetting }
+import { attachTo, bereiteInstanzVor, Cdp, entferneFakeManager, installFakeManager, closeExtraLeaves, notices, pollUntil, releaseAlwaysOnTop, requireVisible, setPluginSetting }
   from "../../tools/obsidian-cdp/cdp.js";
+import { startLlmStub } from "../../tools/obsidian-cdp/llm-stub.js";
 import { createBilanz, parseArgs, runDriver, Vorbedingung } from "../../tools/obsidian-cdp/bilanz.js";
 import { requireEigenerBuild } from "../../tools/obsidian-cdp/vault.js";
 import { LAB_API_VERSION } from "../src/vendor/kit-obsidian/lab-client";
@@ -908,66 +907,39 @@ async function startFakeEndpoint(
   draft: { regex: string; flags: string; replacement: string; explanation: string },
   opts: { echoPlaceholder?: boolean } = {},
 ): Promise<{ url: string; close: () => Promise<void>; chatCalls: () => number; lastModel: () => string; lastBody: () => string; lastAuth: () => string }> {
-  let chatCalls = 0;
-  let lastModel = "";
-  let lastBody = "";
-  let lastAuth = "";
-  const server: Server = createServer((req, res) => {
-    if (req.method === "OPTIONS") {
-      res.writeHead(204, {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-        "Access-Control-Allow-Headers": "*",
-      });
-      res.end();
-      return;
-    }
-    if (req.method === "POST" && req.url?.includes("/v1/chat/completions") === true) {
-      // Modell mitschneiden: ein Lauf „ging durch" belegt nicht, WELCHES Modell ankam.
-      const teile: Buffer[] = [];
-      req.on("data", (c: Buffer) => teile.push(c));
-      req.on("end", () => {
-        chatCalls += 1;
-        lastBody = Buffer.concat(teile).toString("utf8");
-        lastAuth = String(req.headers.authorization ?? "");
-        try { lastModel = String((JSON.parse(lastBody) as { model?: unknown }).model ?? ""); } catch { lastModel = "?"; }
-        // Schwaerzung: das Modell sieht Platzhalter `[redacted-<art>-<n>]`; spiegelt es einen in `regex`
-        // zurueck, muss das Plugin das Original sehen (umkehrbar).
-        const platzhalter = opts.echoPlaceholder === true ? /\[redacted-[a-z-]+-\d+\]/.exec(lastBody)?.[0] : undefined;
-        const antwort = platzhalter !== undefined ? { ...draft, regex: platzhalter } : draft;
-        res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-        res.end(JSON.stringify({
-          choices: [{ message: { content: JSON.stringify(antwort) }, finish_reason: "stop" }],
-        }));
-      });
-      return;
-    }
-    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-    res.end(
-      req.url?.includes("/v1/models") === true
-        ? JSON.stringify({ data: [{ id: "smoke-model", object: "model" }] })
-        : JSON.stringify({ ok: true }),
-    );
+  // Der zentrale Stub (Welle 20): `stream:false` bekommt JSON, die Pfade sind streng (alles
+  // ausser GET /v1/models und POST /v1/chat/completions ist 404 — der alte Server antwortete auf
+  // jeden fremden Pfad mit 200 {"ok":true}).
+  const stub = await startLlmStub({
+    models: ["smoke-model"],
+    antwort: (anfrage) => {
+      // Schwaerzung: das Modell sieht Platzhalter `[redacted-<art>-<n>]`; spiegelt es einen in `regex`
+      // zurueck, muss das Plugin das Original sehen (umkehrbar).
+      const platzhalter = opts.echoPlaceholder === true ? /\[redacted-[a-z-]+-\d+\]/.exec(anfrage.body)?.[0] : undefined;
+      return { text: JSON.stringify(platzhalter !== undefined ? { ...draft, regex: platzhalter } : draft) };
+    },
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const port = (server.address() as AddressInfo).port;
   return {
-    url: `http://127.0.0.1:${port}`,
-    // `server.close` wartet auf offene Keep-Alive-Sockets des Renderers, ohne `closeAllConnections`
-    // unbegrenzt (Verdacht fuer „Smoke haengt nach M3"). Mit Frist: laeuft sie ab, ist der
-    // Abschnitt „nichts gemessen" (Vorbedingung), kein stilles Haengen.
+    url: stub.url,
+    // Mit Frist: laeuft sie ab, ist der Abschnitt „nichts gemessen“ (Vorbedingung), kein stilles
+    // Haengen (Verdacht fuer „Smoke haengt nach M3“).
     close: async () => {
       let timer: NodeJS.Timeout | undefined;
       const frist = new Promise<"frist">((resolve) => { timer = setTimeout(() => { resolve("frist"); }, STUB_CLOSE_FRIST_MS); });
-      const zu = new Promise<"zu">((resolve) => { server.close(() => { resolve("zu"); }); server.closeAllConnections(); });
+      const zu = stub.stop().then(() => "zu" as const);
       const ende = await Promise.race([zu, frist]);
       clearTimeout(timer);
       if (ende === "frist") throw new Vorbedingung(`Stub-Server schloss nicht binnen ${STUB_CLOSE_FRIST_MS} ms`);
     },
-    chatCalls: () => chatCalls,
-    lastModel: () => lastModel,
-    lastBody: () => lastBody,
-    lastAuth: () => lastAuth,
+    chatCalls: () => stub.zaehler().chat,
+    // Modell mitschneiden: ein Lauf „ging durch" belegt nicht, WELCHES Modell ankam.
+    lastModel: () => {
+      const letzte = stub.letzte("chat");
+      if (!letzte) return "";
+      return letzte.json === null ? "?" : String((letzte.json as { model?: unknown }).model ?? "");
+    },
+    lastBody: () => stub.letzte("chat")?.body ?? "",
+    lastAuth: () => String(stub.letzte("chat")?.header.authorization ?? ""),
   };
 }
 
@@ -1173,34 +1145,28 @@ const MANAGED_TEXT = ["Endpunkte kommen vom LLM Endpoint Manager", "Endpoints co
  *  Renderer selbst auf `window` (eine CDP-Rundreise ueber Node verliert Funktionen) und
  *  setzt ihn beim Abbau wieder ein — ein echter Manager im Vault bleibt so unangetastet. */
 async function fakeManagerEin(cdp: Cdp, url: string): Promise<void> {
-  await cdp.evaluate(`
-    if (!("__smokeVorherManager" in window)) window.__smokeVorherManager = app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}] ?? null;
-    const ep = { id: "fake-mgr-ep", label: "Fake Manager Endpoint", url: ${JSON.stringify(url)}, provider: "openai", capabilities: ["chat"], defaultModel: ${JSON.stringify(MANAGER_DEFAULT_MODEL)}, enabled: true, hasSecret: false };
-    // config.model traegt wie beim echten Manager ebenfalls den Standard — sonst waere die
-    // Vorrangregel „Nutzerwahl schlaegt Standard" (M2b) ohne Wirkung gruen.
-    const geloest = { id: ep.id, label: ep.label, config: { url: ${JSON.stringify(url)}, model: ${JSON.stringify(MANAGER_DEFAULT_MODEL)} }, defaultModel: ${JSON.stringify(MANAGER_DEFAULT_MODEL)} };
-    app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}] = { api: {
-      version: 1,
-      list: () => [ep],
-      get: (id) => (id === ep.id ? ep : null),
-      resolve: async () => geloest,
-      materialize: async (id) => (id === ep.id ? geloest : { error: "not-found" }),
-      models: async (id) => (id === ep.id ? [${JSON.stringify(MANAGER_DEFAULT_MODEL)}, ${JSON.stringify(MANAGER_CHOICE_MODEL)}] : { error: "not-found" }),
-      importEndpoints: async (eps) => ({ added: [], merged: [], skipped: eps.map((e) => e.url) }),
-      on: () => () => {},
-    } };
-    return true;
-  `);
+  // Zentraler Fake-Manager. `configModel: "default"`: `config.model` traegt wie beim echten Manager
+  // den Standard — sonst waere die Vorrangregel „Nutzerwahl schlaegt Standard“ (M2b) ohne Wirkung gruen.
+  await installFakeManager(cdp, {
+    pluginId: MANAGER_PLUGIN_ID,
+    endpunkte: [{
+      id: "fake-mgr-ep", label: "Fake Manager Endpoint", url,
+      models: [MANAGER_DEFAULT_MODEL, MANAGER_CHOICE_MODEL], defaultModel: MANAGER_DEFAULT_MODEL, configModel: "default",
+    }],
+  });
 }
 
+/** Stellt den vorgefundenen Slot wieder her — ein echter Manager im Vault bleibt unangetastet. Raeumt
+ *  auch den lokalen Apple-Fake (eigener Sicherungsschluessel `__smokeVorherManager`) ab. */
 async function fakeManagerAus(cdp: Cdp): Promise<void> {
+  await entferneFakeManager(cdp, { pluginId: MANAGER_PLUGIN_ID });
   await cdp.evaluate(`
     const id = ${JSON.stringify(MANAGER_PLUGIN_ID)};
     if ("__smokeVorherManager" in window) {
       const vorher = window.__smokeVorherManager;
       if (vorher === null) delete app.plugins.plugins[id]; else app.plugins.plugins[id] = vorher;
       delete window.__smokeVorherManager;
-    } else delete app.plugins.plugins[id];
+    }
     return true;
   `);
 }
