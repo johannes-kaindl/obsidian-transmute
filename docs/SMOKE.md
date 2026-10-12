@@ -10,29 +10,23 @@ schreiben") gesetzt. Ein Smoke, der an einem Modell hängt, misst das Modell mit
 
 ## Fahren
 
-⚠️ **Zuerst prüfen, wer sonst an Obsidian hängt.** Obsidian ist Single-Instance — ein
-`quit` trifft die Instanz, an der möglicherweise eine andere Session arbeitet, und zerstört
-deren Zustand. Der eigene Lauf ist danach sauber grün; der Schaden entsteht woanders und
-fällt nicht auf.
+Der Smoke läuft in einer **Zweitinstanz** mit eigenem Profil und eigenem Port; die reguläre Instanz wird nie beendet oder neu gestartet. `--port` ist Pflicht, und der Lauf braucht den Lock für den eigenen Port.
 
 ```bash
-lsof -nP -iTCP:9222 -sTCP:LISTEN >/dev/null && echo "läuft bereits — NICHT beenden"
-```
-
-Hört der Port schon, dann **mitnutzen statt neu starten**: ein eigenes Fenster per
-`vault-open` über IPC öffnen, dann `attachTo("workspace", port, vault)` — der Vault-Name
-wählt, nicht die Reihenfolge. ⚠️ Die Port-Prüfung ersetzt die Frage nicht: sie zeigt aktive
-CDP-Treiber, aber nicht, wer ein Fenster offen hält oder auf den Port wartet.
-
-Erst wenn nichts läuft — oder nach Absprache mit dem, der es benutzt — gilt das Rezept unten.
-
-```bash
-osascript -e 'tell application "Obsidian" to quit'
-open -a Obsidian --args --remote-debugging-port=9222
+UD=/tmp/obs-test-obsidian-transmute; mkdir -p "$UD"
+lsof -nP -iTCP:<port> -sTCP:LISTEN; pgrep -f "user-data-dir=$UD"      # beides leer
+cp ~/Library/Application\ Support/obsidian/obsidian-<version>.asar "$UD"/
+# $UD/obsidian.json: {"vaults":{"nt":{"path":"<Vault>","ts":<ms>,"open":true}},"language":"en"}
+# <Vault> = $STAGING_VAULTS_DIR/obsidian-transmute (Default-Name des Treibers) oder ein Wegwerf-Vault:
 npm run lab:vault -- --out ./test-vault --notes 12000   # nur beim ersten Mal
-OBSIDIAN_PLUGIN_DIR="$PWD/test-vault/.obsidian/plugins/transmute" npm run deploy
-npm run smoke:gui -- --vault test-vault
+OBSIDIAN_PLUGIN_DIR="<Vault>/.obsidian/plugins/transmute" npm run deploy
+python3 ~/.claude/hooks/obsidian-cdp-lock.py acquire --label obsidian-transmute --intent "GUI-Smoke" --exclusive focus --port <port> --ttl 300
+/Applications/Obsidian.app/Contents/MacOS/Obsidian --user-data-dir="$UD" --remote-debugging-port=<port> &
+npm run smoke:gui -- --port <port> [--vault <Vault-Name>]
+python3 ~/.claude/hooks/obsidian-cdp-lock.py release
 ```
+
+Vertrauensdialog, eingeschränkter Modus und Aktivierung erledigt der Treiber (`bereiteInstanzVor`). Je Messlauf ein frischer Prozess; der erste Lauf nach einer Profilanlage ist ein Aufwärmlauf. Die Bilanz hat vier Zustände (grün · rot · übersprungen · nichts gemessen); Rot und „nichts gemessen" setzen Exit 1, ein Abbruch Exit 2. Der Nenner ist die Soll-Liste `ABSCHNITTE` im Treiber.
 
 **Nur EIN Obsidian-Fenster offen lassen.** Bei mehreren Fenstern bringt `activate` das
 falsche nach vorn, und Chromium drosselt Timer in `hidden` Seiten auf 1 Hz — jede

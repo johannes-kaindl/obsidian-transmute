@@ -9,13 +9,15 @@
  * yourself"). Ein Aufnahmelauf, der an einem LLM haengt, ist nicht reproduzierbar — und
  * die Bilder sollen das Werkzeug zeigen, nicht die Tagesform eines Modells.
  *
- * ## Ablauf
+ * ## Ablauf (Zweitinstanz, eigener Port, Lock je Port — Dach-AGENTS.md § Staging-Vaults)
+ *
+ * Kein Quit und kein Neustart der regulaeren Instanz; `--port` ist Pflicht.
  *
  * ```bash
- * export STAGING_VAULTS_DIR="$HOME/StagingVaults"
  * npm run build
- * npm run shots -- --setup        # Vault bauen, danach Obsidian NEU STARTEN
- * npm run shots -- --only preview
+ * npm run shots -- --setup                          # Vault bauen ($STAGING_VAULTS_DIR muss gesetzt sein)
+ * # Zweitinstanz starten (Profil /tmp/obs-test-obsidian-transmute, .asar, obsidian.json, Lock), dann:
+ * npm run shots -- --port <port> --only preview
  * ```
  *
  * Ein Bild pro Obsidian-Start ist der sichere Weg: jeder Lauf hinterlaesst Zustand.
@@ -24,7 +26,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { attachTo, closeExtraLeaves, openExisting, pollUntil, setAppConfig, type Cdp } from "../../tools/obsidian-cdp/cdp.js";
+import { attachTo, closeExtraLeaves, openExisting, pollUntil, requireVisible, setAppConfig, type Cdp } from "../../tools/obsidian-cdp/cdp.js";
 import { boxAround, boxOf, capture, setWindowSize, writeShot } from "../../tools/obsidian-cdp/shot.js";
 import { buildVault, stagingVaultDir } from "../../tools/obsidian-cdp/vault.js";
 
@@ -50,7 +52,7 @@ const argOf = (name: string): string | undefined => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const PORT = Number(argOf("port") ?? "9222");
+const PORT = Number(argOf("port") ?? "");
 const ONLY = argOf("only");
 const VAULT_NAME = "transmute-shots";
 
@@ -231,18 +233,18 @@ async function main(): Promise<void> {
     for (const zeile of buildVault({ repoRoot: REPO_ROOT, vaultDir, fixtureDir: FIXTURE, pluginId: PLUGIN_ID })) {
       console.log(`  ${zeile}`);
     }
-    console.log(`\nVault steht: ${vaultDir}\nObsidian jetzt NEU STARTEN und diesen Vault oeffnen.`);
+    console.log(`\nVault steht: ${vaultDir}\nZweitinstanz (neu) starten, diesen Vault in $UD/obsidian.json eintragen.`);
     return;
   }
 
+  if (!Number.isInteger(PORT) || PORT <= 0) throw new Error("--port <port> ist Pflicht (Zweitinstanz, siehe Kopf dieser Datei); kein Standardport.");
   const cdp = await attachTo("workspace", PORT, VAULT_NAME);
   if (!cdp) throw new Error(`Kein Obsidian-Hauptfenster fuer Vault „${VAULT_NAME}" auf Port ${PORT}.`);
 
   try {
-    await cdp.send("Page.bringToFront");
-    const { execFileSync } = await import("node:child_process");
-    execFileSync("osascript", ["-e", 'tell application "Obsidian" to activate']);
-    await new Promise((r) => setTimeout(r, 2000));
+    // `requireVisible` zielt auf das verbundene Fenster; ein `osascript … activate` holte die
+    // reguelaere Instanz nach vorn (Befund kl-w19).
+    await requireVisible(cdp);
 
     // Aufnahmesprache ist Englisch — README.md ist die kanonische Fassung. Die
     // Einstellung ist APP-weit und wird deshalb geprueft, nicht gesetzt: ein stiller
