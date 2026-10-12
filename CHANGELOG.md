@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Kit pins raised to obsidian-kit 0.57.0 / code-kit 0.24.0. Classifying a failed Shortcuts call (timeout, busy, cancelled, unsupported) now uses the kit's shared `classifyShortcutFailure` instead of a local copy; it returns the same reason and message for every status and error body, so nothing changes for you.
+
 ## [0.12.0] — 2026-10-12
 
 ### Changed

@@ -1,5 +1,4 @@
-import type { ShortcutFailure } from "./shortcut-errors";
-import { classifyShortcutFailure } from "./shortcut-errors";
+import { classifyShortcutFailure, type ShortcutFailure } from "../../vendor/kit/shortcut-failure";
 
 export type CompleteResult =
   /** truncated: finish_reason === "length" — am Token-Limit abgeschnitten. Kein Fehler,
