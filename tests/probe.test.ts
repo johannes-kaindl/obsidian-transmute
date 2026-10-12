@@ -50,8 +50,10 @@ describe("probeRisky", () => {
       "a".repeat(5000),
       { now: () => Date.now(), budgetMs: 4 },
     );
-    // Echte Zeit: die Probe muss in Sekundenbruchteilen zurueckkommen, sonst waere sie
-    // selbst die Bombe, vor der sie schuetzen soll.
+    // Echte Zeit, absichtlich ein Budget und keine Linearitaetsprobe: das Muster `(a+)+b` ist
+    // exponentiell, `pruefeLinear` kennt keine Frist und haenge daran. Die Probe muss in
+    // Sekundenbruchteilen zurueckkommen, sonst waere sie selbst die Bombe; 3000 ms sind das
+    // mindestens das Dreissigfache des gemessenen Werts (ganze Testdatei 22–69 ms) und tragen auch Load ~300 bei zwoelf Sessions.
     expect(Date.now() - start).toBeLessThan(3000);
     expect(res.ok).toBe(false);
   });

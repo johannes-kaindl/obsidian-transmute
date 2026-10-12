@@ -22,9 +22,8 @@ describe("parseRuleResponse", () => {
   });
 
   it("viele offene think-Tags bleiben linear (kein quadratisches Regex-Backtracking)", () => {
-    const t0 = performance.now();
-    parseRuleResponse("<think>".repeat(50_000));
-    expect(performance.now() - t0).toBeLessThan(500);
+    const r = pruefeLinear(parseRuleResponse, "<think>");
+    expect(r.linear, r.message).toBe(true);
   });
 
   it("entfernt einen think-Block", () => {
