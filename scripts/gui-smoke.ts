@@ -15,42 +15,35 @@
  *
  * ## Voraussetzung
  *
- * ⚠️ **Zuerst pruefen, wer sonst an Obsidian haengt.** Obsidian ist Single-Instance — ein
- * `quit` trifft die Instanz, an der moeglicherweise eine andere Session arbeitet, und zerstoert
- * deren Zustand. Der eigene Lauf ist danach sauber gruen; der Schaden entsteht woanders und
- * faellt nicht auf.
+ * Zweitinstanz mit eigenem Profil und eigenem Port, nie die regulaere Instanz (kein `quit`,
+ * kein Neustart fremder Fenster). `--port` ist Pflicht.
  *
  * ```bash
- * lsof -nP -iTCP:9222 -sTCP:LISTEN >/dev/null && echo "laeuft bereits — NICHT beenden"
+ * UD=/tmp/obs-test-obsidian-transmute; mkdir -p "$UD"
+ * lsof -nP -iTCP:<port> -sTCP:LISTEN; pgrep -f "user-data-dir=$UD"      # beides leer
+ * cp ~/Library/Application\ Support/obsidian/obsidian-*.asar "$UD"/      # aktuelle Version
+ * # $UD/obsidian.json: {"vaults":{"nt":{"path":"$STAGING_VAULTS_DIR/obsidian-transmute","ts":1,"open":true}},"language":"en"}
+ * python3 ~/.claude/hooks/obsidian-cdp-lock.py acquire --label obsidian-transmute --intent "GUI-Smoke" --exclusive focus --port <port> --ttl 300
+ * OBSIDIAN_PLUGIN_DIR="$STAGING_VAULTS_DIR/obsidian-transmute/.obsidian/plugins/transmute" npm run deploy
+ * /Applications/Obsidian.app/Contents/MacOS/Obsidian --user-data-dir="$UD" --remote-debugging-port=<port> &
+ * npm run smoke:gui -- --port <port>
+ * python3 ~/.claude/hooks/obsidian-cdp-lock.py release
  * ```
  *
- * Hoert der Port schon, dann **mitnutzen statt neu starten**: ein eigenes Fenster per
- * `vault-open` ueber IPC oeffnen, dann `attachTo("workspace", port, vault)` — der Vault-Name
- * waehlt, nicht die Reihenfolge. ⚠️ Die Port-Pruefung ersetzt die Frage nicht: sie zeigt aktive
- * CDP-Treiber, aber nicht, wer ein Fenster offen haelt oder auf den Port wartet.
+ * Vertrauensdialog, Restricted Mode und Aktivierung erledigt `bereiteInstanzVor` im Treiber.
+ * Je Messlauf ein frischer Prozess; der erste Lauf nach einer Profilanlage ist ein Aufwaermlauf.
+ * Flags: `--vault <name>` (Default `obsidian-transmute`), `--keep`.
  *
- * Erst wenn nichts laeuft — oder nach Absprache mit dem, der es benutzt — gilt das Rezept unten.
- *
- * ```bash
- * osascript -e 'quit app "Obsidian"'
- * open -a Obsidian --args --remote-debugging-port=9222
- * OBSIDIAN_PLUGIN_DIR="<vault>/.obsidian/plugins/transmute" npm run deploy
- * ```
- *
- * Dann:
- *
- * ```bash
- * npm run smoke:gui -- --vault test-vault
- * npm run smoke:gui -- --port 9222 --keep
- * ```
+ * Exit 0 gruen/uebersprungen, 1 bei Rot oder „nichts gemessen", 2 bei Abbruch.
  */
 
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 
-import { attachTo, Cdp, closeExtraLeaves, notices, pollUntil, releaseAlwaysOnTop, requireVisible, setPluginSetting }
+import { attachTo, bereiteInstanzVor, Cdp, closeExtraLeaves, notices, pollUntil, releaseAlwaysOnTop, requireVisible, setPluginSetting }
   from "../../tools/obsidian-cdp/cdp.js";
+import { createBilanz, parseArgs, runDriver, Vorbedingung } from "../../tools/obsidian-cdp/bilanz.js";
 import { requireEigenerBuild } from "../../tools/obsidian-cdp/vault.js";
 import { LAB_API_VERSION } from "../src/vendor/kit-obsidian/lab-client";
 
@@ -69,47 +62,107 @@ const NEU = "neue Schreibweise";
  *  der Lauf durch, bevor der Klick ankommt — dann wird uebersprungen statt geraten. */
 const ABORT_MIN_KANDIDATEN = 100;
 
-const args = process.argv.slice(2);
-const argOf = (name: string, fallback: string): string => {
-  const i = args.indexOf(`--${name}`);
-  const value = i >= 0 ? args[i + 1] : undefined;
-  return value ?? fallback;
-};
-const PORT = Number(argOf("port", "9222"));
-const VAULT = args.includes("--vault") ? argOf("vault", "") : undefined;
-const KEEP = args.includes("--keep");
+const args = parseArgs(process.argv.slice(2));
+const PORT = Number(args.value("port") ?? "");
+const VAULT = args.value("vault") ?? "obsidian-transmute";
+const KEEP = args.has("keep");
 
 // --- Pruefpunkte -------------------------------------------------------------
 
-/** Drei Zustaende, nicht zwei — und das ist der ganze Punkt.
- *
- * Bis zum 2026-09-02 schrieb `skipped()` `passed: true`, und die Schlusszeile zaehlte
- * `checks.length - rot.length`. Ein uebersprungener Pruefpunkt erschien damit in der
- * **Bilanz als gruener**: der Lauf an diesem Tag meldete „25/25 gruen", obwohl 23 gemessen
- * und 2 uebersprungen waren — ausgerechnet die zwei, wegen derer der Lauf gefahren wurde.
- * Auch der Exit-Code blieb 0.
- *
- * Das ist dieselbe Gattung wie die Fehler, die dieser Pruefpunkt schon dreimal hatte, nur
- * andersherum: dort wurde *Abwesenheit von Bedarf* als Defekt gemeldet, hier wird
- * *Abwesenheit von Messung* als Erfolg gemeldet. Ein Zaehler, der beides in einen Topf
- * wirft, ist genau dann falsch, wenn man ihn braucht. */
-type Zustand = "gruen" | "rot" | "uebersprungen";
+/** Soll-Liste je Abschnitt — der Nenner der Bilanz (CORE-TEST-19). Ein Punkt, der nie
+ *  aufgezeichnet wird (Abschnitt abgebrochen, Vorbedingung fehlt), zaehlt als „nichts gemessen"
+ *  und setzt Exit 1; er erscheint nie als gruen. Zweig-Alternativen eines Punkts tragen
+ *  denselben Namen. */
+const ABSCHNITTE: Record<string, readonly string[]> = {
+  Umfang: [
+    "Bereich Vault zeigt den Umfangs-Block",
+    "Kandidatenzahl nennt Treffer und Gesamtzahl",
+    "Ordner-Filter grenzt ein",
+    "Leerer Umfang meldet sich als solcher",
+    "Vorschau-Knopf ist bei leerem Umfang gesperrt",
+  ],
+  Vorschau: [
+    "Vorschau listet betroffene Dateien",
+    "Dateien starten eingeklappt",
+    "Zusammenfassung nennt Dateien und Treffer",
+    "Aufklappen zeigt die Treffer der Datei",
+    "Teilweise gewaehlte Datei zeigt den Teil-Zustand",
+  ],
+  Anwenden: [
+    "Bestaetigungsdialog erscheint ueber der Schwelle",
+    "Anwendung meldet ihr Ergebnis",
+    "Die Ersetzung steht wirklich in der Datei",
+    "Snapshot liegt auf der Platte",
+    "Rueckgaengig-Knopf steht bereit",
+  ],
+  Rueckgaengig: [
+    "Unveraenderte Datei wird wiederhergestellt",
+    "Seither bearbeitete Datei bleibt unangetastet",
+    "Uebersprungene Datei wird benannt",
+  ],
+  Unvollstaendig: ["Unvollstaendig gemessene Datei ist gesperrt"],
+  "Datei-Anwenden": [
+    "Erstes Anwenden ersetzt beide Treffer in der Notiz",
+    "Regex bleibt nach Anwenden stehen, statt zu leeren",
+    "Zweites Anwenden mit Aenderung dazwischen greift ohne neues Pinnen",
+    "Zuruecksetzen leert die Runde bewusst",
+  ],
+  Abbruch: ["Renderer atmet waehrend des Laufs", "Abbrechen beendet den Lauf"],
+  Setter: [
+    "Bereich „Vault\" ueberlebt den Einstellungs-Setter",
+    "Bereich „Vault\" ueberlebt das Neuladen des Plugins",
+    "Frisch geoeffnetes Panel kennt die Kandidaten sofort",
+  ],
+  "llm-lab": ["llm-lab-Meldestrecke (Konsumenten-Seite): feature/turnId/promptTemplate/Nachrichten korrekt gemeldet"],
+  Verbindung: [
+    "V1 Schwaerzung: der Transport sieht den Platzhalter, die Regel kommt im Original an",
+    "V2 Schluessel wandert in den Schluesselbund und erreicht den Server trotzdem",
+    "V3 Anfrage: ohne Stream, Temperatur 0, ohne Denken",
+    "V4 Schwaerzung mit PEM: das JSON bleibt gueltig, das mehrzeilige Original ist da",
+  ],
+  Manager: [
+    "M1 Einstellungen zeigen den Manager statt der lokalen Liste",
+    "M2 Lauf nutzt den Manager-Endpunkt und dessen Standardmodell",
+    "M2b Die Modellwahl des Nutzers schlaegt den Standard des Endpunkts",
+    "M3 Manager aus: lokale Liste in den Einstellungen und im Lauf",
+  ],
+  "Apple Intelligence": [
+    "S1 Fake-Manager liefert den Apple-Endpunkt nur bei Opt-in",
+    "S2 Dropdown zeigt „Apple Intelligence (on-device)“",
+    "S3 Wahl → Quelle traegt transport shortcuts",
+    "S4 Lauf oeffnet die shortcuts://-URL mit dem gefalteten Prompt",
+    "S5 Zeitueberschreitung des Kurzbefehls zeigt die Kurzbefehl-Meldung",
+  ],
+  Hilfe: ["H1 Hilfe-Zeile ist die erste Zeile der Einstellungen"],
+  "Globales Modell": [
+    "G1 Altwert wandert in die Zeile, kein globales Modell in den Einstellungen",
+    "G2 Panel-Modellwahl schreibt in die aktive Zeile, „Server waehlt“ leert sie",
+  ],
+  i18n: ["Panel zeigt keinen rohen Uebersetzungs-Schluessel"],
+};
+const PUNKTE: readonly string[] = ["Panel laesst sich oeffnen", ...Object.values(ABSCHNITTE).flat()];
 
-interface Check {
-  name: string;
-  zustand: Zustand;
-  detail: string;
-}
-const checks: Check[] = [];
+const bilanz = createBilanz({ punkte: PUNKTE });
 
+/** gruen/rot. Ein Name ausserhalb von `PUNKTE` wirft — Tippfehlerschutz der Soll-Liste. */
 function record(name: string, passed: boolean, detail: string): void {
-  checks.push({ name, zustand: passed ? "gruen" : "rot", detail });
-  console.log(`${passed ? "✓" : "✗"} ${name} — ${detail}`);
+  bilanz.record(name, passed, detail);
 }
 
+/** Nicht anwendbar in dieser Lage (Lauf schon fertig, Budget) — zaehlt als uebersprungen, Exit 0. */
 function skipped(name: string, reason: string): void {
-  checks.push({ name, zustand: "uebersprungen", detail: `übersprungen: ${reason}` });
-  console.log(`· ${name} — übersprungen: ${reason}`);
+  bilanz.skipped(name, reason);
+}
+
+/** Gegenstand nicht erreicht (Vorbedingung, Zugang, fremder Zustand) — „nichts gemessen", Exit 1. */
+function unmeasured(name: string, reason: string): void {
+  bilanz.unmeasured(name, reason);
+}
+
+/** Setzt jeden noch nicht aufgezeichneten Punkt des Abschnitts auf „nichts gemessen". */
+function offeneUnmeasured(abschnittName: string, grund: string): void {
+  const da = new Set(bilanz.eintraege().map((p) => p.name));
+  for (const n of ABSCHNITTE[abschnittName] ?? []) if (!da.has(n)) unmeasured(n, grund);
 }
 
 // --- DOM-Helfer --------------------------------------------------------------
@@ -296,8 +349,7 @@ async function abschnittVorschau(cdp: Cdp): Promise<boolean> {
   // Handpfad statt Modell: ein Smoke, der ein LLM braucht, misst das LLM mit.
   const manual = await click(cdp, ".transmute-manual-link");
   if (!manual) {
-    record("Handpfad ohne Modell erreichbar", false, "Knopf „oder Regex selbst schreiben“ nicht gefunden");
-    return false;
+    throw new Vorbedingung("Knopf „oder Regex selbst schreiben“ nicht gefunden");
   }
   await fill(cdp, ".transmute-regex", ALT);
   await fill(cdp, ".transmute-replacement-input", NEU);
@@ -305,8 +357,7 @@ async function abschnittVorschau(cdp: Cdp): Promise<boolean> {
 
   const berechnet = await click(cdp, ".transmute-compute");
   if (!berechnet) {
-    record("Vorschau berechnen ist erreichbar", false, "Knopf fehlt");
-    return false;
+    throw new Vorbedingung("Knopf „Vorschau berechnen“ fehlt");
   }
 
   const zeilen = await pollUntil<number>(
@@ -479,8 +530,7 @@ async function abschnittDateiAnwenden(cdp: Cdp): Promise<void> {
 
   const manual = await click(cdp, ".transmute-manual-link");
   if (!manual) {
-    record("Datei-Anwenden: Handpfad erreichbar", false, "Knopf „oder Regex selbst schreiben“ nicht gefunden");
-    return;
+    throw new Vorbedingung("Knopf „oder Regex selbst schreiben“ nicht gefunden");
   }
   await fill(cdp, ".transmute-regex", ALT);
   await fill(cdp, ".transmute-replacement-input", NEU);
@@ -593,10 +643,17 @@ async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
       "Renderer atmet waehrend des Laufs",
       `nur ${kandidaten} Kandidaten — zu wenig fuer eine belastbare Messung`,
     );
+    skipped("Abbrechen beendet den Lauf", `nur ${kandidaten} Kandidaten — kein laufender Lauf zum Abbrechen`);
     return;
   }
 
+  // Abschnitt Datei-Anwenden endet im Bereich „Notiz" und mit „Zuruecksetzen": das Panel hat
+  // dann weder Kandidatenzeile noch Musterfeld, „Vorschau berechnen" ist nicht da. Bereich
+  // „Vault" (Position 2, sprachunabhaengig) und den Handpfad wiederherstellen.
+  await click(cdp, ".transmute-scope-btn", 2);
+  await cdp.evaluate("await new Promise((r) => setTimeout(r, 400)); return true;");
   await fill(cdp, ".transmute-folder", "");
+  if (!(await exists(cdp, ".transmute-regex"))) await click(cdp, ".transmute-manual-link");
   // Ein teures Muster statt eines groesseren Vaults: `[a-z]` trifft in jeder Datei bis
   // zur Obergrenze und macht den Lauf sicher laenger als den Freigabe-Takt (250 ms).
   // Mit dem billigen Muster war der Lauf ueber 1057 Notizen in unter 250 ms durch —
@@ -617,7 +674,9 @@ async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
   try {
     await requireVisible(cdp);
   } catch (fehler) {
-    skipped("Renderer atmet waehrend des Laufs", `Fenster nicht nach vorn zu holen: ${(fehler as Error).message.split("\n")[0]}`);
+    const grund = `Fenster nicht nach vorn zu holen: ${(fehler as Error).message.split("\n")[0]}`;
+    unmeasured("Renderer atmet waehrend des Laufs", grund);
+    unmeasured("Abbrechen beendet den Lauf", grund);
     await fill(cdp, ".transmute-regex", ALT);
     await fill(cdp, ".transmute-folder", SMOKE_DIR);
     return;
@@ -655,7 +714,7 @@ async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
     const compute = document.querySelector(".transmute-compute");
     if (!compute || compute.disabled) {
       window.setTimeout = orig;
-      return { yields: -1, runden: -1, abortSichtbar: false, dauer: 0, refMs, gestartet: false, hidden: document.hidden, vorher, muster };
+      return { yields: -1, runden: -1, abortSichtbar: false, dauer: 0, refMs, gestartet: false, hidden: document.hidden, vorher, muster, zeilen: -1, kopf: !compute ? "Knopf fehlt" : "Knopf gesperrt" };
     }
 
     const t0 = performance.now();
@@ -707,7 +766,7 @@ async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
   `);
 
   if (mess.yields === -1) {
-    skipped("Renderer atmet waehrend des Laufs", "Vorschau-Knopf war nicht bedienbar");
+    unmeasured("Renderer atmet waehrend des Laufs", `Vorschau-Knopf war nicht bedienbar (${mess.kopf}; Muster „${mess.muster}"; Kandidaten: ${mess.vorher})`);
     await fill(cdp, ".transmute-regex", ALT);
     await fill(cdp, ".transmute-folder", SMOKE_DIR);
     return;
@@ -720,7 +779,7 @@ async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
     + ` Fremdrunden ${mess.runden}, gestartet=${mess.gestartet}, abortSichtbar=${mess.abortSichtbar},`
     + ` Eichung ${Math.round(mess.refMs)} ms`;
   if (!mess.gestartet) {
-    skipped(
+    unmeasured(
       "Renderer atmet waehrend des Laufs",
       `Lauf ist in 2 s nicht angelaufen — der Vorschau-Klick hat keinen Lauf ausgeloest (${lage})`,
     );
@@ -782,7 +841,7 @@ async function abschnittSetter(cdp: Cdp): Promise<void> {
     return app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.defaultScope;
   `);
   if (ergebnis === null) {
-    skipped("Bereich „Vault\" ueberlebt den Einstellungs-Setter", "Settings-Tab nicht greifbar");
+    unmeasured("Bereich „Vault\" ueberlebt den Einstellungs-Setter", "Settings-Tab nicht greifbar");
     return;
   }
   record(
@@ -910,8 +969,8 @@ async function startFakeEndpoint(
 async function abschnittLlmLab(cdp: Cdp): Promise<void> {
   const labVorher = await cdp.evaluate<boolean>(`return !!app.plugins.plugins["llm-lab"];`);
   if (labVorher) {
-    skipped(
-      "llm-lab-Meldestrecke (Konsumenten-Seite)",
+    unmeasured(
+      ABSCHNITTE["llm-lab"]![0]!,
       "ein llm-lab-Eintrag existiert bereits (echtes Plugin oder Rest eines abgebrochenen Laufs); Stub wuerde ihn ueberschreiben",
     );
     return;
@@ -1171,7 +1230,7 @@ async function abschnittManager(cdp: Cdp): Promise<void> {
     "M3 Manager aus: lokale Liste in den Einstellungen und im Lauf",
   ];
   if (await cdp.evaluate<boolean>(`return !!app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}];`)) {
-    for (const n of REST) skipped(n, "ein llm-endpoint-manager ist im Vault aktiv; die Fake-API wuerde ihn verdecken");
+    for (const n of REST) unmeasured(n, "ein llm-endpoint-manager ist im Vault aktiv; die Fake-API wuerde ihn verdecken");
     return;
   }
   const draft = { regex: "foo", flags: "", replacement: "bar", explanation: "e" };
@@ -1195,7 +1254,7 @@ async function abschnittManager(cdp: Cdp): Promise<void> {
 
     const mit = await einstellungenText(cdp);
     if (mit === null) {
-      skipped(REST[0]!, "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden");
+      unmeasured(REST[0]!, "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden");
     } else {
       const da = MANAGED_TEXT.some((x) => mit.text.includes(x));
       record(REST[0]!, da && mit.lokaleZeilen === 0, `Manager-Text ${da ? "da" : "fehlt"}, ${mit.lokaleZeilen} lokale Endpunkt-Zeilen`);
@@ -1294,7 +1353,7 @@ async function abschnittApple(cdp: Cdp): Promise<void> {
     "S5 Zeitueberschreitung des Kurzbefehls zeigt die Kurzbefehl-Meldung",
   ];
   if (await cdp.evaluate<boolean>(`return !!app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}];`)) {
-    for (const n of NAMEN) skipped(n, "ein llm-endpoint-manager ist im Vault aktiv; die Fake-API wuerde ihn verdecken");
+    for (const n of NAMEN) unmeasured(n, "ein llm-endpoint-manager ist im Vault aktiv; die Fake-API wuerde ihn verdecken");
     return;
   }
   const http = await startFakeEndpoint({ regex: "foo", flags: "", replacement: "bar", explanation: "e" });
@@ -1327,8 +1386,8 @@ async function abschnittApple(cdp: Cdp): Promise<void> {
       return [...tab.containerEl.querySelectorAll("select option")].map((o) => o.textContent || "");
     `);
     if (optionen === null) {
-      skipped(NAMEN[1]!, "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden");
-      skipped(NAMEN[2]!, "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden");
+      unmeasured(NAMEN[1]!, "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden");
+      unmeasured(NAMEN[2]!, "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden");
     } else {
       record(NAMEN[1]!, optionen.some((o) => o.includes(APPLE_LABEL)), `Optionen: ${JSON.stringify(optionen)}`);
       const hinweis = await cdp.evaluate<{ ok: boolean; hinweis: boolean }>(`
@@ -1372,7 +1431,7 @@ async function abschnittApple(cdp: Cdp): Promise<void> {
     record(NAMEN[4]!, ende !== null && ende.key.startsWith("error.shortcut."), ende ? `Phase ${ende.phase}, Meldungsschluessel ${ende.key}` : "Sitzung erreichte keinen Fehlerzustand");
   } catch (e) {
     for (const n of NAMEN) {
-      if (!checks.some((c) => c.name === n)) skipped(n, `Messung abgebrochen: ${(e as Error).message}`);
+      unmeasured(n, `Messung abgebrochen: ${(e as Error).message}`);
     }
   } finally {
     if (stubGesetzt) {
@@ -1416,7 +1475,7 @@ async function abschnittGlobalesModell(cdp: Cdp): Promise<void> {
       tab.display();
       return { zeilenModell: p.settings.endpoints[0]?.model, hatAltschluessel: "model" in gespeichert || "model" in p.settings, text: tab.containerEl.textContent ?? "", namen: [...tab.containerEl.querySelectorAll(".setting-item-name")].map((n) => (n.textContent ?? "").trim()) };
     `);
-    if (ergebnis === null) { skipped(NAME, "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden"); return; }
+    if (ergebnis === null) { unmeasured(NAME, "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden"); return; }
     const keineOption = !/global model/i.test(ergebnis.text);
     const keineZeile = !ergebnis.namen.includes("Model");
     record(NAME, ergebnis.zeilenModell === ALTWERT && !ergebnis.hatAltschluessel && keineOption && keineZeile,
@@ -1457,7 +1516,7 @@ async function abschnittHilfe(cdp: Cdp): Promise<void> {
       bug: first.querySelector(".clickable-icon svg.bug, .clickable-icon [data-icon='bug'], .clickable-icon .lucide-bug") !== null,
     };
   `);
-  if (r === null) { skipped("H1 Hilfe-Zeile ist die erste Zeile der Einstellungen", "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden"); return; }
+  if (r === null) { unmeasured("H1 Hilfe-Zeile ist die erste Zeile der Einstellungen", "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden"); return; }
   const ok = (r.name === "Help" || r.name === "Hilfe") && r.buttons === 1 && r.bug;
   record("H1 Hilfe-Zeile ist die erste Zeile der Einstellungen", ok, `erste Zeile „${r.name}“, ${r.buttons} Text-Knopf, bug-Icon ${r.bug ? "da" : "fehlt"}`);
 }
@@ -1506,7 +1565,9 @@ async function abschnitt(name: string, lauf: () => Promise<void>): Promise<void>
     await lauf();
   } catch (fehler) {
     const grund = fehler instanceof Error ? fehler.message.split("\n")[0] : String(fehler);
-    record(`Abschnitt „${name}" laeuft durch`, false, `abgebrochen: ${grund}`);
+    // Ein Abschnittsfehler ist kein Befund am Prueflings, sondern eine Messung, die nicht
+    // stattgefunden hat: die noch offenen Punkte des Abschnitts zaehlen als „nichts gemessen".
+    offeneUnmeasured(name, fehler instanceof Vorbedingung ? grund : `Abschnitt „${name}" abgebrochen: ${grund}`);
   }
 }
 
@@ -1514,8 +1575,11 @@ async function main(): Promise<void> {
   // attachTo statt Cdp.attach: Obsidian gibt dem Einstellungen-Fenster denselben
   // Vault-Namen im Titel, ein Titel-Filter waere also mehrdeutig (und sprachabhaengig).
   // Das Kriterium ist die Sache selbst — nur das Hauptfenster traegt einen Workspace.
+  if (!Number.isInteger(PORT) || PORT <= 0) {
+    throw new Error("--port <port> ist Pflicht (Zweitinstanz, siehe Kopf dieser Datei); kein Standardport.");
+  }
   const cdp = await attachTo("workspace", PORT, VAULT);
-  if (!cdp) throw new Error(`Kein Obsidian-Hauptfenster auf Port ${PORT}${VAULT ? ` fuer Vault ${VAULT}` : ""}.`);
+  if (!cdp) throw new Error(`Kein Obsidian-Hauptfenster auf Port ${PORT} fuer Vault ${VAULT}.`);
 
   // Vorwerte AUSSERHALB des try: sonst haengt die Wiederherstellung daran, dass der
   // Lauf sauber zu Ende geht — und genau dann tut er es nicht.
@@ -1539,10 +1603,14 @@ async function main(): Promise<void> {
     // Bedingung, an der die Timer-Drosselung tatsaechlich haengt.
     await requireVisible(cdp);
 
+    // Vertrauensdialog, Restricted Mode und Aktivierung: ueber die zentrale Fassung. `pluginIds`
+    // sind `manifest.id`s (hier `transmute`), `nurVault` der Name des Staging-Vaults.
+    const vorbereitung = await bereiteInstanzVor(cdp, { pluginIds: [PLUGIN_ID], nurVault: VAULT, sprache: "en" });
+    console.log(`Instanz: ${vorbereitung.hinweis}`);
     const aktiv = await cdp.evaluate<boolean>(
       `return !!app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];`,
     );
-    if (!aktiv) throw new Error(`Plugin „${PLUGIN_ID}" ist in diesem Vault nicht aktiv.`);
+    if (!aktiv) throw new Error(`Plugin „${PLUGIN_ID}" ist in diesem Vault nicht aktiv (${vorbereitung.hinweis}).`);
 
     // Laeuft dieser Lauf gegen den eigenen Stand? `manifest.version` ist dafuer strukturell
     // blind — Store-Build und Repo-Build tragen dieselbe Nummer. Am 2026-08-30 standen
@@ -1631,20 +1699,10 @@ async function main(): Promise<void> {
       `);
     }
 
-    const rot = checks.filter((c) => c.zustand === "rot");
-    const uebersprungen = checks.filter((c) => c.zustand === "uebersprungen");
-    const gruen = checks.filter((c) => c.zustand === "gruen");
-    console.log(
-      `\n${gruen.length} grün · ${uebersprungen.length} übersprungen · ${rot.length} rot`
-      + ` (von ${checks.length} Prüfpunkten)`,
-    );
-    for (const c of rot) console.log(`  ✗ ${c.name} — ${c.detail}`);
-    // Uebersprungene mit ausgeben: ein Punkt, der nicht gemessen wurde, ist eine offene
-    // Frage — und offene Fragen gehoeren in die Schlusszeile, nicht nur ins Protokoll.
-    for (const c of uebersprungen) console.log(`  · ${c.name} — ${c.detail}`);
     cdp.close();
-    if (rot.length > 0) process.exitCode = 1;
+    // Die Soll-Liste ist der Nenner; `abschluss()` setzt Exit 1 bei Rot oder „nichts gemessen".
+    bilanz.abschluss();
   }
 }
 
-await main();
+runDriver(main);
