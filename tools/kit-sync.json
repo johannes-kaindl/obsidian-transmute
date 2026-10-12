@@ -19,7 +19,7 @@
     },
     {
       "dir": "src/vendor/kit-obsidian", "source": "obsidian-kit", "from": "src/obsidian",
-      "modules": ["backend-probe", "chat-client", "chat-transport", "clipboard", "clock", "collapsible", "endpoint-list", "endpoint-secrets", "endpoint-source", "folder-suggest", "help-setting", "lab-client", "llm-connection", "llm-connection-strings", "endpoint-status-text", "endpoint-plumbing", "embedding-connection", "model-picker", "request-section", "request-session", "secrets", "settings_walker", "shortcuts-bridge"],
+      "modules": ["backend-probe", "chat-client", "chat-transport", "clipboard", "clock", "collapsible", "endpoint-list", "endpoint-secrets", "endpoint-source", "folder-suggest", "help-setting", "hub", "lab-client", "llm-connection", "llm-connection-strings", "endpoint-status-text", "endpoint-plumbing", "embedding-connection", "model-picker", "request-section", "request-session", "secrets", "settings_walker", "shortcuts-bridge"],
       "rewrite": [["../pure/", "../kit/"], ["../vendor/code-kit/pure/", "../kit/"], ["../vendor/code-kit/web/", "../kit/"]]
     },
     {

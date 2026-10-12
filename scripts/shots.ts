@@ -23,10 +23,10 @@
  * Ein Bild pro Obsidian-Start ist der sichere Weg: jeder Lauf hinterlaesst Zustand.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { attachTo, closeExtraLeaves, openExisting, pollUntil, requireVisible, setAppConfig, type Cdp } from "../../tools/obsidian-cdp/cdp.js";
+import { attachTo, bereiteInstanzVor, closeExtraLeaves, openExisting, pollUntil, requireVisible, setAppConfig, setPluginSetting, type Cdp } from "../../tools/obsidian-cdp/cdp.js";
 import { boxAround, boxOf, capture, setWindowSize, writeShot } from "../../tools/obsidian-cdp/shot.js";
 import { buildVault, stagingVaultDir } from "../../tools/obsidian-cdp/vault.js";
 
@@ -194,6 +194,51 @@ async function shotRuleEditor(cdp: Cdp): Promise<void> {
   await schreibe(cdp, "rule-editor.png", box ?? (await panelBox(cdp)) ?? undefined);
 }
 
+/** Tab „Bibliothek": die gespeicherten Regeln als Liste mit Ausfuehren-Knopf. Die Regeln stellt
+ *  das Rezept selbst, damit das Bild nicht vom Seed des Vaults abhaengt; danach kommen die alten zurueck. */
+async function shotLibrary(cdp: Cdp): Promise<void> {
+  await closeExtraLeaves(cdp);
+  await openExisting(cdp, HERO_NOTE, "source");
+  await panelOeffnen(cdp, 460);
+  const vorher = await cdp.evaluate<unknown>(`return app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.presets;`);
+  try {
+    await setPluginSetting(cdp, PLUGIN_ID, "presets", [
+      { id: "iso-dates", name: "German dates to ISO", regex: REGEX, flags: "g", replacement: REPLACEMENT },
+      { id: "trim-trailing", name: "Trim trailing spaces", regex: "[ \\t]+$", flags: "gm", replacement: "" },
+      { id: "straight-quotes", name: "Curly quotes to straight quotes", regex: "[\u201c\u201d]", flags: "g", replacement: "\"" },
+    ]);
+    if (!(await click(cdp, ".okit-hub-tab[data-tab='library']"))) throw new Error("library: Tab nicht gefunden");
+    const rows = await pollUntil<number>(cdp, `return document.querySelectorAll(".transmute-library-row").length || null;`, 8_000, 300);
+    if (!rows) throw new Error("library: keine Zeilen");
+    const box = await boxAround(cdp, [".okit-hub-tabs", ".transmute-library-list"], 8);
+    await schreibe(cdp, "library.png", box ?? (await panelBox(cdp)) ?? undefined);
+  } finally {
+    await setPluginSetting(cdp, PLUGIN_ID, "presets", vorher);
+    await click(cdp, ".okit-hub-tab[data-tab='work']");
+  }
+}
+
+/** Nur zur Abnahme, nicht fuer die README: beide Tabs in Standard- und schmaler Sidebar
+ *  nach `$SHOT_DIR` (Default /tmp/w20-shots/obsidian-transmute). */
+async function shotReview(cdp: Cdp): Promise<void> {
+  const dir = process.env.SHOT_DIR ?? "/tmp/w20-shots/obsidian-transmute";
+  mkdirSync(dir, { recursive: true });
+  await closeExtraLeaves(cdp);
+  await openExisting(cdp, HERO_NOTE, "source");
+  for (const [label, breite] of [["standard", 460], ["schmal", 280]] as const) {
+    await panelOeffnen(cdp, breite);
+    await click(cdp, ".okit-hub-tab[data-tab='work']");
+    await regelSetzen(cdp);
+    for (const tab of ["work", "library"]) {
+      await click(cdp, `.okit-hub-tab[data-tab='${tab}']`);
+      await cdp.evaluate("await new Promise((r) => setTimeout(r, 400)); return true;");
+      const box = await panelBox(cdp);
+      writeFileSync(join(dir, `${tab}-${label}.png`), await capture(cdp, box ?? undefined));
+      console.log(`  ${join(dir, `${tab}-${label}.png`)}`);
+    }
+  }
+}
+
 /** Einstellungen. In Obsidian 1.13 ein EIGENES Fenster — deshalb ueber `attachTo`
  *  gewaehlt und nicht ueber den Titel: beide Fenster tragen denselben Vault-Namen. */
 async function shotSettings(cdp: Cdp): Promise<void> {
@@ -223,7 +268,11 @@ const BILDER: Record<string, (cdp: Cdp) => Promise<void>> = {
   "vault-scope": shotVaultScope,
   "rule-editor": shotRuleEditor,
   "settings": shotSettings,
+  "library": shotLibrary,
 };
+
+/** Nur auf ausdruecklichen Wunsch (`--only review`), nicht im Standardlauf. */
+const ABNAHME: Record<string, (cdp: Cdp) => Promise<void>> = { review: shotReview };
 
 // --- Ablauf ------------------------------------------------------------------
 
@@ -245,6 +294,9 @@ async function main(): Promise<void> {
     // `requireVisible` zielt auf das verbundene Fenster; ein `osascript … activate` holte die
     // reguelaere Instanz nach vorn (Befund kl-w19).
     await requireVisible(cdp);
+    // Vertrauensdialog, Restricted Mode und Plugin-Aktivierung eines frischen Profils.
+    const vorbereitet = await bereiteInstanzVor(cdp, { pluginIds: [PLUGIN_ID], nurVault: VAULT_NAME, sprache: "en" });
+    if (vorbereitet.plugins[PLUGIN_ID] === "fehlt") throw new Error(`Plugin „${PLUGIN_ID}" nicht geladen: ${vorbereitet.hinweis}`);
 
     // Aufnahmesprache ist Englisch — README.md ist die kanonische Fassung. Die
     // Einstellung ist APP-weit und wird deshalb geprueft, nicht gesetzt: ein stiller
@@ -270,7 +322,7 @@ async function main(): Promise<void> {
 
     const namen = ONLY ? [ONLY] : Object.keys(BILDER);
     for (const name of namen) {
-      const fn = BILDER[name];
+      const fn = BILDER[name] ?? ABNAHME[name];
       if (!fn) throw new Error(`Unbekanntes Bild: ${name}. Bekannt: ${Object.keys(BILDER).join(", ")}`);
       console.log(`\n${name}`);
       await fn(cdp);

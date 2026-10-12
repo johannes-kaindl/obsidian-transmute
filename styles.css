@@ -347,6 +347,105 @@
   margin-top: var(--size-2-2);
 }
 
+/* Tab „Bibliothek": Listen-Zeile vertikal (UI-STANDARD §8) — Name und Muster links, Knopf rechts. */
+.transmute-library {
+  padding: var(--size-4-3) var(--size-4-4) var(--size-4-6);
+}
+
+.transmute-library-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.transmute-library-row {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  padding: var(--size-4-2) 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.transmute-library-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.transmute-library-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transmute-library-pattern {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.transmute-preset-btn {
+  flex: 0 0 auto;
+  font-size: var(--font-smaller);
+}
+
+.transmute-empty {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+/* --- 0.3.0: Regel-Formular --------------------------------------------- */
+
+.transmute-regex-row {
+  display: flex;
+  gap: var(--size-4-1);
+  align-items: center;
+}
+
+.transmute-regex,
+.transmute-replacement-input {
+  width: 100%;
+  font-family: var(--font-monospace);
+}
+
+.transmute-replacement-input {
+  margin-top: var(--size-2-2);
+}
+
+.transmute-flags {
+  display: flex;
+  gap: var(--size-4-1);
+  margin-top: var(--size-2-2);
+}
+
+.transmute-flag {
+  padding: 0 var(--size-4-2);
+}
+
+.transmute-flag.is-active {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.transmute-flag[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Was wirklich laeuft — zum Ablesen und Kopieren. */
+.transmute-effective {
+  display: block;
+  margin-top: var(--size-2-2);
+  color: var(--text-muted);
+  font-size: var(--font-smaller);
+}
+
+.transmute-manual-link {
+  display: block;
+  margin-top: var(--size-2-2);
+}
+
 .transmute-presets {
   display: flex;
   flex-wrap: wrap;
@@ -696,3 +795,45 @@
 .okit-request-status.is-warning { color: var(--text-warning); }
 .okit-request-status.is-error { color: var(--text-error); }
 .okit-request-deviation { color: var(--text-muted); font-size: var(--font-ui-small); padding-left: var(--size-4-6); }
+
+/* Kit-Baustein Hub-Tab-Leiste (HUB_CSS) — wortgleich aus dem Kit, nicht von Hand aendern; der Waechter tests/kit-css.test.ts prueft es. */
+/* Hub-Tab-Leiste (obsidian-kit: buildHubInto). Die vier nummerierten Zutaten gehören
+   zusammen — jede einzeln ist wirkungslos, s. Modulkopf von src/obsidian/hub.ts. */
+.okit-hub-root { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.okit-hub-tabs {
+  display: flex;
+  flex-wrap: wrap;                 /* (1) erlaubt die zweite Zeile */
+  gap: var(--size-2-1);
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+/* box-shadow: none nimmt dem nativen <button> nur seinen Ruhe-Schatten. Obsidians
+   Fokusring bleibt: button:focus-visible { box-shadow: 0 0 0 3px … } hat mit (0,1,1) die
+   höhere Spezifität als .okit-hub-tab (0,1,0) — geprüft in Obsidians app.css. */
+.okit-hub-tab {
+  display: flex;
+  flex: 1 1 auto;                  /* (2) Basis = Inhaltsbreite, sonst bricht nichts um */
+  min-width: 0;                    /* (3) hebt min-width:auto auf, sonst sprengt ein langes Label die Zeile */
+  align-items: center;
+  justify-content: center;
+  gap: var(--size-4-1);
+  padding: var(--size-2-3) var(--size-4-2);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.okit-hub-tab-label {              /* (4) ohne eigenes Label-Element kann nichts ellipsieren */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.okit-hub-tab-icon { display: inline-flex; flex: 0 0 auto; }
+.okit-hub-tab:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+.okit-hub-tab.is-active { color: var(--text-normal); border-bottom-color: var(--interactive-accent); }
+.okit-hub-content { flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden; }
+.okit-hub-panel { height: 100%; overflow: auto; }
+.okit-hub-panel.is-hidden { display: none; }

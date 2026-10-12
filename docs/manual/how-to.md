@@ -24,6 +24,7 @@ setup notes in the [README](../../README.md).
 10. [Raise the time budget for a large note](#raise-the-time-budget-for-a-large-note)
 11. [Turn off reasoning suppression](#turn-off-reasoning-suppression)
 12. [Use the Apple Intelligence endpoint](#use-the-apple-intelligence-endpoint)
+13. [Run a saved rule without asking the model](#run-a-saved-rule-without-asking-the-model)
 
 ---
 
@@ -256,3 +257,12 @@ If the model's answer is not usable JSON, the usual recovery applies: [Recover f
 
 For the architecture and module layout behind all of this, see
 [AGENTS.md](../../AGENTS.md) in the repository root.
+
+---
+
+## Run a saved rule without asking the model
+
+1. Save the rule once: **Settings → Transmute → Saved rules → "Add a preset…"** (name, pattern, flags, replacement).
+2. Open a note, or select the text, and open the Transmute panel.
+3. Switch to the **"Library"** tab and press **"Run"** on the row of the rule.
+4. The panel returns to the **"Workspace"** tab and shows the [preview](reference.md#preview) as for any other rule. Edit the pattern there, deselect matches, then **"Apply"**.

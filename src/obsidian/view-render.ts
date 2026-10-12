@@ -31,7 +31,6 @@ export type PanelModel = {
    *  Live-Update neu gezeichnet und wuerde ein offenes <details> sonst zuklappen. */
   reasoningOpen: boolean;
   /** In den Einstellungen angelegt — per Klick abfeuerbar, auch ohne bestehende Regel. */
-  presets: PresetDef[];
   /** Nur bei scope === "vault" gesetzt. */
   /** Zum Zeichnen: der gespeicherte Zustand PLUS dem abgeleiteten `hasRule`. */
   vault?: VaultPanelModel;
@@ -494,16 +493,31 @@ export function renderOutcome(parts: PanelParts, model: PanelModel, handlers: Pa
 }
 
 /**
- * Gespeicherte Regeln per Klick abfeuern — ohne erneuten Modell-Umweg.
+ * Tab „Bibliothek": die gespeicherten Regeln als Liste, je Zeile ein Ausfuehren-Knopf.
  *
- * Steht auf Panel-Ebene, nicht im Regel-Container: auch im Ruhezustand sichtbar, denn
- * ein Preset ERSETZT genau den Schritt, der sonst eine Regel erst entstehen laesst.
+ * Ein Preset ERSETZT genau den Schritt, der sonst eine Regel erst entstehen laesst, nicht die
+ * Evaluierung danach — der Knopf ruft denselben Weg wie „Von Hand" mit befuellten Feldern
+ * (`onLoadPreset`). Verwaltet (anlegen, aendern, loeschen) wird in den Einstellungen; es gibt
+ * hier kein zweites Datenmodell. Listen-Zeile vertikal (UI-STANDARD §8): Name, darunter das Muster.
  */
-function renderPresets(parent: El, model: PanelModel, handlers: PanelHandlers): void {
-  if (model.presets.length === 0) return;
-  const row = parent.createDiv({ cls: "transmute-presets" });
-  for (const preset of model.presets) {
-    const btn = row.createEl("button", { cls: "transmute-preset-btn", text: preset.name });
+export function renderLibrary(root: El, presets: PresetDef[], handlers: Pick<PanelHandlers, "onLoadPreset">): void {
+  root.empty();
+  root.addClass("transmute-library");
+  if (presets.length === 0) {
+    root.createDiv({ cls: "transmute-empty", text: t("view.libraryEmpty") });
+    return;
+  }
+  const list = root.createDiv({ cls: "transmute-library-list" });
+  for (const preset of presets) {
+    const row = list.createDiv({ cls: "transmute-library-row" });
+    const text = row.createDiv({ cls: "transmute-library-text" });
+    text.createDiv({ cls: "transmute-library-name", text: preset.name });
+    text.createEl("code", { cls: "transmute-library-pattern", text: `/${preset.regex}/${preset.flags}` });
+    const btn = row.createEl("button", {
+      cls: "transmute-preset-btn",
+      text: t("view.libraryRun"),
+      attr: { "aria-label": t("view.libraryRunAria", preset.name) },
+    });
     btn.addEventListener("click", () => handlers.onLoadPreset(preset));
   }
 }
@@ -575,8 +589,6 @@ export function renderPanel(root: El, model: PanelModel, handlers: PanelHandlers
   // Kein Tab und kein Modus: der Link oeffnet dieselbe Vorschau, nur mit leerem Muster.
   const manual = root.createEl("button", { text: t("view.startManual"), cls: "transmute-manual-link transmute-link" });
   manual.addEventListener("click", () => handlers.onStartManual());
-
-  renderPresets(root, model, handlers);
 
   const body = root.createDiv({ cls: "transmute-body" });
 

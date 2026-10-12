@@ -76,7 +76,6 @@ const model = (...versions: Version[]): PanelModel => ({
   model: "",
   suppressReasoning: true,
   reasoningOpen: false,
-  presets: [],
 });
 
 describe("Dreiteilung", () => {

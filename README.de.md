@@ -13,6 +13,8 @@
 
 <img src="https://raw.githubusercontent.com/johannes-kaindl/obsidian-transmute/main/docs/images/vault-scope.png" width="512" alt="Bereich „Ganzer Vault“, nach Ordner gefiltert, mit den Treffern nach Datei gruppiert und einer aufgeklappten Datei">
 
+<img src="https://raw.githubusercontent.com/johannes-kaindl/obsidian-transmute/main/docs/images/library.png" width="450" alt="Der Tab „Bibliothek“ des Panels: drei gespeicherte Regeln, je mit Muster und Ausführen-Knopf (Bildschirmfoto der englischen Oberfläche)">
+
 ## Funktionen
 
 - **Suchen & Ersetzen in natürlicher Sprache.** Beschreibe die Änderung in eigenen Worten; ein lokales OpenAI-kompatibles LLM macht daraus einen regulären Ausdruck, eine Ersetzung und eine Klartext-Erklärung.
@@ -20,6 +22,7 @@
 - **Ein Undo-Schritt.** Das Anwenden läuft über den Editor, **Cmd+Z** macht es in einem Schritt rückgängig.
 - **Nachschärfen.** Mit einer Anschluss-Anweisung wie „aber nicht in Codeblöcken“ weiterarbeiten.
 - **Bereichs-Kontrolle:** ganze Notiz oder Auswahl, der Standard ist einstellbar.
+- **Eine Bibliothek gespeicherter Regeln.** Der Tab „Bibliothek“ im Panel listet deine gespeicherten Regeln; ein Klick auf „Ausführen“ lädt eine Regel für die aktuelle Notiz oder Auswahl und zeigt die Vorschau, ohne das Modell zu fragen.
 - **Modellagnostisch.** Kein Modellname ist hartkodiert, Endpunkte lokal oder gehostet, Reasoning-Modelle werden behandelt.
 - **Sicher gegen ausufernde Muster.** Erzeugte Muster prüft eine statische Heuristik, bevor sie laufen.
 - **Zweisprachige Oberfläche** (Englisch, Deutsch).

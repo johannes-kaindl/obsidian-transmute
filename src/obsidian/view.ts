@@ -5,7 +5,7 @@ import { t } from "../vendor/kit/i18n";
 import { copyToClipboard } from "../vendor/kit-obsidian/clipboard";
 import { locateRegion } from "../core/anchor";
 import { activeMarkdownView, applyHitsToEditor, readScope, viewForPath } from "./editor-io";
-import { renderOutcome, renderPanel, type PanelHandlers, type PanelModel, type PanelParts } from "./view-render";
+import { renderLibrary, renderOutcome, renderPanel, type PanelHandlers, type PanelModel, type PanelParts } from "./view-render";
 import { effectiveFlags } from "../core/regex/compile";
 import type { RuleDraft } from "../core/types";
 import type { EvalOptions } from "../core/regex/evaluate";
@@ -20,8 +20,12 @@ import { allTags, listCandidates, makeReader, writeSelected } from "./vault-io";
 import { finalizeSnapshot, restoreSnapshot, rotateSnapshots, writeSnapshot } from "./snapshot-io";
 import { ConfirmModal } from "./confirm-modal";
 import type { VaultPanel } from "./view-render";
+import { buildHubInto, type HubController, type HubPanel } from "../vendor/kit-obsidian/hub";
 
 export const VIEW_TYPE_TRANSMUTE = "transmute-panel";
+
+/** Die zwei Tabs des Hubs: der Arbeitsbereich (heutiges Panel) und die Bibliothek der Presets. */
+type TabId = "work" | "library";
 
 /**
  * Tippause, nach der die Regel neu gerechnet wird.
@@ -67,6 +71,10 @@ export class TransmuteView extends ItemView {
   /** Container fuer den Teil-Draw, aus dem letzten Voll-Draw. */
   private parts: PanelParts = null;
   private editTimer: number | null = null;
+  /** Hub (einmal gebaut) und die Container seiner Panels; jeder Inhalt darf neu gezeichnet werden. */
+  private hub: HubController<TabId> | null = null;
+  private workEl: HTMLElement | null = null;
+  private libraryEl: HTMLElement | null = null;
   private reasoningOpen = false;
 
   /** Alles, was der vault-weite Lauf zum Zeichnen braucht. */
@@ -118,6 +126,7 @@ export class TransmuteView extends ItemView {
     this.scope.register(["Mod"], "z", () => false);
     this.scope.register(["Mod", "Shift"], "z", () => false);
 
+    this.buildHub();
     this.deps.session().onChange((_state, reason) => {
       // Ein Voll-Draw leert den Container und zoege damit das Eingabefeld unter dem
       // Cursor weg — samt Fokus, Cursorposition und Undo-Stack des Feldes.
@@ -141,7 +150,26 @@ export class TransmuteView extends ItemView {
    *  Der Timer dagegen muss weg, sonst feuert er in ein geleertes Panel. */
   protected onClose(): Promise<void> {
     this.clearEditTimer();
+    this.hub?.destroy();
+    this.hub = null;
     return Promise.resolve();
+  }
+
+  /** Der Hub entsteht genau einmal; `draw()` zeichnet nur den Inhalt des Arbeitsbereichs neu. */
+  private buildHub(): void {
+    const panel = (id: TabId, label: () => string, icon: string, mount: (el: HTMLElement) => void, onShow?: () => void): HubPanel<TabId> => ({
+      id,
+      get label(): string { return label(); },
+      icon,
+      mount,
+      onShow,
+      destroy: () => {},
+    });
+    this.hub = buildHubInto(this.contentEl, [
+      panel("work", () => t("view.tabWork"), "replace", (el) => { this.workEl = el; }),
+      // Presets werden in den Einstellungen verwaltet — beim Oeffnen des Tabs frisch lesen.
+      panel("library", () => t("view.tabLibrary"), "library", (el) => { this.libraryEl = el; }, () => { this.drawLibrary(); }),
+    ], "work");
   }
 
   private handlers(): PanelHandlers {
@@ -245,6 +273,11 @@ export class TransmuteView extends ItemView {
           { regex: preset.regex, flags: preset.flags, replacement: preset.replacement },
           pinned.text,
         );
+        // `editRule` meldet "edit" und zeichnet nur das Ergebnis neu — die Regel-Felder, die
+        // `startManual` leer gezeichnet hat, blieben leer, obwohl die Sitzung die Regel kennt.
+        this.draw();
+        // Das Ergebnis erscheint im Arbeitsbereich — ohne Wechsel saehe man nichts.
+        this.hub?.setTab("work");
       },
       onAcceptRisk: () => {
         if (this.pinned === null) return;
@@ -664,7 +697,6 @@ export class TransmuteView extends ItemView {
       model: this.deps.getModel(),
       suppressReasoning: this.deps.getSuppressReasoning(),
       reasoningOpen: this.reasoningOpen,
-      presets: this.deps.getPresets(),
       // `hasRule` kommt aus derselben Quelle, die `computeVaultPreview` prueft — nicht
       // aus einer zweiten Bedingung, die dasselbe zu wissen glaubt.
       vault: this.scopeKind === "vault"
@@ -674,7 +706,13 @@ export class TransmuteView extends ItemView {
   }
 
   private draw(): void {
-    this.parts = renderPanel(this.contentEl, this.panelModel(), this.handlers());
+    if (this.workEl === null) return;
+    this.parts = renderPanel(this.workEl, this.panelModel(), this.handlers());
+  }
+
+  private drawLibrary(): void {
+    if (this.libraryEl === null) return;
+    renderLibrary(this.libraryEl, this.deps.getPresets(), this.handlers());
   }
 
   /** Teil-Draw: Verlauf und Ergebnis neu, die Regel-Felder bleiben stehen. */

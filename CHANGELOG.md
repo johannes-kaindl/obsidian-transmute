@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A "Library" tab in the panel.** A tab bar (the kit's hub) now switches between "Workspace" (the panel as before) and "Library": your saved rules as a list with a "Run" button per row. "Run" fills in the saved pattern and replacement for the current note or selection and switches back to the workspace, where the preview appears — no model call. The row of preset buttons under "or write the pattern yourself" is gone; the rules live in the tab.
+
+### Fixed
+
+- **Running a saved rule now shows it in the pattern and replacement fields.** Before, the preview was computed from the rule but the two fields stayed empty.
+
 ### Changed
 
 - Kit pins raised to obsidian-kit 0.57.0 / code-kit 0.24.0. Classifying a failed Shortcuts call (timeout, busy, cancelled, unsupported) now uses the kit's shared `classifyShortcutFailure` instead of a local copy; it returns the same reason and message for every status and error body, so nothing changes for you.

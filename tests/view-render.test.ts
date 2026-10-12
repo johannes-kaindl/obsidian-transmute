@@ -3,7 +3,7 @@ import { makeFakeEl } from "./__mocks__/obsidian";
 import { findByClass } from "./helpers/dom";
 import { EMPTY_FILTER } from "../src/core/vault/scope";
 import { RUN_IDLE } from "../src/core/vault/state";
-import { renderPanel, type PanelHandlers, type PanelModel } from "../src/obsidian/view-render";
+import { renderLibrary, renderPanel, type PanelHandlers, type PanelModel } from "../src/obsidian/view-render";
 import type { Hit } from "../src/core/types";
 import "../src/core/i18n/strings";
 
@@ -50,7 +50,6 @@ const base: Omit<PanelModel, "state"> = {
   model: "",
   suppressReasoning: true,
   reasoningOpen: false,
-  presets: [],
 };
 
 const hit = (over: Partial<Hit> = {}): Hit => ({
@@ -433,27 +432,34 @@ describe("Vault-Scope im Panel", () => {
   });
 });
 
-describe("renderPanel — Presets", () => {
+describe("renderLibrary", () => {
   const preset = { id: "p1", name: "Leerzeilen trimmen", regex: " +$", flags: "gm", replacement: "" };
 
-  it("zeigt keinen Presets-Block, solange keine Presets angelegt sind", () => {
+  it("zeigt bei leerer Bibliothek einen Empty-State statt einer Liste", () => {
     const root = makeFakeEl();
-    renderPanel(root, { ...base, presets: [], state: { phase: "idle" } }, handlers);
-    expect(findByClass(root, "transmute-presets")).toBeNull();
+    renderLibrary(root, [], { onLoadPreset: vi.fn() });
+    expect(findByClass(root, "transmute-empty")).not.toBeNull();
+    expect(findByClass(root, "transmute-library-row")).toBeNull();
   });
 
-  it("zeigt einen Knopf pro angelegtem Preset, auch im Ruhezustand", () => {
+  it("zeigt je Preset eine Zeile mit Name und Muster", () => {
     const root = makeFakeEl();
-    renderPanel(root, { ...base, presets: [preset], state: { phase: "idle" } }, handlers);
+    renderLibrary(root, [preset], { onLoadPreset: vi.fn() });
     expect(root.textContent).toContain("Leerzeilen trimmen");
+    expect(root.textContent).toContain("/ +$/gm");
   });
 
-  it("feuert den Preset beim Klick ab", () => {
+  it("feuert den Preset beim Klick auf Ausfuehren ab", () => {
     const onLoadPreset = vi.fn();
     const root = makeFakeEl();
-    renderPanel(root, { ...base, presets: [preset], state: { phase: "idle" } }, { ...handlers, onLoadPreset });
-    const btn = findByClass<{ click(): void }>(root, "transmute-preset-btn");
-    btn?.click();
+    renderLibrary(root, [preset], { onLoadPreset });
+    findByClass<{ click(): void }>(root, "transmute-preset-btn")?.click();
     expect(onLoadPreset).toHaveBeenCalledWith(preset);
+  });
+
+  it("der Arbeitsbereich traegt keine Preset-Knoepfe mehr", () => {
+    const root = makeFakeEl();
+    renderPanel(root, { ...base, state: { phase: "idle" } }, handlers);
+    expect(findByClass(root, "transmute-preset-btn")).toBeNull();
   });
 });

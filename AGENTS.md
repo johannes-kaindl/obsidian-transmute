@@ -67,7 +67,7 @@ kam fertig aus dem Ökosystem, neu gebaut wurde im Wesentlichen die Regex-Domän
     `reasoning.ts`, `run-state.ts`, `settings.ts`, `think-splitter.ts`, `timeout.ts`,
     `model-choice.ts`, `sampling-profiles.ts`, `endpoint-source.ts`.
   - `src/vendor/kit-obsidian/` (importiert `obsidian`): `clipboard.ts`, `folder-suggest.ts`,
-    `settings_walker.ts`, `model-picker.ts`, `endpoint-source.ts`.
+    `settings_walker.ts`, `model-picker.ts`, `endpoint-source.ts`, `hub.ts`.
   - Seit Welle 15 (obsidian-kit 0.51.3, code-kit 0.15.4) dazu die Verbindung: `llm-connection`, `llm-connection-strings`, `backend-probe`, `collapsible`, `endpoint-list`, `endpoint-secrets`, `endpoint-secret-hook`, `request-section`, `request-session`, `secrets` (obsidian-kit) und `backend-probe`, `capabilities`, `model-list-cache`, `redact`, `secrets` (code-kit). Die `*_CSS`-Konstanten stehen wortgleich in `styles.css`; `tests/kit-css.test.ts` bewacht das.
   - `tests/vendor/kit/obsidian-mock.ts` — der Obsidian-Mock (seit 0.6.0 gestempelt aus dem Kit-Tag, vorher eine ungestempelte Kopie von 0.15.0); `tests/__mocks__/obsidian.ts` re-exportiert nur.
 - **Aus Nachbar-Plugins übernommen:** Endpoint-Zeilen-Editor + pure Editor-Model
@@ -114,7 +114,9 @@ Handbearbeitung und Revalidierung vor dem Schreiben gehen alle hindurch. Drei ge
 Stellen würden auseinanderlaufen; genau so ist in 0.2.0 die Anzeige von der Ausführung
 abgedriftet. Wer einen vierten Ausführungsweg braucht, baut ihn **nicht** daneben.
 
-**Der Panel-Körper ist dreigeteilt** (`.transmute-history` / `.transmute-rule` /
+**Das Panel ist ein Hub aus dem Kit (`buildHubInto`, seit 0.13.0) mit zwei Tabs: „Arbeitsbereich“ (`work`) und „Bibliothek“ (`library`, die Presets als Listen-Zeilen mit Ausführen-Knopf, `renderLibrary`).** Der Hub wird einmal in `onOpen` gebaut (`buildHub` in `view.ts`); `draw()` zeichnet nur in den Container des Arbeitsbereichs, die Bibliothek zeichnet bei jedem Öffnen des Tabs neu (die Presets verwaltet der Settings-Tab, es gibt kein zweites Datenmodell). Ausführen aus der Bibliothek geht über `onLoadPreset` und wechselt danach mit `hub.setTab("work")` — und zeichnet vorher voll neu, weil `editRule` nur „edit“ meldet und die Regel-Felder sonst leer blieben. `HUB_CSS` steht wortgleich in `styles.css`.
+
+**Der Panel-Körper (im Arbeitsbereich) ist dreigeteilt** (`.transmute-history` / `.transmute-rule` /
 `.transmute-outcome`). `renderPanel` zeichnet alles, `renderOutcome` nur die äußeren
 beiden — die Regel-Felder bleiben stehen, weil ein `root.empty()` unter dem Cursor Fokus,
 Cursorposition und den Undo-Stack des Feldes mitnimmt. Welcher Weg dran ist, sagt die

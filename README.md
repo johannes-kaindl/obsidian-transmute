@@ -20,11 +20,14 @@
 - **Scope up to the whole vault**, with a snapshot before every vault-wide replacement and a one-click restore.
 - **Safety by measurement.** Generated patterns are screened for runaway backtracking; hand-written ones are timed on a sample before they run.
 - **"Why doesn't this match?"** A button that measures relaxed variants of the pattern and explains the miss.
+- **A library of saved rules.** The panel's "Library" tab lists your saved rules; one click on "Run" loads a rule for the current note or selection and shows the preview, without asking the model.
 - **Model-agnostic and bilingual.** No model name is hard-coded, endpoints can be local or hosted, reasoning models are handled, the interface is English and German.
 
 All features in detail: [Features and usage](https://github.com/johannes-kaindl/obsidian-transmute/blob/main/docs/manual/features-and-usage.md).
 
 <img src="https://raw.githubusercontent.com/johannes-kaindl/obsidian-transmute/main/docs/images/vault-scope.png" width="512" alt="Scope set to the whole vault, filtered by folder, with the matches grouped per file and one file expanded">
+
+<img src="https://raw.githubusercontent.com/johannes-kaindl/obsidian-transmute/main/docs/images/library.png" width="450" alt="The Library tab of the panel: three saved rules, each with its pattern and a Run button">
 
 ## Requirements
 

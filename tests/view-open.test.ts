@@ -4,6 +4,7 @@ import { TFile } from "./__mocks__/obsidian";
 import { findByClass } from "./helpers/dom";
 import { TransmuteView, type TransmuteViewDeps } from "../src/obsidian/view";
 import { TransmuteSession } from "../src/core/session";
+import type { PresetDef } from "../src/core/settings";
 import "../src/core/i18n/strings";
 
 /** Ein Vault mit `n` Notizen — die Zahl ist der ganze Gegenstand dieses Tests. */
@@ -25,7 +26,7 @@ function fakeApp(n: number): App {
   } as unknown as App;
 }
 
-function deps(scope: "file" | "selection" | "vault"): TransmuteViewDeps {
+function deps(scope: "file" | "selection" | "vault", presets: PresetDef[] = []): TransmuteViewDeps {
   // EINE Sitzung fuer die Lebensdauer der View: `onOpen` haengt einen `onChange`-Horcher
   // an, und eine je Aufruf neu gebaute Sitzung wuerde ihn ins Leere haengen.
   const session = new TransmuteSession(
@@ -44,7 +45,7 @@ function deps(scope: "file" | "selection" | "vault"): TransmuteViewDeps {
     runOptions: () => ({ sampleChars: 400, budgetMs: 2000, maxHits: 500 }),
     confirmThreshold: () => 50,
     snapshotKeep: () => 5,
-    getPresets: () => [],
+    getPresets: () => presets,
   };
 }
 
@@ -75,5 +76,52 @@ describe("TransmuteView.onOpen", () => {
     const view = new TransmuteView({ app: fakeApp(12) } as unknown as WorkspaceLeaf, deps("file"));
     await oeffnen(view);
     expect(findByClass(view.contentEl, "transmute-scope-block")).toBeNull();
+  });
+});
+
+describe("TransmuteView — Hub mit Bibliothek", () => {
+  const preset: PresetDef = { id: "p1", name: "Leerzeilen trimmen", regex: " +$", flags: "gm", replacement: "" };
+  const hubOf = (view: TransmuteView): { currentTab(): string; setTab(id: string): void } =>
+    (view as unknown as { hub: { currentTab(): string; setTab(id: string): void } }).hub;
+
+  it("startet im Arbeitsbereich und kennt zwei Tabs", async () => {
+    const view = new TransmuteView({ app: fakeApp(1) } as unknown as WorkspaceLeaf, deps("file", [preset]));
+    await oeffnen(view);
+    expect(hubOf(view).currentTab()).toBe("work");
+    expect(findByClass(view.contentEl, "okit-hub-tabs")).not.toBeNull();
+  });
+
+  it("zeichnet die Bibliothek beim Tab-Wechsel aus den aktuellen Presets", async () => {
+    const view = new TransmuteView({ app: fakeApp(1) } as unknown as WorkspaceLeaf, deps("file", [preset]));
+    await oeffnen(view);
+    expect(findByClass(view.contentEl, "transmute-library-row")).toBeNull();
+    hubOf(view).setTab("library");
+    expect(hubOf(view).currentTab()).toBe("library");
+    expect(findByClass<{ textContent?: string }>(view.contentEl, "transmute-library-row")?.textContent).toContain("Leerzeilen trimmen");
+  });
+
+  it("Ausfuehren aus der Bibliothek setzt Regel und Felder und wechselt in den Arbeitsbereich", async () => {
+    const d = deps("file", [preset]);
+    const view = new TransmuteView({ app: fakeApp(1) } as unknown as WorkspaceLeaf, d);
+    // Gemerkter Text: ohne Notiz meldet `pinScope` nichts Brauchbares — dann darf der Tab bleiben.
+    (view as unknown as { pinScope(): unknown }).pinScope = () => ({ path: "a.md", name: "a", scope: "file", text: "x  ", baseOffset: 0 });
+    await oeffnen(view);
+    hubOf(view).setTab("library");
+    findByClass<{ click(): void }>(view.contentEl, "transmute-preset-btn")?.click();
+    expect(hubOf(view).currentTab()).toBe("work");
+    // Die Regel-Felder zeigen die Regel, nicht nur die Sitzung kennt sie.
+    expect(findByClass<{ value?: string }>(view.contentEl, "transmute-regex")?.value).toBe(" +$");
+    const st = d.session().state;
+    expect(st.phase).toBe("preview");
+    if (st.phase === "preview") expect(st.versions[st.active]?.rule.regex).toBe(" +$");
+  });
+
+  it("bleibt in der Bibliothek, wenn der Lauf nicht starten kann (keine Notiz gemerkt)", async () => {
+    const view = new TransmuteView({ app: fakeApp(1) } as unknown as WorkspaceLeaf, deps("file", [preset]));
+    (view as unknown as { pinScope(): unknown }).pinScope = () => null;
+    await oeffnen(view);
+    hubOf(view).setTab("library");
+    findByClass<{ click(): void }>(view.contentEl, "transmute-preset-btn")?.click();
+    expect(hubOf(view).currentTab()).toBe("library");
   });
 });

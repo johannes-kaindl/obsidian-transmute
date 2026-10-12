@@ -58,6 +58,7 @@ sonst eine Datei, die mit dem Lauf nichts zu tun hat.
 | Vorschau | Handpfad ohne Modell · Dateiliste · **eingeklappt startend** · Zusammenfassung · Aufklappen · Tri-State bei teilweiser Auswahl |
 | Anwenden | Bestätigungsdialog über der Schwelle · Ergebnismeldung · **die Ersetzung steht wirklich in der Datei** · Snapshot auf der Platte · Rückgängig-Knopf |
 | Rückgängig | unveränderte Datei wird hergestellt · **seither bearbeitete Datei bleibt unangetastet** · übersprungene Datei wird benannt |
+| Hub | Tab-Leiste mit zwei Tabs, Icons gerendert · Bibliothek listet die Regel mit Ausführen-Knopf · **Ausführen wechselt in den Arbeitsbereich und füllt die Felder** |
 | Grenzen | unvollständig gemessene Datei ist gesperrt |
 | Event-Loop | **Renderer atmet während des Laufs** (s. u.) |
 | Einstellungen | Bereich „Vault" überlebt Setter **und** Neuladen |
@@ -72,6 +73,10 @@ zweimal war der Lauf schlicht kürzer als der Freigabe-Takt. Der Punkt eicht des
 die Timer-Kette des Fensters und meldet die Bedingungen im Ergebnis mit.
 
 ## Durchläufe
+
+### 2026-10-12 — Obsidian 1.14.4, Welle 20 (Bibliothek-Tab im Hub) · **48 grün · 0 rot · 2 übersprungen von 50**
+
+Vorher (frischer Prozess nach Aufwärmlauf, Port 9392): 45 grün · 0 rot · 2 übersprungen von 47. Neu sind die drei Hub-Punkte T1–T3; sonst hat sich nichts verschoben (die zwei Übersprungenen sind weiter „Renderer atmet“/„Abbrechen“: der Lauf war nach 83 ms durch). Der erste Lauf mit T3 war **rot** (Muster- und Ersetzungsfeld leer nach „Ausführen“): `editRule` meldet „edit“ und zeichnet die Regel-Felder nicht neu; das gab es schon bei der alten Preset-Knopfzeile. Behoben mit einem Voll-Draw vor dem Tab-Wechsel, Unit-Test mit Mutationsprobe in beide Richtungen.
 
 ### 2026-10-09 — Obsidian 1.14.4, Welle 15 (Verbindungs-Tausch auf `createLlmConnection`) · **43 grün · 0 rot · 1 übersprungen von 44**
 

@@ -36,7 +36,7 @@ under [Panel](#panel) below.
 ## Panel
 
 The panel is opened via the ribbon icon or the **"Open panel"** command and appears as
-a view in the right sidebar. Its layout, top to bottom:
+a view in the right sidebar. A tab bar at the top switches between **"Workspace"** (`view.tabWork`, everything below) and **"Library"** (`view.tabLibrary`, see [Library](#library)). Layout of the workspace, top to bottom:
 
 1. **Scope switch** — three buttons, **"Whole note"**, **"Selection"** and **"Whole vault"**
    (`view.scope.file` / `view.scope.selection` / `view.scope.vault`). The active one is highlighted. Starts at the configured
@@ -50,6 +50,10 @@ a view in the right sidebar. Its layout, top to bottom:
    - *Error* — a plain-language message (see [Error messages](#error-messages) and
      [Risk messages](#risk-messages)), with an expandable **"Show the model's raw
      answer"** section when a raw response is available.
+
+### Library
+
+The **"Library"** tab lists the saved rules (the "Saved rules" group in the settings) as rows: the name, the pattern as `/regex/flags` underneath, and a **"Run"** button (`view.libraryRun`). **"Run"** takes the current note or selection like "or write the pattern yourself", fills in the saved pattern and replacement, and switches to the **"Workspace"** tab, where the [preview](#preview) appears. Nothing is sent to the model. If no note or selection is available, the tab stays open and Obsidian says why. Saved rules are created, changed and removed in the settings, not here; with none saved the tab shows a hint where to add them.
 
 ### Preview
 

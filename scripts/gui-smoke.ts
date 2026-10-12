@@ -108,6 +108,11 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
     "Zweites Anwenden mit Aenderung dazwischen greift ohne neues Pinnen",
     "Zuruecksetzen leert die Runde bewusst",
   ],
+  Hub: [
+    "T1 Hub-Leiste: zwei Tabs, Icons gerendert, Arbeitsbereich aktiv",
+    "T2 Bibliothek listet die gespeicherte Regel mit Ausfuehren-Knopf",
+    "T3 Ausfuehren wechselt in den Arbeitsbereich und setzt die Regel",
+  ],
   Abbruch: ["Renderer atmet waehrend des Laufs", "Abbrechen beendet den Lauf"],
   Setter: [
     "Bereich „Vault\" ueberlebt den Einstellungs-Setter",
@@ -1535,6 +1540,81 @@ async function abschnittHilfe(cdp: Cdp): Promise<void> {
   record("H1 Hilfe-Zeile ist die erste Zeile der Einstellungen", ok, `erste Zeile „${r.name}“, ${r.buttons} Text-Knopf, bug-Icon ${r.bug ? "da" : "fehlt"}`);
 }
 
+// --- Abschnitt: Hub ----------------------------------------------------------
+
+/** Tab-Leiste und Bibliothek (0.13.0): der Hub wird einmal gebaut, die Bibliothek zeichnet beim
+ *  Oeffnen neu. Die gespeicherten Regeln stellt der Treiber selbst (und gibt sie zurueck). */
+async function abschnittHub(cdp: Cdp): Promise<void> {
+  const pfad = `${SMOKE_DIR}/notiz-hub.md`;
+  await cdp.evaluate(`
+    const p = ${JSON.stringify(pfad)};
+    const body = "Zeile mit ${ALT}.\\n";
+    const vorhanden = app.vault.getAbstractFileByPath(p);
+    if (vorhanden) await app.vault.modify(vorhanden, body);
+    else await app.vault.create(p, body);
+    return true;
+  `);
+  await dateiOeffnen(cdp, pfad);
+  const vorher = await cdp.evaluate<unknown>(`return app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.presets;`);
+  try {
+    await setPluginSetting(cdp, PLUGIN_ID, "presets", [{ id: "smoke-p", name: "Smoke-Regel", regex: ALT, flags: "g", replacement: NEU }]);
+    // Bereich "Notiz" (Position 0) und zurueck in den Arbeitsbereich, falls ein Vorgaenger woanders stand.
+    await click(cdp, ".okit-hub-tab[data-tab='work']");
+    await click(cdp, ".transmute-scope-btn", 0);
+
+    const leiste = await cdp.evaluate<{ tabs: string[]; icons: number[]; aktiv: string | null }>(`
+      const tabs = [...document.querySelectorAll(".okit-hub-tab")];
+      return {
+        tabs: tabs.map((t) => t.getAttribute("data-tab") + ":" + (t.querySelector(".okit-hub-tab-label")?.textContent ?? "")),
+        icons: tabs.map((t) => t.querySelector(".okit-hub-tab-icon")?.innerHTML.length ?? 0),
+        aktiv: document.querySelector(".okit-hub-tab.is-active")?.getAttribute("data-tab") ?? null,
+      };
+    `);
+    record(
+      "T1 Hub-Leiste: zwei Tabs, Icons gerendert, Arbeitsbereich aktiv",
+      leiste.tabs.length === 2 && leiste.icons.every((n) => n > 0) && leiste.aktiv === "work",
+      `Tabs ${leiste.tabs.join(" | ")}; Icon-HTML-Laengen ${leiste.icons.join("/")}; aktiv ${leiste.aktiv}`,
+    );
+
+    await click(cdp, ".okit-hub-tab[data-tab='library']");
+    const zeilen = await cdp.evaluate<{ aktiv: string | null; name: string; muster: string; knoepfe: number; sichtbar: boolean }>(`
+      const row = document.querySelector(".transmute-library-row");
+      const panel = document.querySelector(".transmute-library")?.closest(".okit-hub-panel");
+      return {
+        aktiv: document.querySelector(".okit-hub-tab.is-active")?.getAttribute("data-tab") ?? null,
+        name: row?.querySelector(".transmute-library-name")?.textContent ?? "",
+        muster: row?.querySelector(".transmute-library-pattern")?.textContent ?? "",
+        knoepfe: row ? row.querySelectorAll("button").length : 0,
+        sichtbar: !!panel && !panel.classList.contains("is-hidden"),
+      };
+    `);
+    record(
+      "T2 Bibliothek listet die gespeicherte Regel mit Ausfuehren-Knopf",
+      zeilen.aktiv === "library" && zeilen.sichtbar && zeilen.name === "Smoke-Regel" && zeilen.muster === `/${ALT}/g` && zeilen.knoepfe === 1,
+      `aktiv ${zeilen.aktiv}, sichtbar ${zeilen.sichtbar}, „${zeilen.name}“ ${zeilen.muster}, ${zeilen.knoepfe} Knopf`,
+    );
+
+    await click(cdp, ".transmute-library-row .transmute-preset-btn");
+    await cdp.evaluate("await new Promise((r) => setTimeout(r, 700)); return true;");
+    const danach = await cdp.evaluate<{ aktiv: string | null; regex: string | null; ersetzung: string | null }>(`
+      return {
+        aktiv: document.querySelector(".okit-hub-tab.is-active")?.getAttribute("data-tab") ?? null,
+        regex: document.querySelector(".transmute-regex")?.value ?? null,
+        ersetzung: document.querySelector(".transmute-replacement-input")?.value ?? null,
+      };
+    `);
+    record(
+      "T3 Ausfuehren wechselt in den Arbeitsbereich und setzt die Regel",
+      danach.aktiv === "work" && danach.regex === ALT && danach.ersetzung === NEU,
+      `aktiv ${danach.aktiv}, Muster „${danach.regex}“, Ersetzung „${danach.ersetzung}“`,
+    );
+  } finally {
+    await setPluginSetting(cdp, PLUGIN_ID, "presets", vorher);
+    await click(cdp, ".okit-hub-tab[data-tab='work']");
+    await cdp.evaluate(`app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].sessionInstance.reset?.(); return true;`);
+  }
+}
+
 // --- Abschnitt: i18n ---------------------------------------------------------
 
 /** Sprache des Panels — fuer die Knoepfe, deren Beschriftung gelesen werden muss. */
@@ -1685,6 +1765,7 @@ async function main(): Promise<void> {
       await abschnitt("Unvollstaendig", () => abschnittUnvollstaendig(cdp));
     }
     await abschnitt("Datei-Anwenden", () => abschnittDateiAnwenden(cdp));
+    await abschnitt("Hub", () => abschnittHub(cdp));
     await abschnitt("Abbruch", () => abschnittAbbruch(cdp, kandidaten));
     await abschnitt("Setter", () => abschnittSetter(cdp));
     await abschnitt("llm-lab", () => abschnittLlmLab(cdp));
