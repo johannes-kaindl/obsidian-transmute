@@ -16,6 +16,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **Kit pins raised to obsidian-kit 0.59.0 / code-kit 0.24.0** (from 0.57.0; the 0.58.0 release only adds test helpers, nothing visible). Visible effects:
+  - **Settings, endpoint list:** the "move to top" and "remove endpoint" buttons stay together in one row instead of the trash can wrapping alone into a second line; the key and model fields are a little narrower and the address stays fully visible.
+  - **Settings, "Request" section:** for an endpoint whose model family is not known yet it now reads "Family: not detected yet · Backend: not detected yet" with a note that this is normal for a freshly added endpoint (the LLM Endpoint Manager records family and backend), and the fields say "Not sent yet — waiting for the model family" instead of "Not sent — the model family is unknown".
 - Kit pins raised to obsidian-kit 0.57.0 / code-kit 0.24.0. Classifying a failed Shortcuts call (timeout, busy, cancelled, unsupported) now uses the kit's shared `classifyShortcutFailure` instead of a local copy; it returns the same reason and message for every status and error body, so nothing changes for you.
 
 ## [0.12.0] — 2026-10-12
