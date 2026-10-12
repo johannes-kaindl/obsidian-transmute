@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-10-12
+
 ### Added
 
 - **A "Library" tab in the panel.** A tab bar (the kit's hub) now switches between "Workspace" (the panel as before) and "Library": your saved rules as a list with a "Run" button per row. "Run" fills in the saved pattern and replacement for the current note or selection and switches back to the workspace, where the preview appears — no model call. The row of preset buttons under "or write the pattern yourself" is gone; the rules live in the tab.
