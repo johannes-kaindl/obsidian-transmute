@@ -6,7 +6,7 @@
   "targets": [
     {
       "dir": "src/vendor/kit", "source": "code-kit", "from": "src/ts/pure",
-      "modules": ["backend-probe", "capabilities", "cooperative-yield", "endpoint", "endpoint_config", "endpoint_diagnostics", "error_body", "i18n", "model-choice", "model-list-cache", "reasoning", "redact", "rounds", "run-state", "model-context", "embeddings-client", "sampling-profiles", "secrets", "settings", "sse", "think-splitter", "timeout"]
+      "modules": ["backend-probe", "capabilities", "cooperative-yield", "endpoint", "endpoint_config", "endpoint_diagnostics", "error_body", "i18n", "model-choice", "model-list-cache", "reasoning", "redact", "rounds", "run-state", "model-context", "embeddings-client", "llm-json", "sampling-profiles", "secrets", "settings", "sse", "think-splitter", "timeout"]
     },
     {
       "dir": "src/vendor/kit", "source": "code-kit", "from": "src/ts/web",
@@ -24,7 +24,7 @@
     },
     {
       "dir": "tests/vendor/kit", "source": "obsidian-kit", "from": "src/testing",
-      "modules": ["kit-css", "obsidian-mock"]
+      "modules": ["kit-css", "obsidian-mock", "linear-probe"]
     }
   ]
 }

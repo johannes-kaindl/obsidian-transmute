@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseDiagnoseResponse, parseRuleResponse } from "../src/core/llm/response";
+import { pruefeLinear } from "./vendor/kit/linear-probe";
 
 const valid = '{"regex":"\\\\d+","flags":"g","replacement":"N","explanation":"Zahlen"}';
 
@@ -87,4 +88,54 @@ describe("parseDiagnoseResponse", () => {
     const raw = JSON.stringify({ diagnosis: "X", fix: { flags: "i" } });
     expect(parseDiagnoseResponse(raw).fix).toBeNull();
   });
+});
+
+describe("JSON-Lesen aus dem Kit (llm-json, K9) — sichtbare Aenderungen", () => {
+  it("findet das JSON hinter Prosa mit Klammern (frueher: kein JSON)", () => {
+    const res = parseRuleResponse(`Siehe [1]: ${valid}`);
+    expect(res).toMatchObject({ ok: true });
+  });
+
+  it("ein Klammerpaar, das kein JSON ist, verdeckt das Objekt nicht mehr", () => {
+    const res = parseRuleResponse(`Muster {foo bar} dazu: ${valid}`);
+    expect(res).toMatchObject({ ok: true });
+  });
+
+  it("ein offenes <think> verwirft alles dahinter (frueher: das JSON dahinter wurde gelesen)", () => {
+    expect(parseRuleResponse(`<think>ich ueberlege ${valid}`)).toMatchObject({ ok: false, reason: "no-json" });
+    expect(parseDiagnoseResponse(`<think>ich ueberlege {"diagnosis":"x"}`).text).toBe("");
+  });
+
+  it("mehrere lose </think>: es wird bis zum letzten geschnitten", () => {
+    const res = parseDiagnoseResponse("Vorspann</think>mitte</think>Der Befund.");
+    expect(res.text).toBe("Der Befund.");
+  });
+
+  it("liest bei Zaeunen nur den ersten (fence: first, wie bisher)", () => {
+    const raw = "```json\n" + valid + "\n```\nund\n```json\n" + valid.replace("Zahlen", "Anderes") + "\n```";
+    const res = parseRuleResponse(raw);
+    if (res.ok) expect(res.draft.explanation).toBe("Zahlen");
+    else throw new Error("erwartet ok");
+  });
+
+  // Eingaben, die jeden Zweig vor der verdaechtigen Stelle durchlaufen (Think, Zaun, Klammer, Escape).
+  const shapes: Record<string, (n: number) => string> = {
+    "offene think": (n) => "<think>".repeat(n),
+    "lose Schliesser": (n) => "</think>".repeat(n),
+    "offene Klammern": (n) => "{".repeat(n),
+    "offene Strings": (n) => '{"a":"'.repeat(n),
+    "Zaeune ohne Ende": (n) => "```json ".repeat(n),
+    "Klammer um x": (n) => "[".repeat(n) + "x" + "]".repeat(n),
+    "Escape frisst Quote": (n) => '\\"['.repeat(n),
+    "verschachtelt": (n) => "{".repeat(n) + "x" + "}".repeat(n),
+    "hinter Zaun und think": (n) => "<think>x</think>```json\n" + "[".repeat(n) + "x" + "]".repeat(n),
+  };
+  for (const [name, shape] of Object.entries(shapes)) {
+    it(`bleibt linear: ${name}`, () => {
+      const rule = pruefeLinear((s: string) => parseRuleResponse(s), shape);
+      expect(rule.linear, rule.message).toBe(true);
+      const diag = pruefeLinear((s: string) => parseDiagnoseResponse(s), shape);
+      expect(diag.linear, diag.message).toBe(true);
+    });
+  }
 });
