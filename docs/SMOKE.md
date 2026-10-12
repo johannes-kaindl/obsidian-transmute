@@ -74,6 +74,10 @@ die Timer-Kette des Fensters und meldet die Bedingungen im Ergebnis mit.
 
 ## Durchläufe
 
+### 2026-10-12 — Obsidian 1.14.4, Welle 20 (B2: Pin obsidian-kit 0.59.0, Brücke `fc71211`) · **48 grün · 0 rot · 2 übersprungen von 50**
+
+Vorher (B1, Pin 0.57.0): 48/0/2/0 von 50. Keine Verschiebung; die Detailzeilen aller V-, M-, S-, llm-lab-, H- und G-Punkte sind bis auf die turnId identisch. `ENDPOINT_LIST_CSS` in `styles.css` neu kopiert (der Treiber prüft die Endpunkt-Zeile nicht über Kindselektoren). `settings.png` neu aufgenommen.
+
 ### 2026-10-12 — Obsidian 1.14.4, Welle 20 (B1: zentraler LLM-Stub und Fake-Manager, Brücke `fc71211`) · **48 grün · 0 rot · 2 übersprungen von 50**
 
 Der eigene HTTP-Server des Treibers (`startFakeEndpoint`) ist eine dünne Hülle über `startLlmStub`, der Fake-Manager des Abschnitts „Manager“ kommt aus `installFakeManager`/`entferneFakeManager`. Gleiche Lage wie vorher (Port 9392, frischer Prozess), Bilanz unverändert; die Detailzeilen aller V-, M-, S- und llm-lab-Punkte sind bis auf die turnId identisch. Ein erster Lauf zeigte „Renderer atmet“ als nichts gemessen („Lauf ist in 2 s nicht angelaufen“, Abschnitt vor jedem Stub); zwei Wiederholungen mit frischem Prozess lagen wieder bei „übersprungen: Lauf nach 110 ms durch“. Der Apple-Fake (zwei Endpunkte, Transport `shortcuts`) bleibt lokal, weil `FakeEndpunkt` weder `transport` noch `shortcut` noch den `list`-Filter `transports` kennt.
