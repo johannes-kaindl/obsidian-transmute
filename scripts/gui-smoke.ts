@@ -61,6 +61,7 @@ const NEU = "neue Schreibweise";
 /** Ab so vielen Kandidaten ist der Abbruch-Pruefpunkt ueberhaupt messbar. Darunter ist
  *  der Lauf durch, bevor der Klick ankommt — dann wird uebersprungen statt geraten. */
 const ABORT_MIN_KANDIDATEN = 100;
+const STUB_CLOSE_FRIST_MS = 5_000;
 
 const args = parseArgs(process.argv.slice(2));
 const PORT = Number(args.value("port") ?? "");
@@ -947,7 +948,17 @@ async function startFakeEndpoint(
   const port = (server.address() as AddressInfo).port;
   return {
     url: `http://127.0.0.1:${port}`,
-    close: () => new Promise<void>((resolve) => { server.close(() => { resolve(); }); }),
+    // `server.close` wartet auf offene Keep-Alive-Sockets des Renderers, ohne `closeAllConnections`
+    // unbegrenzt (Verdacht fuer „Smoke haengt nach M3"). Mit Frist: laeuft sie ab, ist der
+    // Abschnitt „nichts gemessen" (Vorbedingung), kein stilles Haengen.
+    close: async () => {
+      let timer: NodeJS.Timeout | undefined;
+      const frist = new Promise<"frist">((resolve) => { timer = setTimeout(() => { resolve("frist"); }, STUB_CLOSE_FRIST_MS); });
+      const zu = new Promise<"zu">((resolve) => { server.close(() => { resolve("zu"); }); server.closeAllConnections(); });
+      const ende = await Promise.race([zu, frist]);
+      clearTimeout(timer);
+      if (ende === "frist") throw new Vorbedingung(`Stub-Server schloss nicht binnen ${STUB_CLOSE_FRIST_MS} ms`);
+    },
     chatCalls: () => chatCalls,
     lastModel: () => lastModel,
     lastBody: () => lastBody,
@@ -1300,8 +1311,11 @@ async function abschnittManager(cdp: Cdp): Promise<void> {
       p.llm.invalidate();
       return true;
     `).catch(() => undefined);
-    await mgr.close();
-    await lokal.close();
+    try {
+      await mgr.close();
+    } finally {
+      await lokal.close();
+    }
   }
 }
 
