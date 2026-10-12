@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The connection now comes from obsidian-kit 0.56.0 and code-kit 0.23.0.** Visible effects:
+  - **Context length per endpoint row.** Below a reachable row with a model the settings show "Context: loaded N · max M tokens" (only "max M" while the model is not loaded; nothing when the server names no number), read from LM Studio or Ollama with a 5-second limit per attempt.
+  - **The model dropdown of a row offers "— (server picks)" again** (the screenshot in the settings docs shows it). Choosing it removes the row's model, so the server decides.
+  - **Long streamed answers render faster and leak less** (incremental guard against remote content in model output), and closing the panel while an answer is still rendering no longer cuts off the last guard pass.
+  - **The `<think>` stripping that checks every answer is linear.** A degenerate answer with tens of thousands of `<think>` tags used to freeze for seconds.
+  - The wording of the status icons and input hints in the endpoint list is now the kit's (English and German).
+- **Reading the rule from a model answer comes from code-kit `llm-json`.** Of the existing cases nothing changes, but:
+  - JSON behind prose that contains brackets (`see [1]: {…}`) is found now; before it was reported as "no JSON".
+  - A bracket pair that is not JSON in front of the real object no longer hides it.
+  - **An unclosed `<think>` now drops everything after it** (before, a JSON behind it was still read). This applies to the rule and to the diagnosis text.
+  - With several stray `</think>` the text is cut up to the last one.
+  - Reading is linear for degenerate answers (measured up to 50 000 repetitions: a few milliseconds).
+- **The version history uses code-kit `rounds`** (selecting, appending and the "tune again builds on the active version" cut). Nothing changes for you: stepping back and tuning again still appends after the last version and builds on the one you selected, and nothing is cut off.
+
+### Removed
+
+- Internal: `extractChatContent`, `extractFinishReason` and `extractReasoning` (unused since 0.8.0).
+
 ## [0.11.0] — 2026-10-11
 
 ### Changed
