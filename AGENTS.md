@@ -91,7 +91,7 @@ testbar. Nur `main.ts`, Settings-Tab, Views/Modals und die HTTP-/Vault-Adapter i
 ```
 src/
 ├── core/
-│   ├── llm/          prompt · response (inkl. extractReasoning) · client
+│   ├── llm/          prompt · response (Regel/Diagnose lesen, JSON aus code-kit llm-json) · client
 │   ├── regex/        compile (allowRisky) · execute (Zeitbudget + maxHits) ·
 │   │                 guard · evaluate ← der EINE Ausführungspfad
 │   ├── vault/        scope (Kandidaten) · run (Lauf) · selection (zwei Ebenen) ·
