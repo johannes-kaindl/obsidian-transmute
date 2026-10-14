@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.13.1] — 2026-10-14
+
 ### Changed
 
 - **The model ID in the endpoint list stays visible.** At normal window width the model ID in an endpoint row is no longer cut off; a very long ID gets its own line, and in a narrow window the block of model field and buttons moves to a second row as a whole (obsidian-kit 0.59.1).
