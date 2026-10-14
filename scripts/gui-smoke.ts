@@ -39,10 +39,12 @@
  * Exit 0 gruen/uebersprungen, 1 bei Rot oder „nichts gemessen", 2 bei Abbruch.
  */
 
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { attachTo, beimAbbruch, bereiteInstanzVor, Cdp, entferneFakeManager, installFakeManager, closeExtraLeaves, istAbgebrochen, klicke, notices, pollUntil, releaseAlwaysOnTop, requireVisible, setPluginSetting }
   from "../../tools/obsidian-cdp/cdp.js";
+import { boxOf, capture } from "../../tools/obsidian-cdp/shot.js";
 import { startLlmStub } from "../../tools/obsidian-cdp/llm-stub.js";
 import { createBilanz, parseArgs, runDriver, Vorbedingung } from "../../tools/obsidian-cdp/bilanz.js";
 import { requireEigenerBuild } from "../../tools/obsidian-cdp/vault.js";
@@ -143,7 +145,10 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
     "S5 Zeitueberschreitung des Kurzbefehls zeigt die Kurzbefehl-Meldung",
   ],
   Hilfe: ["H1 Hilfe-Zeile ist die erste Zeile der Einstellungen"],
-  Denken: ["D1 Denk-Knopf (Kit-Baustein) schaltet die Stufe des Modus structured und zeigt den Zustand"],
+  Denken: [
+    "D1 Denk-Knopf (Kit-Baustein) schaltet die Stufe des Modus structured und zeigt den Zustand",
+    "D2 Modell ohne „aus“ (gpt-oss): das Label nennt „minimal“ statt „Thinking off“, der Knopf bleibt bedienbar",
+  ],
   "Globales Modell": [
     "G1 Altwert wandert in die Zeile, kein globales Modell in den Einstellungen",
     "G2 Panel-Modellwahl schreibt in die aktive Zeile, „Server waehlt“ leert sie",
@@ -1550,11 +1555,57 @@ async function abschnittDenken(cdp: Cdp): Promise<void> {
     record(NAME,
       aus.pressed === "false" && an.pressed === "true" && an.stufe !== "off" && wieder.pressed === "false" && wieder.stufe === "off",
       `aus: ${aus.pressed}/${aus.label}/${aus.stufe}; nach Klick: ${an.pressed}/${an.label}/${an.stufe}; nach zweitem Klick: ${wieder.pressed}/${wieder.label}/${wieder.stufe}`);
+    await denkenOhneAus(cdp);
   } finally {
     await cdp.evaluate(`
       const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
       if (${JSON.stringify(vorher)} === null) delete p.settings.request.thinking.structured; else p.settings.request.thinking.structured = ${JSON.stringify(vorher)};
       await p.saveSettings();
+      return true;
+    `).catch(() => undefined);
+  }
+}
+
+/** D2: Ein Modell der Familie gpt-oss kennt kein „aus“. Der Knopf bleibt wirksam (er wechselt zwischen minimal und der gewaehlten Stufe);
+ *  das Label sagt „Thinking: minimal“ und behauptet keine Sperre. Das Modell steht in der Endpunkt-Zeile, der Vorwert wird zurueckgesetzt. */
+async function denkenOhneAus(cdp: Cdp): Promise<void> {
+  const NAME = "D2 Modell ohne „aus“ (gpt-oss): das Label nennt „minimal“ statt „Thinking off“, der Knopf bleibt bedienbar";
+  const vor = await cdp.evaluate<string>(`return JSON.stringify(app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.endpoints);`);
+  const lese = (): Promise<{ da: boolean; label: string; disabled: boolean; pressed: string | null }> => cdp.evaluate(`
+    const b = document.querySelector(".okit-thinking-toggle");
+    return { da: !!b, label: b ? b.textContent.trim() : "", disabled: b ? b.disabled : true, pressed: b ? b.getAttribute("aria-pressed") : null };
+  `);
+  try {
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = p.settings.endpoints.map((e, i) => (i === 0 ? { ...e, model: "gpt-oss-20b" } : e));
+      p.settings.request.thinking.structured = "off";
+      await p.saveSettings();
+      p.llm.invalidate();
+      for (const l of app.workspace.getLeavesOfType("transmute-panel")) l.detach();
+      return true;
+    `);
+    await panelOeffnen(cdp);
+    await new Promise((r) => setTimeout(r, 600));
+    const aus = await lese();
+    if (!aus.da) { unmeasured(NAME, "kein .okit-thinking-toggle im Panel gefunden"); return; }
+    // Abnahme am Bild (nicht Teil der Bilanz): die Modellzeile mit dem ehrlichen Label, Ablage ueber $SHOT_DIR.
+    if (process.env.SHOT_DIR) {
+      const box = await boxOf(cdp, ".transmute-model-row", 0);
+      mkdirSync(process.env.SHOT_DIR, { recursive: true });
+      writeFileSync(join(process.env.SHOT_DIR, "thinking-gpt-oss.png"), await capture(cdp, box ?? undefined));
+    }
+    await klickAusdruck(cdp, `document.querySelector(".okit-thinking-toggle")`);
+    await new Promise((r) => setTimeout(r, 500));
+    const an = await lese();
+    record(NAME, aus.label === "Thinking: minimal" && !aus.disabled && an.label === "Thinking on" && !an.disabled,
+      `Ausgang „${aus.label}“ (gesperrt: ${aus.disabled}); nach Klick „${an.label}“ (gesperrt: ${an.disabled})`);
+  } finally {
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = JSON.parse(${JSON.stringify(vor)});
+      await p.saveSettings();
+      p.llm.invalidate();
       return true;
     `).catch(() => undefined);
   }

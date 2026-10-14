@@ -343,10 +343,16 @@ describe("renderPanel — Modellzeile", () => {
     expect(findByClass<any>(on, "okit-thinking-toggle")?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("nennt bei Modellen, die immer denken, den Grund statt „aus“", () => {
+  // gpt-oss kennt kein „aus“: der Schalter wechselt zwischen minimal und der gewaehlten Stufe — das Label sagt es, es behauptet keine Sperre.
+  it("nennt bei Modellen ohne „aus“ die tatsaechliche Stufe statt „Thinking off“ — und der Klick bleibt wirksam", () => {
+    const onThinkingLevel = vi.fn();
     const root = makeFakeEl();
-    renderPanel(root, { ...base, model: "gpt-oss-20b", family: "gpt-oss", state: { phase: "idle" } }, handlers);
-    expect(root.textContent).toContain("Always thinks");
+    renderPanel(root, { ...base, model: "gpt-oss-20b", family: "gpt-oss", thinkingOnLevel: "low", state: { phase: "idle" } }, { ...handlers, onThinkingLevel });
+    expect(root.textContent).toContain("Thinking: minimal");
+    expect(root.textContent).not.toContain("Thinking off");
+    expect(root.textContent).not.toContain("Always thinks");
+    (findByClass<any>(root, "okit-thinking-toggle") as { click(): void }).click();
+    expect(onThinkingLevel).toHaveBeenCalledWith("low");
   });
 
   it("meldet den Klick als Stufenwechsel: an → aus, aus → zuletzt gewaehlte Stufe", () => {

@@ -123,7 +123,7 @@ function modelRow(parent: El, model: PanelModel, handlers: PanelHandlers): void 
     setLevel: (level) => { handlers.onThinkingLevel(level); return Promise.resolve(); },
     levelPicker: () => false,
     strings: {
-      button: (level, offNotPossible) => (level === "off" ? t(offNotPossible ? "view.thinkingAlways" : "view.thinkingOff") : t("view.thinkingOn")),
+      button: (level, offNotPossible) => (level === "off" ? t(offNotPossible ? "view.thinkingMinimal" : "view.thinkingOff") : t("view.thinkingOn")),
       level: (level) => t(`view.thinkingLevel.${level}`),
       pickerLabel: t("view.thinkingPicker"),
     },
