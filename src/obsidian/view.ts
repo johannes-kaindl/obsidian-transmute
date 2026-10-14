@@ -2,6 +2,7 @@ import { ItemView, MarkdownView, Notice, Scope, type WorkspaceLeaf } from "obsid
 import type { TransmuteSession } from "../core/session";
 import type { PresetDef, ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
+import { familyFromName, type ThinkingLevel } from "../vendor/kit/sampling-profiles";
 import { copyToClipboard } from "../vendor/kit-obsidian/clipboard";
 import { locateRegion } from "../core/anchor";
 import { activeMarkdownView, applyHitsToEditor, readScope, viewForPath } from "./editor-io";
@@ -48,8 +49,9 @@ export type TransmuteViewDeps = {
   listModels(): Promise<string[]>;
   getModel(): string;
   setModel(model: string): void;
-  getSuppressReasoning(): boolean;
-  setSuppressReasoning(value: boolean): void;
+  /** Denkstufe des Modus `structured` und die Stufe, auf die „an“ schaltet. */
+  getThinking(): { level: ThinkingLevel; onLevel: ThinkingLevel };
+  setThinking(level: ThinkingLevel): void;
   /** Dieselben Werte, die auch die Sitzung bekommt (main.ts). */
   runOptions(): { sampleChars: number; budgetMs: number; maxHits: number };
   confirmThreshold(): number;
@@ -232,8 +234,8 @@ export class TransmuteView extends ItemView {
       onRefreshModels: () => {
         void this.refreshModels(true);
       },
-      onToggleThinking: () => {
-        this.deps.setSuppressReasoning(!this.deps.getSuppressReasoning());
+      onThinkingLevel: (level) => {
+        this.deps.setThinking(level);
         this.draw();
       },
       onSelectVersion: (index) => {
@@ -692,7 +694,9 @@ export class TransmuteView extends ItemView {
       pinnedName: this.pinned?.name ?? null,
       models: this.models,
       model: this.deps.getModel(),
-      suppressReasoning: this.deps.getSuppressReasoning(),
+      family: this.deps.getModel() === "" ? null : familyFromName(this.deps.getModel()),
+      thinkingLevel: this.deps.getThinking().level,
+      thinkingOnLevel: this.deps.getThinking().onLevel,
       reasoningOpen: this.reasoningOpen,
       // `hasRule` kommt aus derselben Quelle, die `computeVaultPreview` prueft — nicht
       // aus einer zweiten Bedingung, die dasselbe zu wissen glaubt.

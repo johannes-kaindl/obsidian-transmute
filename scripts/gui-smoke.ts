@@ -133,6 +133,7 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
     "M2 Lauf nutzt den Manager-Endpunkt und dessen Standardmodell",
     "M2b Die Modellwahl des Nutzers schlaegt den Standard des Endpunkts",
     "M3 Manager aus: lokale Liste in den Einstellungen und im Lauf",
+    "M4 Abgeschalteter Wunsch-Endpunkt: die Meldung nennt den Manager-Grund",
   ],
   "Apple Intelligence": [
     "S1 Fake-Manager liefert den Apple-Endpunkt nur bei Opt-in",
@@ -142,6 +143,7 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
     "S5 Zeitueberschreitung des Kurzbefehls zeigt die Kurzbefehl-Meldung",
   ],
   Hilfe: ["H1 Hilfe-Zeile ist die erste Zeile der Einstellungen"],
+  Denken: ["D1 Denk-Knopf (Kit-Baustein) schaltet die Stufe des Modus structured und zeigt den Zustand"],
   "Globales Modell": [
     "G1 Altwert wandert in die Zeile, kein globales Modell in den Einstellungen",
     "G2 Panel-Modellwahl schreibt in die aktive Zeile, „Server waehlt“ leert sie",
@@ -1218,6 +1220,7 @@ async function abschnittManager(cdp: Cdp): Promise<void> {
     "M2 Lauf nutzt den Manager-Endpunkt und dessen Standardmodell",
     "M2b Die Modellwahl des Nutzers schlaegt den Standard des Endpunkts",
     "M3 Manager aus: lokale Liste in den Einstellungen und im Lauf",
+    "M4 Abgeschalteter Wunsch-Endpunkt: die Meldung nennt den Manager-Grund",
   ];
   if (await cdp.evaluate<boolean>(`return !!app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}];`)) {
     for (const n of REST) unmeasured(n, "ein llm-endpoint-manager ist im Vault aktiv; die Fake-API wuerde ihn verdecken");
@@ -1280,6 +1283,28 @@ async function abschnittManager(cdp: Cdp): Promise<void> {
     record(REST[3]!, zeigtLokal && okM3 && lokal.lastModel() === LOCAL_MODEL,
       `Einstellungen: ${ohne === null ? "kein Tab" : `${ohne.lokaleZeilen} lokale Zeilen, Manager-Text ${MANAGED_TEXT.some((x) => ohne.text.includes(x)) ? "noch da" : "weg"}`}; `
       + `lokaler Stub ${lokal.chatCalls()} Aufruf(e), Modell „${lokal.lastModel()}“ (erwartet „${LOCAL_MODEL}“)`);
+
+    // M4 — der Nutzer hat einen Endpunkt gewaehlt, der im Manager inzwischen abgeschaltet ist. Der Manager antwortet nur
+    // „no-endpoint“; den genaueren Grund („disabled“) haelt die Aufloesung der ausdruecklichen Wahl fest (obsidian-kit 0.60.0).
+    // Die Meldung ist der Kit-Text je Code, nicht mehr „der Manager hat keinen nutzbaren Endpunkt“.
+    await installFakeManager(cdp, {
+      pluginId: MANAGER_PLUGIN_ID,
+      endpunkte: [{ id: "fake-aus-ep", label: "Fake Abgeschaltet", url: mgr.url, models: [MANAGER_DEFAULT_MODEL], defaultModel: MANAGER_DEFAULT_MODEL, enabled: false }],
+    });
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.choice = { endpointId: "fake-aus-ep" };
+      await p.saveSettings();
+      p.llm.invalidate();
+      void p.sessionInstance.generate("Smoke-Test: ersetze foo", "foo bar");
+      return true;
+    `);
+    const meldung = await pollUntil<string>(cdp, `
+      const st = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].sessionInstance.state;
+      return st.phase === "error" ? String(st.args[0] ?? "") : "";
+    `, 15_000, 250);
+    const zeigtGrund = meldung !== null && /switched off|abgeschaltet/.test(meldung);
+    record(REST[4]!, zeigtGrund, `Meldung: „${meldung ?? "(keine)"}“`);
   } finally {
     await fakeManagerAus(cdp).catch(() => undefined);
     await cdp.evaluate(`
@@ -1494,6 +1519,47 @@ async function abschnittGlobalesModell(cdp: Cdp): Promise<void> {
 
 /** H1: Die Hilfe-Zeile ist die ERSTE Zeile im Einstellungs-Tab (UI-STANDARD §8), mit Text-Knopf
  *  und bug-Icon. Gezeichnet ueber `display()`, den Fallback-Renderer derselben Definitionen. */
+/** D1: Der Denk-Knopf im Panel ist der Kit-Baustein; ein Klick schaltet `request.thinking.structured` von „off“ auf die
+ *  gemerkte Stufe und zurueck, Label und `aria-pressed` folgen. Der Vorwert wird zurueckgesetzt. */
+async function abschnittDenken(cdp: Cdp): Promise<void> {
+  const NAME = "D1 Denk-Knopf (Kit-Baustein) schaltet die Stufe des Modus structured und zeigt den Zustand";
+  await closeExtraLeaves(cdp);
+  await panelOeffnen(cdp);
+  const vorher = await cdp.evaluate<unknown>(`return app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.request.thinking.structured ?? null;`);
+  const zustand = (): Promise<{ da: boolean; pressed: string | null; label: string; stufe: string | null }> => cdp.evaluate(`
+    const b = document.querySelector(".okit-thinking-toggle");
+    const st = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.request.thinking.structured ?? null;
+    return { da: !!b, pressed: b ? b.getAttribute("aria-pressed") : null, label: b ? b.textContent.trim() : "", stufe: st };
+  `);
+  try {
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.request.thinking.structured = "off";
+      await p.saveSettings();
+      return true;
+    `);
+    await bereichWaehlen(cdp, "Whole note");
+    const aus = await zustand();
+    if (!aus.da) { unmeasured(NAME, "kein .okit-thinking-toggle im Panel gefunden"); return; }
+    await klickAusdruck(cdp, `document.querySelector(".okit-thinking-toggle")`);
+    await new Promise((r) => setTimeout(r, 500));
+    const an = await zustand();
+    await klickAusdruck(cdp, `document.querySelector(".okit-thinking-toggle")`);
+    await new Promise((r) => setTimeout(r, 500));
+    const wieder = await zustand();
+    record(NAME,
+      aus.pressed === "false" && an.pressed === "true" && an.stufe !== "off" && wieder.pressed === "false" && wieder.stufe === "off",
+      `aus: ${aus.pressed}/${aus.label}/${aus.stufe}; nach Klick: ${an.pressed}/${an.label}/${an.stufe}; nach zweitem Klick: ${wieder.pressed}/${wieder.label}/${wieder.stufe}`);
+  } finally {
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      if (${JSON.stringify(vorher)} === null) delete p.settings.request.thinking.structured; else p.settings.request.thinking.structured = ${JSON.stringify(vorher)};
+      await p.saveSettings();
+      return true;
+    `).catch(() => undefined);
+  }
+}
+
 async function abschnittHilfe(cdp: Cdp): Promise<void> {
   const r = await cdp.evaluate<{ tab: boolean; name: string; buttons: number; bug: boolean } | null>(`
     const tab = (app.setting?.pluginTabs ?? []).find((x) => x.id === ${JSON.stringify(PLUGIN_ID)});
@@ -1776,6 +1842,7 @@ async function main(): Promise<void> {
     await abschnitt("Manager", () => abschnittManager(cdp));
     await abschnitt("Apple Intelligence", () => abschnittApple(cdp));
     await abschnitt("Hilfe", () => abschnittHilfe(cdp));
+    await abschnitt("Denken", () => abschnittDenken(cdp));
     await abschnitt("Globales Modell", () => abschnittGlobalesModell(cdp));
     await abschnitt("i18n", () => abschnittI18n(cdp));
   } finally {

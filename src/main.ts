@@ -6,6 +6,7 @@ import type { ChatMessage } from "./core/types";
 import "./core/i18n/strings";
 import { getLang, pickLang, setLang, t } from "./vendor/kit/i18n";
 import { onLevelFor, thinkingFor } from "./vendor/kit/sampling-profiles";
+import { managerErrorText, resolveLlmConnectionStrings } from "./vendor/kit-obsidian/llm-connection-strings";
 import { createLlmConnection, type LlmConnection, type LlmResult } from "./vendor/kit-obsidian/llm-connection";
 import { redactExchange } from "./vendor/kit-obsidian/chat-client";
 import { createShortcutsChatTransport, requestUrlTransport } from "./vendor/kit-obsidian/chat-transport";
@@ -113,14 +114,14 @@ export default class TransmutePlugin extends Plugin {
           setModel: (model: string) => {
             void this.llm.setModel(model);
           },
-          // Der Schalter im Panel bedient die Denkstufe des Modus „structured“ (Settings → Request):
+          // Der Denk-Knopf im Panel bedient die Denkstufe des Modus „structured“ (Settings → Request):
           // aus = „off“, an = die zuletzt gewaehlte Stufe.
-          getSuppressReasoning: () => thinkingFor(this.settings.request, "structured") === "off",
-          setSuppressReasoning: (value: boolean) => {
+          getThinking: () => ({ level: thinkingFor(this.settings.request, "structured"), onLevel: onLevelFor(this.settings.request, "structured") }),
+          setThinking: (level) => {
             const req = this.settings.request;
             const current = thinkingFor(req, "structured");
             if (current !== "off") req.lastOnLevel.structured = current;
-            req.thinking.structured = value ? "off" : onLevelFor(req, "structured");
+            req.thinking.structured = level;
             void this.saveSettings();
           },
           runOptions: () => ({
@@ -164,13 +165,14 @@ export default class TransmutePlugin extends Plugin {
     // nichts zu tun
   }
 
-  /** `LlmResult` der Verbindung → `CompleteResult`. Ohne Endpunkt: mit Manager nennt die Meldung den
-   *  Manager (Schluessel fehlt oder kein nutzbarer Endpunkt), ohne ihn die lokale Liste. */
+  /** `LlmResult` der Verbindung → `CompleteResult`. Ohne Endpunkt: mit Manager nennt die Meldung den Grund, den der
+   *  Manager meldet (Kit-Text je Code: kein Endpunkt, Wahl weg, abgeschaltet, Schluessel fehlt, nicht erreichbar), ohne
+   *  ihn die lokale Liste. */
   private toResult(r: LlmResult): CompleteResult {
     const shortcuts = r.source.transport === "shortcuts";
     if (!r.ok && r.kind === "no-endpoint" && !shortcuts) {
       if (r.source.kind === "manager") {
-        return { ok: false, error: t(r.detail === "secret-missing" ? "error.secretMissing" : "error.managerNoEndpoint") };
+        return { ok: false, error: managerErrorText(resolveLlmConnectionStrings({ lang: getLang() }), r.detail) };
       }
       return { ok: false, error: t("error.noEndpoint") };
     }

@@ -20,7 +20,7 @@ const handlers: PanelHandlers = {
   onSelectVersion: vi.fn(),
   onModel: vi.fn(),
   onRefreshModels: vi.fn(),
-  onToggleThinking: vi.fn(),
+  onThinkingLevel: vi.fn(),
   onSetAll: vi.fn(),
   onStartManual: vi.fn(),
   onEditRule: vi.fn(),
@@ -48,7 +48,9 @@ const base: Omit<PanelModel, "state"> = {
   pinnedName: null,
   models: [],
   model: "",
-  suppressReasoning: true,
+  family: null,
+  thinkingLevel: "off" as const,
+  thinkingOnLevel: "low" as const,
   reasoningOpen: false,
 };
 
@@ -327,27 +329,37 @@ describe("renderPanel — Modellzeile", () => {
     expect(off.textContent).toContain("Thinking off");
 
     const on = makeFakeEl();
-    renderPanel(on, { ...base, model: "qwen", suppressReasoning: false, state: { phase: "idle" } }, handlers);
+    renderPanel(on, { ...base, model: "qwen", thinkingLevel: "low", state: { phase: "idle" } }, handlers);
     expect(on.textContent).toContain("Thinking on");
   });
 
-  it("Thinking-Toggle traegt aria-pressed passend zum Zustand (UI-STANDARD 8)", () => {
+  it("Thinking-Knopf (Kit-Baustein) traegt aria-pressed passend zum Zustand (UI-STANDARD 8)", () => {
     const off = makeFakeEl();
     renderPanel(off, { ...base, model: "qwen", state: { phase: "idle" } }, handlers);
-    expect(findByClass<any>(off, "transmute-think")?.getAttribute("aria-pressed")).toBe("false");
+    expect(findByClass<any>(off, "okit-thinking-toggle")?.getAttribute("aria-pressed")).toBe("false");
 
     const on = makeFakeEl();
-    renderPanel(on, { ...base, model: "qwen", suppressReasoning: false, state: { phase: "idle" } }, handlers);
-    expect(findByClass<any>(on, "transmute-think")?.getAttribute("aria-pressed")).toBe("true");
+    renderPanel(on, { ...base, model: "qwen", thinkingLevel: "low", state: { phase: "idle" } }, handlers);
+    expect(findByClass<any>(on, "okit-thinking-toggle")?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("sperrt den Schalter bei Modellen, die immer denken — nativ disabled, aria-pressed=true", () => {
+  it("nennt bei Modellen, die immer denken, den Grund statt „aus“", () => {
     const root = makeFakeEl();
-    renderPanel(root, { ...base, model: "gpt-oss-20b", state: { phase: "idle" } }, handlers);
+    renderPanel(root, { ...base, model: "gpt-oss-20b", family: "gpt-oss", state: { phase: "idle" } }, handlers);
     expect(root.textContent).toContain("Always thinks");
-    const toggle = findByClass<any>(root, "transmute-think");
-    expect(toggle?.disabled).toBe(true);
-    expect(toggle?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("meldet den Klick als Stufenwechsel: an → aus, aus → zuletzt gewaehlte Stufe", () => {
+    const onThinkingLevel = vi.fn();
+    const off = makeFakeEl();
+    renderPanel(off, { ...base, model: "qwen", thinkingOnLevel: "medium", state: { phase: "idle" } }, { ...handlers, onThinkingLevel });
+    (findByClass<any>(off, "okit-thinking-toggle") as { click(): void }).click();
+    expect(onThinkingLevel).toHaveBeenLastCalledWith("medium");
+
+    const on = makeFakeEl();
+    renderPanel(on, { ...base, model: "qwen", thinkingLevel: "high", state: { phase: "idle" } }, { ...handlers, onThinkingLevel });
+    (findByClass<any>(on, "okit-thinking-toggle") as { click(): void }).click();
+    expect(onThinkingLevel).toHaveBeenLastCalledWith("off");
   });
 });
 

@@ -18,7 +18,7 @@ const handlers: PanelHandlers = {
   onSelectVersion: vi.fn(),
   onModel: vi.fn(),
   onRefreshModels: vi.fn(),
-  onToggleThinking: vi.fn(),
+  onThinkingLevel: vi.fn(),
   onSetAll: vi.fn(),
   onStartManual: vi.fn(),
   onEditRule: vi.fn(),
@@ -74,7 +74,9 @@ const model = (...versions: Version[]): PanelModel => ({
   pinnedName: null,
   models: [],
   model: "",
-  suppressReasoning: true,
+  family: null,
+  thinkingLevel: "off" as const,
+  thinkingOnLevel: "low" as const,
   reasoningOpen: false,
 });
 

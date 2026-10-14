@@ -3,7 +3,9 @@ import type { SessionState } from "../core/session";
 import type { PresetDef, ScopeKind } from "../core/settings";
 import { effectiveFlags } from "../core/regex/compile";
 import { CHEATSHEET } from "../core/cheatsheet";
-import { modelChoices, thinkToggleView } from "../core/reasoning-toggle";
+import { modelChoices } from "../core/reasoning-toggle";
+import { buildThinkingControl } from "../vendor/kit-obsidian/thinking-control";
+import type { FamilyId, ThinkingLevel } from "../vendor/kit/sampling-profiles";
 import { clipContext } from "../core/snippet";
 import type { Hit, RuleDraft, RuleProblem, Version } from "../core/types";
 import { t } from "../vendor/kit/i18n";
@@ -26,7 +28,11 @@ export type PanelModel = {
   /** Zuletzt vom Endpunkt geladene Modelle; leer, solange nichts geladen wurde. */
   models: string[];
   model: string;
-  suppressReasoning: boolean;
+  /** Familie des gewaehlten Modells (aus dem Namen) — sie sagt, ob „aus“ moeglich ist; null, solange kein Modell gewaehlt ist. */
+  family: FamilyId | null;
+  /** Denkstufe des Modus `structured` und die Stufe, auf die „an“ schaltet. */
+  thinkingLevel: ThinkingLevel;
+  thinkingOnLevel: ThinkingLevel;
   /** Gehoert ins Modell, nicht ins DOM: der Ergebnis-Container wird bei jedem
    *  Live-Update neu gezeichnet und wuerde ein offenes <details> sonst zuklappen. */
   reasoningOpen: boolean;
@@ -59,7 +65,7 @@ export type PanelHandlers = {
   onSelectVersion(index: number): void;
   onModel(model: string): void;
   onRefreshModels(): void;
-  onToggleThinking(): void;
+  onThinkingLevel(level: ThinkingLevel): void;
   onToggle(index: number): void;
   onSetAll(value: boolean): void;
   onStartManual(): void;
@@ -108,18 +114,20 @@ function modelRow(parent: El, model: PanelModel, handlers: PanelHandlers): void 
   setIcon(refresh, "refresh-cw");
   refresh.addEventListener("click", () => handlers.onRefreshModels());
 
-  // Zustand traegt Text UND Klasse, nicht nur Farbe (WCAG 1.4.1).
-  const think = thinkToggleView(model.model, model.suppressReasoning);
-  const thinkOn = think.cls !== "is-off";
-  const toggle = row.createEl("button", { cls: "transmute-think" });
-  toggle.addClass(...(think.cls === "" ? [] : [think.cls]));
-  setIcon(toggle.createSpan(), thinkOn ? "brain" : "brain-cog");
-  toggle.createSpan({ text: t(think.labelKey) });
-  toggle.setAttribute("aria-pressed", String(thinkOn));
-  toggle.disabled = think.disabled;
-  if (!think.disabled) {
-    toggle.addEventListener("click", () => handlers.onToggleThinking());
-  }
+  // Der Denk-Knopf ist der Kit-Baustein (Zustand traegt Text, Icon und aria-pressed, nicht nur Farbe — WCAG 1.4.1).
+  buildThinkingControl({
+    containerEl: row,
+    family: () => model.family,
+    current: () => model.thinkingLevel,
+    onLevel: () => model.thinkingOnLevel,
+    setLevel: (level) => { handlers.onThinkingLevel(level); return Promise.resolve(); },
+    levelPicker: () => false,
+    strings: {
+      button: (level, offNotPossible) => (level === "off" ? t(offNotPossible ? "view.thinkingAlways" : "view.thinkingOff") : t("view.thinkingOn")),
+      level: (level) => t(`view.thinkingLevel.${level}`),
+      pickerLabel: t("view.thinkingPicker"),
+    },
+  });
 }
 
 function scopeSwitch(parent: El, model: PanelModel, handlers: PanelHandlers): void {

@@ -15,10 +15,12 @@ All notable changes to this project are documented here. The format follows
 - **Snapshots are kept by day, week and month instead of "the last 5".** After a vault-wide replacement the snapshot folders are thinned the way backups usually are: the newest six of today, the oldest of each of the last 7 days, 4 weeks and 6 months. The newest snapshot is always kept, so "Undo" for the last replacement keeps working. The setting "Snapshots to keep" is gone; older folders are read as before, and a folder whose name carries no time is never deleted. New snapshot folders carry milliseconds in their name (`2026-08-14T17-02-11-123Z`).
 - **The model's reasoning is shown as formatted text** instead of a plain block (links and images in it are neutralised first).
 - **The ribbon tooltip and the command "Open panel" follow the interface language.**
+- **The thinking button is the kit's** (same label, icon and spacing as in the other plugins). A model that always thinks no longer locks the button; it reads "Always thinks" while the level stays off, and a click still switches the stored level. Before, the button was disabled for such models.
 - **In a narrow sidebar the scope buttons and the model row wrap instead of being cut off.**
 
 ### Fixed
 
+- **Error messages name the real reason when the LLM Endpoint Manager has no endpoint for you:** a missing API key, an endpoint switched off there, an endpoint that no longer exists, or a manager that does not answer — one text each, in English and German — instead of one generic "no usable endpoint" (obsidian-kit 0.60.0).
 - **The warning about discarded request settings lists them sorted** instead of in the order they were stored (obsidian-kit 0.60.1, code-kit 0.27.1).
 - **The Apple Intelligence hint under the endpoint choice now appears when you pick that endpoint**, not only after reopening the settings.
 
