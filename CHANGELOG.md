@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-10-14
+
 ### Added
 
 - **A "Reset panel" command**, and "Reset" in the panel now asks first when a preview is showing. The preview and its history are discarded; the note stays unchanged. Without a preview, Reset works without a question as before.
