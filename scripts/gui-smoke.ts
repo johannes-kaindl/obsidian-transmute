@@ -32,14 +32,16 @@
  *
  * Vertrauensdialog, Restricted Mode und Aktivierung erledigt `bereiteInstanzVor` im Treiber.
  * Je Messlauf ein frischer Prozess; der erste Lauf nach einer Profilanlage ist ein Aufwaermlauf.
- * Flags: `--vault <name>` (Default `obsidian-transmute`), `--keep`.
+ * Flags: `--vault <name>` (Default `obsidian-transmute`), `--keep`, `--halten <ms>` (Haltedauer zwischen Press und Release),
+ * `--klick-gegenprobe` (es wird NICHT geklickt; jeder klickabhaengige Punkt muss rot oder „nichts gemessen“ werden, nie gruen).
+ * Klicks laufen ueber EINEN Weg (`klicke`, echter Mausklick); Ctrl-C raeumt ueber das Abbruch-Modul der Bruecke auf.
  *
  * Exit 0 gruen/uebersprungen, 1 bei Rot oder „nichts gemessen", 2 bei Abbruch.
  */
 
 import { join } from "node:path";
 
-import { attachTo, bereiteInstanzVor, Cdp, entferneFakeManager, installFakeManager, closeExtraLeaves, notices, pollUntil, releaseAlwaysOnTop, requireVisible, setPluginSetting }
+import { attachTo, beimAbbruch, bereiteInstanzVor, Cdp, entferneFakeManager, installFakeManager, closeExtraLeaves, istAbgebrochen, klicke, notices, pollUntil, releaseAlwaysOnTop, requireVisible, setPluginSetting }
   from "../../tools/obsidian-cdp/cdp.js";
 import { startLlmStub } from "../../tools/obsidian-cdp/llm-stub.js";
 import { createBilanz, parseArgs, runDriver, Vorbedingung } from "../../tools/obsidian-cdp/bilanz.js";
@@ -199,15 +201,22 @@ async function prop<T>(cdp: Cdp, selector: string, name: string): Promise<T | nu
   `);
 }
 
+/** Klick-Modus (`--halten <ms>`, `--klick-gegenprobe`), gesetzt in `main`. EIN Klick-Weg: kein Prüfpunkt klickt am Modus vorbei,
+ *  sonst griffe die Gegenprobe nur bei der Hälfte (README der Brücke § Klick-Modus). */
+const KLICK = args.klickModus();
+
+/** Echter Mausklick über `klicke` (Lage, Haltedauer, Gegenprobe). `false` heißt: Ziel nicht im DOM oder unsichtbar — ein
+ *  Werkzeugproblem, das der Aufrufer als „Knopf nicht gefunden“ meldet; in der Gegenprobe ist ein vorhandenes Ziel `true`,
+ *  obwohl nicht geklickt wurde (die abhängigen Punkte müssen dann rot werden). */
+async function klickAusdruck(cdp: Cdp, ausdruck: string): Promise<boolean> {
+  const r = await klicke(cdp, ausdruck, KLICK);
+  if (!r.ok) console.log(`  ${r.hinweis}`);
+  await new Promise((res) => setTimeout(res, 250));
+  return r.ok;
+}
+
 async function click(cdp: Cdp, selector: string, index = 0): Promise<boolean> {
-  return cdp.evaluate<boolean>(`
-    const els = document.querySelectorAll(${JSON.stringify(selector)});
-    const el = els[${index}];
-    if (!el) return false;
-    el.click();
-    await new Promise((r) => setTimeout(r, 250));
-    return true;
-  `);
+  return klickAusdruck(cdp, `document.querySelectorAll(${JSON.stringify(selector)})[${index}]`);
 }
 
 /** Wert in ein Eingabefeld schreiben — mit beiden Ereignissen.
@@ -229,16 +238,8 @@ async function fill(cdp: Cdp, selector: string, value: string): Promise<boolean>
 
 /** Knopf ueber seinen sichtbaren Text finden und klicken (fuer Modal-Knoepfe ohne Klasse). */
 async function clickByText(cdp: Cdp, root: string, label: string): Promise<boolean> {
-  return cdp.evaluate<boolean>(`
-    const scope = document.querySelector(${JSON.stringify(root)});
-    if (!scope) return false;
-    const btn = [...scope.querySelectorAll("button")]
-      .find((b) => b.textContent.trim() === ${JSON.stringify(label)});
-    if (!btn) return false;
-    btn.click();
-    await new Promise((r) => setTimeout(r, 300));
-    return true;
-  `);
+  return klickAusdruck(cdp, `[...(document.querySelector(${JSON.stringify(root)})?.querySelectorAll("button") ?? [])]
+    .find((b) => b.textContent.trim() === ${JSON.stringify(label)})`);
 }
 
 
@@ -292,14 +293,10 @@ async function panelOeffnen(cdp: Cdp): Promise<void> {
 /** Den Bereich umschalten. Die Knoepfe tragen alle dieselbe Klasse — unterschieden
  *  wird ueber den sichtbaren Text, damit der Punkt nicht an der Reihenfolge haengt. */
 async function bereichWaehlen(cdp: Cdp, label: string): Promise<boolean> {
-  return cdp.evaluate<boolean>(`
-    const btn = [...document.querySelectorAll(".transmute-scope-btn")]
-      .find((b) => b.textContent.trim() === ${JSON.stringify(label)});
-    if (!btn) return false;
-    btn.click();
-    await new Promise((r) => setTimeout(r, 600));
-    return true;
-  `);
+  const ok = await klickAusdruck(cdp, `[...document.querySelectorAll(".transmute-scope-btn")]
+    .find((b) => b.textContent.trim() === ${JSON.stringify(label)})`);
+  await new Promise((r) => setTimeout(r, 350));
+  return ok;
 }
 
 // --- Abschnitt: Umfang -------------------------------------------------------
@@ -463,14 +460,21 @@ async function abschnittRueckgaengig(cdp: Cdp): Promise<void> {
     return true;
   `);
 
+  // Vorbedingung des Punkts: die Datei steht im ERSETZTEN Zustand. Ohne sie ist „ALT steht wieder drin“ trivial wahr (der
+  // Endzustand ist auch der Ausgangszustand) und der Punkt bliebe grün, selbst wenn Anwenden nie lief — die Falle der
+  // Klick-Gegenprobe (Task „GUI-Smoke braucht eine Klick-Gegenprobe“, Befund json-editor). Die Gegenprobe selbst stoppt schon
+  // am Tor (`abschnittAnwenden` liefert dann kein Undo, dieser Abschnitt läuft nicht → „nichts gemessen“, nie grün).
+  const vorUndo = await notizText(cdp, 0);
+  const ersetzt = (vorUndo ?? "").includes(NEU) && !(vorUndo ?? "").includes(ALT);
+
   await click(cdp, ".transmute-undo");
   await cdp.evaluate("await new Promise((r) => setTimeout(r, 1200)); return true;");
 
   const wieder = await notizText(cdp, 0);
   record(
     "Unveraenderte Datei wird wiederhergestellt",
-    (wieder ?? "").includes(ALT) && !(wieder ?? "").includes(NEU),
-    `enthaelt „${ALT}": ${(wieder ?? "").includes(ALT)}`,
+    ersetzt && (wieder ?? "").includes(ALT) && !(wieder ?? "").includes(NEU),
+    `vorher ersetzt: ${ersetzt}; danach enthaelt „${ALT}": ${(wieder ?? "").includes(ALT)}`,
   );
 
   const beruehrt = await notizText(cdp, 1);
@@ -1156,19 +1160,9 @@ async function fakeManagerEin(cdp: Cdp, url: string): Promise<void> {
   });
 }
 
-/** Stellt den vorgefundenen Slot wieder her — ein echter Manager im Vault bleibt unangetastet. Raeumt
- *  auch den lokalen Apple-Fake (eigener Sicherungsschluessel `__smokeVorherManager`) ab. */
+/** Stellt den vorgefundenen Slot wieder her — ein echter Manager im Vault bleibt unangetastet. */
 async function fakeManagerAus(cdp: Cdp): Promise<void> {
   await entferneFakeManager(cdp, { pluginId: MANAGER_PLUGIN_ID });
-  await cdp.evaluate(`
-    const id = ${JSON.stringify(MANAGER_PLUGIN_ID)};
-    if ("__smokeVorherManager" in window) {
-      const vorher = window.__smokeVorherManager;
-      if (vorher === null) delete app.plugins.plugins[id]; else app.plugins.plugins[id] = vorher;
-      delete window.__smokeVorherManager;
-    }
-    return true;
-  `);
 }
 
 /** Text und Zeilenzahl des Einstellungs-Tabs, gezeichnet in dessen eigenen (abgehaengten)
@@ -1298,32 +1292,18 @@ const APPLE_SHORTCUT = "Smoke Apple LLM";
 /** Kurz, damit der Timeout-Pfad (S5) in Sekunden laeuft — die Client-Frist richtet sich nach ihr (+10 s). */
 const APPLE_SHORTCUT_TIMEOUT_MS = 3000;
 
-/** Fake-Manager mit ZWEI Endpunkten (HTTP und Apple, Transport `shortcuts`). `list(filter)` filtert
- *  wie der echte Manager nach `filter.transports` mit Default `["http"]` (Spiegel von
- *  llm-endpoint-manager/scripts/gui-smoke.ts G2) — S1 misst das am Fake selbst, damit S2 nicht
- *  gruen wird, ohne dass das Opt-in je gebraucht wurde. */
+/** Fake-Manager mit ZWEI Endpunkten (HTTP und Apple, Transport `shortcuts`) über den zentralen Baustein der Brücke.
+ *  Dessen `list(filter)` filtert wie der echte Manager nach `filter.transports` mit Default `["http"]` (Spiegel von
+ *  llm-endpoint-manager `list-ops.ts`) — S1 misst das am Fake selbst, damit S2 nicht gruen wird, ohne dass das Opt-in
+ *  je gebraucht wurde. */
 async function fakeAppleManagerEin(cdp: Cdp, httpUrl: string): Promise<void> {
-  await cdp.evaluate(`
-    if (!("__smokeVorherManager" in window)) window.__smokeVorherManager = app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}] ?? null;
-    const http = { id: "fake-http", label: "Fake HTTP Endpoint", url: ${JSON.stringify(httpUrl)}, provider: "openai", capabilities: ["chat"], defaultModel: ${JSON.stringify(MANAGER_DEFAULT_MODEL)}, enabled: true, hasSecret: false };
-    const shortcut = { name: ${JSON.stringify(APPLE_SHORTCUT)}, timeoutMs: ${APPLE_SHORTCUT_TIMEOUT_MS} };
-    const apple = { id: ${JSON.stringify(APPLE_ENDPOINT_ID)}, label: ${JSON.stringify(APPLE_LABEL)}, url: "apple-shortcuts://on-device", provider: "apple-shortcuts", transport: "shortcuts", shortcut, capabilities: ["chat"], enabled: true, hasSecret: false };
-    const all = [http, apple];
-    const geloest = (e) => e.id === apple.id
-      ? { id: e.id, label: e.label, config: { url: e.url, model: "" }, transport: "shortcuts", shortcut }
-      : { id: e.id, label: e.label, config: { url: e.url, model: ${JSON.stringify(MANAGER_DEFAULT_MODEL)} }, defaultModel: ${JSON.stringify(MANAGER_DEFAULT_MODEL)} };
-    app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}] = { api: {
-      version: 1,
-      list: (filter) => { const ts = (filter && filter.transports) || ["http"]; return all.filter((e) => ts.includes(e.transport || "http")); },
-      get: (id) => all.find((e) => e.id === id) ?? null,
-      resolve: async () => geloest(http),
-      materialize: async (id) => { const e = all.find((x) => x.id === id); return e ? geloest(e) : { error: "not-found" }; },
-      models: async (id) => (id === http.id ? [${JSON.stringify(MANAGER_DEFAULT_MODEL)}] : []),
-      importEndpoints: async (eps) => ({ added: [], merged: [], skipped: eps.map((e) => e.url) }),
-      on: () => () => {},
-    } };
-    return true;
-  `);
+  await installFakeManager(cdp, {
+    pluginId: MANAGER_PLUGIN_ID,
+    endpunkte: [
+      { id: "fake-http", label: "Fake HTTP Endpoint", url: httpUrl, models: [MANAGER_DEFAULT_MODEL], defaultModel: MANAGER_DEFAULT_MODEL, configModel: "default" },
+      { id: APPLE_ENDPOINT_ID, label: APPLE_LABEL, url: "apple-shortcuts://on-device", transport: "shortcuts", shortcut: { name: APPLE_SHORTCUT, timeoutMs: APPLE_SHORTCUT_TIMEOUT_MS } },
+    ],
+  });
 }
 
 /** S1–S5: Auswahl im Baustein, Transportwahl, Kurzbefehl-URL, Fehlerpfad. Ein echter Rundlauf (die
@@ -1641,9 +1621,42 @@ async function main(): Promise<void> {
   const cdp = await attachTo("workspace", PORT, VAULT);
   if (!cdp) throw new Error(`Kein Obsidian-Hauptfenster auf Port ${PORT} fuer Vault ${VAULT}.`);
 
-  // Vorwerte AUSSERHALB des try: sonst haengt die Wiederherstellung daran, dass der
-  // Lauf sauber zu Ende geht — und genau dann tut er es nicht.
-  let vorwerte: { budgetMs: number; confirmThreshold: number; defaultScope: string } | null = null;
+  // Vorwert AUSSERHALB des try: sonst haengt die Wiederherstellung daran, dass der Lauf sauber zu Ende geht — und genau dann
+  // tut er es nicht. Es ist ein Schnappschuss ALLER Einstellungen (die Abschnitte stellen Endpunkte, Wahl und Schwellen um; eine
+  // einzelne Zuruecknahme je Feld liesse bei einem Abbruch mitten in einem Abschnitt Reste stehen).
+  let vorwerte: string | null = null;
+
+  // Alles, was dieser Lauf am Wirt veraendert, raeumt EIN Schritt zurueck: der Normalweg im `finally` (`zustand.schliesse()`),
+  // Ctrl-C/SIGTERM ueber das Abbruch-Modul der Brücke (Hauptzweig gesperrt, dieser Schritt darf noch senden, danach Bilanz, Exit
+  // 130). Angemeldet VOR der ersten Mutation, idempotent, wartet im Abbruch nicht. Die Stub-Server auf der Node-Seite enden mit dem Prozess.
+  const zustandZurueck = async (): Promise<void> => {
+    await fakeManagerAus(cdp).catch(() => undefined);
+    await cdp.evaluate(`
+      if (window.__smokeOrigOpen) { window.open = window.__smokeOrigOpen; delete window.__smokeOrigOpen; delete window.__smokeOpenUrls; }
+      return true;
+    `).catch(() => undefined);
+    await releaseAlwaysOnTop(cdp).catch(() => undefined);
+    if (vorwerte !== null) {
+      await cdp.evaluate(`
+        const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+        if (!p) return false;
+        p.settings = JSON.parse(${JSON.stringify(vorwerte)});
+        await p.saveSettings();
+        p.llm?.invalidate?.();
+        return true;
+      `).catch(() => undefined);
+    }
+    if (!KEEP && vorwerte !== null) {
+      await buehneAbbauen(cdp).catch(() => undefined);
+      // Die Snapshots dieses Laufs gehoeren nicht in den Vault des Nutzers.
+      await cdp.evaluate(`
+        const root = app.vault.configDir + "/plugins/${PLUGIN_ID}/snapshots";
+        if (await app.vault.adapter.exists(root)) await app.vault.adapter.rmdir(root, true);
+        return true;
+      `).catch(() => undefined);
+    }
+  };
+  const zustand = beimAbbruch(zustandZurueck, "Smoke-Zustand zurücksetzen");
 
   try {
     // Fenster nach vorn — ueber die ZENTRALE Fassung, nicht ueber eine eigene.
@@ -1689,10 +1702,7 @@ async function main(): Promise<void> {
     );
     console.log(`Build im Vault: ${herkunft.art} (sha1 ${"sha1" in herkunft ? herkunft.sha1.slice(0, 12) : "?"}…)`);
 
-    vorwerte = await cdp.evaluate(`
-      const s = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings;
-      return { budgetMs: s.budgetMs, confirmThreshold: s.confirmThreshold, defaultScope: s.defaultScope };
-    `);
+    vorwerte = await cdp.evaluate<string>(`return JSON.stringify(app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings);`);
 
     // Schwelle unter die Zahl der Buehnen-Notizen: der Bestaetigungsdialog soll kommen.
     await setPluginSetting(cdp, PLUGIN_ID, "confirmThreshold", 3);
@@ -1742,27 +1752,14 @@ async function main(): Promise<void> {
     await abschnitt("Globales Modell", () => abschnittGlobalesModell(cdp));
     await abschnitt("i18n", () => abschnittI18n(cdp));
   } finally {
-    // Nimmt zurueck, was `requireVisible` in seiner letzten Stufe gesetzt haben kann —
-    // ohne den Aufruf klebt das Fenster nach dem Lauf weiter ueber allem anderen.
-    await releaseAlwaysOnTop(cdp);
-    if (vorwerte) {
-      await setPluginSetting(cdp, PLUGIN_ID, "budgetMs", vorwerte.budgetMs);
-      await setPluginSetting(cdp, PLUGIN_ID, "confirmThreshold", vorwerte.confirmThreshold);
-      await setPluginSetting(cdp, PLUGIN_ID, "defaultScope", vorwerte.defaultScope);
+    // Nimmt zurueck, was dieser Lauf veraendert hat (auch `requireVisible` in seiner letzten Stufe) — derselbe Schritt wie beim Abbruch.
+    await zustand.schliesse();
+    // Nach einem Abbruch beendet das Modul den Prozess selbst (Bilanz, Exit 130).
+    if (!istAbgebrochen()) {
+      cdp.close();
+      // Die Soll-Liste ist der Nenner; `abschluss()` setzt Exit 1 bei Rot oder „nichts gemessen".
+      bilanz.abschluss();
     }
-    if (!KEEP) {
-      await buehneAbbauen(cdp);
-      // Die Snapshots dieses Laufs gehoeren nicht in den Vault des Nutzers.
-      await cdp.evaluate(`
-        const root = app.vault.configDir + "/plugins/${PLUGIN_ID}/snapshots";
-        if (await app.vault.adapter.exists(root)) await app.vault.adapter.rmdir(root, true);
-        return true;
-      `);
-    }
-
-    cdp.close();
-    // Die Soll-Liste ist der Nenner; `abschluss()` setzt Exit 1 bei Rot oder „nichts gemessen".
-    bilanz.abschluss();
   }
 }
 

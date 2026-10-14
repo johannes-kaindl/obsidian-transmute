@@ -26,6 +26,8 @@ npm run smoke:gui -- --port <port> [--vault <Vault-Name>]
 python3 ~/.claude/hooks/obsidian-cdp-lock.py release
 ```
 
+Zwei Schalter für Klick-Punkte: `--halten <ms>` hält die Maustaste zwischen Press und Release; `--klick-gegenprobe` klickt nicht, dann muss jeder klickabhängige Punkt rot oder „nichts gemessen“ werden (gemessen 2026-10-14: 29 grün, 6 rot, 15 nichts gemessen). Der Undo-Abschnitt bleibt dabei „nichts gemessen“, weil Anwenden ohne Klick kein Undo anbietet; sein Punkt verlangt zusätzlich den ersetzten Zustand vor dem Klick und ist deshalb nie trivial grün. Ctrl-C räumt über das Abbruch-Modul der Brücke auf (Einstellungen zurück, Bühne weg, Fake-Manager aus, Bilanz, Exit 130).
+
 Vertrauensdialog, eingeschränkter Modus und Aktivierung erledigt der Treiber (`bereiteInstanzVor`). Je Messlauf ein frischer Prozess; der erste Lauf nach einer Profilanlage ist ein Aufwärmlauf. Die Bilanz hat vier Zustände (grün · rot · übersprungen · nichts gemessen); Rot und „nichts gemessen" setzen Exit 1, ein Abbruch Exit 2. Der Nenner ist die Soll-Liste `ABSCHNITTE` im Treiber.
 
 **Nur EIN Obsidian-Fenster offen lassen.** Bei mehreren Fenstern bringt `activate` das
