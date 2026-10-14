@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { effectiveSuppress, modelChoices, thinkToggleView } from "../src/core/reasoning-toggle";
+import { modelChoices, thinkToggleView } from "../src/core/reasoning-toggle";
+import { effectiveSuppress } from "../src/vendor/kit/think-toggle";
 
 describe("thinkToggleView", () => {
   it("zeigt an, wenn das Denken laeuft", () => {

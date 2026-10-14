@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A "Reset panel" command**, and "Reset" in the panel now asks first when a preview is showing. The preview and its history are discarded; the note stays unchanged. Without a preview, Reset works without a question as before.
+
+### Changed
+
+- **Snapshots are kept by day, week and month instead of "the last 5".** After a vault-wide replacement the snapshot folders are thinned the way backups usually are: the newest six of today, the oldest of each of the last 7 days, 4 weeks and 6 months. The newest snapshot is always kept, so "Undo" for the last replacement keeps working. The setting "Snapshots to keep" is gone; older folders are read as before, and a folder whose name carries no time is never deleted. New snapshot folders carry milliseconds in their name (`2026-08-14T17-02-11-123Z`).
+- **The model's reasoning is shown as formatted text** instead of a plain block (links and images in it are neutralised first).
+- **The ribbon tooltip and the command "Open panel" follow the interface language.**
+- **In a narrow sidebar the scope buttons and the model row wrap instead of being cut off.**
+
+### Fixed
+
+- **The Apple Intelligence hint under the endpoint choice now appears when you pick that endpoint**, not only after reopening the settings.
+
 ## [0.13.1] — 2026-10-14
 
 ### Changed

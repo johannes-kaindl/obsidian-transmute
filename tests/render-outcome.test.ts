@@ -265,3 +265,20 @@ describe("Diagnose-Block", () => {
     expect(findByClass(root, "transmute-why")).toBeNull();
   });
 });
+
+describe("Gedankengang als Markdown", () => {
+  it("geht an renderMarkdown, wenn der Haken da ist (kein <pre>)", () => {
+    const root = makeFakeEl();
+    const renderMarkdown = vi.fn();
+    renderPanel(root, model(version({ hits: [hit()], selected: [true], reasoning: "**erst** denken" })), { ...handlers, renderMarkdown });
+    expect(renderMarkdown).toHaveBeenCalledOnce();
+    expect(renderMarkdown.mock.calls[0]?.[1]).toBe("**erst** denken");
+    expect(findAllByTag(root, "pre")).toHaveLength(0);
+  });
+
+  it("bleibt ohne Haken roher Text im <pre>", () => {
+    const root = makeFakeEl();
+    renderPanel(root, model(version({ hits: [hit()], selected: [true], reasoning: "roh" })), handlers);
+    expect(findAllByTag(root, "pre")).toHaveLength(1);
+  });
+});

@@ -54,6 +54,8 @@ export type PanelHandlers = {
   onRefine(): void;
   onApply(): void;
   onReset(): void;
+  /** Rendert Modell-Text als Markdown in `el` (neutralisiert, mit DOM-Waechter). Fehlt der Haken, bleibt der Text roh in einem <pre>. */
+  renderMarkdown?(el: El, text: string): void;
   onSelectVersion(index: number): void;
   onModel(model: string): void;
   onRefreshModels(): void;
@@ -315,7 +317,11 @@ function renderReasoning(parent: El, version: Version, model: PanelModel, handle
   // neu gezeichnet und wuerde ein offenes <details> sonst zuklappen.
   details.open = model.reasoningOpen;
   details.createEl("summary", { text: t("view.reasoning") });
-  details.createEl("pre", { text: version.reasoning });
+  if (handlers.renderMarkdown) {
+    handlers.renderMarkdown(details.createDiv({ cls: "transmute-reasoning-body" }), version.reasoning);
+  } else {
+    details.createEl("pre", { text: version.reasoning });
+  }
   details.addEventListener("toggle", () => handlers.onToggleReasoning());
 }
 

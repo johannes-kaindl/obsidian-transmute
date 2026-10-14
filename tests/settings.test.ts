@@ -7,15 +7,18 @@ describe("loadSettings", () => {
     expect(loadSettings({ model: "x" }).budgetMs).toBe(DEFAULT_SETTINGS.budgetMs);
   });
 
-  it("bringt Schwelle und Snapshot-Anzahl als Vorgabe mit", () => {
+  it("bringt die Schwelle als Vorgabe mit", () => {
     expect(DEFAULT_SETTINGS.confirmThreshold).toBe(50);
-    expect(DEFAULT_SETTINGS.snapshotKeep).toBe(5);
   });
 
   it("ergaenzt die neuen Felder in einer alten data.json", () => {
     const geladen = loadSettings({ endpoints: [{ url: "http://x" }], model: "" });
     expect(geladen.confirmThreshold).toBe(50);
-    expect(geladen.snapshotKeep).toBe(5);
+    expect("snapshotKeep" in geladen).toBe(false);
+  });
+
+  it("wirft den abgeloesten Schluessel snapshotKeep aus einer alten data.json weg", () => {
+    expect("snapshotKeep" in loadSettings({ snapshotKeep: 12 })).toBe(false);
   });
 
   it("startet ohne Presets (Default-Objekt selbst, ohne Seeding)", () => {

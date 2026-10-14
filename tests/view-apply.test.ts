@@ -6,6 +6,9 @@ import { TransmuteView, type TransmuteViewDeps } from "../src/obsidian/view";
 import type { PanelHandlers } from "../src/obsidian/view-render";
 import "../src/core/i18n/strings";
 
+const confirmMock = vi.hoisted(() => vi.fn<(app: unknown, opts: unknown) => Promise<boolean>>());
+vi.mock("../src/vendor/kit-obsidian/confirm", () => ({ confirmAction: confirmMock }));
+
 /**
  * Regression (Johannes' Quicktasks 2026-09-16): "Anwenden" leerte bisher die ganze
  * Runde (Muster, Flags, Ersetzung) — ein zweites Anwenden mit kleiner Korrektur
@@ -62,7 +65,6 @@ function deps(session: TransmuteSession): TransmuteViewDeps {
     setSuppressReasoning: vi.fn(),
     runOptions: () => ({ sampleChars: 400, budgetMs: 2000, maxHits: 500 }),
     confirmThreshold: () => 50,
-    snapshotKeep: () => 5,
     getPresets: () => [],
   };
 }
@@ -115,8 +117,16 @@ describe("Anwenden im Geltungsbereich Datei", () => {
     handlers.onApply();
     expect(editor.getValue()).toBe("neue Schreibweise");
 
+    // Mit Vorschau fragt Zuruecksetzen nach: Abbrechen laesst die Runde stehen, Bestaetigen leert sie.
+    confirmMock.mockResolvedValueOnce(false);
+    await view.resetWithConfirm();
+    expect(session.state.phase).toBe("preview");
+    expect(confirmMock).toHaveBeenCalledOnce();
+
+    confirmMock.mockResolvedValueOnce(true);
     handlers.onReset();
-    expect(session.state.phase).toBe("idle");
+    await vi.waitFor(() => expect(session.state.phase).toBe("idle"));
+    expect(confirmMock).toHaveBeenCalledTimes(2);
 
     // Ohne erneutes Pinnen tut ein weiteres Anwenden nichts mehr — die Runde ist leer.
     handlers.onApply();

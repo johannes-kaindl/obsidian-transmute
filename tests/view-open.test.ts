@@ -44,7 +44,6 @@ function deps(scope: "file" | "selection" | "vault", presets: PresetDef[] = []):
     setSuppressReasoning: vi.fn(),
     runOptions: () => ({ sampleChars: 400, budgetMs: 2000, maxHits: 500 }),
     confirmThreshold: () => 50,
-    snapshotKeep: () => 5,
     getPresets: () => presets,
   };
 }

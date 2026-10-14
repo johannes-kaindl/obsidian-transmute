@@ -79,7 +79,6 @@ export class TransmuteSettingTab extends PluginSettingTab {
           { name: t("set.sampleChars"), desc: t("set.sampleCharsDesc"), control: { type: "number", key: "sampleChars", min: 200 } },
           { name: t("set.budgetMs"), desc: t("set.budgetMsDesc"), control: { type: "number", key: "budgetMs", min: 200 } },
           { name: t("set.confirmThreshold"), desc: t("set.confirmThresholdDesc"), control: { type: "number", key: "confirmThreshold", min: 1 } },
-          { name: t("set.snapshotKeep"), desc: t("set.snapshotKeepDesc"), control: { type: "number", key: "snapshotKeep", min: 0 } },
           { name: t("set.showTargetField"), desc: t("set.showTargetFieldDesc"), control: { type: "toggle", key: "showTargetField" } },
         ],
       },
@@ -181,10 +180,23 @@ export class TransmuteSettingTab extends PluginSettingTab {
     const connectionEl = host.createDiv({ cls: "transmute-connection" });
     const hintEl = host.createDiv({ cls: "transmute-connection-hint" });
     this.plugin.llm.renderSettings(connectionEl, { lang: getLang() });
-    // Der Kurzbefehl-Hinweis haengt an der aufgeloesten Quelle (asynchron, die Verbindung merkt sie sich).
-    void this.plugin.llm.resolve().then((src) => {
-      if (src.transport === "shortcuts" && hintEl.isConnected) new Setting(hintEl).setDesc(t("src.appleHint"));
-    }).catch(() => undefined);
+    // Der Kurzbefehl-Hinweis haengt an der aufgeloesten Quelle (asynchron, die Verbindung merkt sie sich) und folgt
+    // einer Wahl im offenen Tab: die Verbindung zeichnet ihren Container nach jeder Wahl neu, daran haengt der Beobachter.
+    const updateHint = (): void => {
+      void this.plugin.llm.resolve().then((src) => {
+        if (!hintEl.isConnected) return;
+        hintEl.empty();
+        if (src.transport === "shortcuts") new Setting(hintEl).setDesc(t("src.appleHint"));
+      }).catch(() => undefined);
+    };
+    updateHint();
+    if (typeof MutationObserver !== "undefined") {
+      const observer = new MutationObserver(() => {
+        if (!hintEl.isConnected) { observer.disconnect(); return; }
+        updateHint();
+      });
+      observer.observe(connectionEl, { childList: true });
+    }
   }
 
   /** Die Verbindung haelt Modell-Listen fuer den Tab — beim Schliessen verwerfen. */
@@ -226,8 +238,6 @@ export class TransmuteSettingTab extends PluginSettingTab {
         return s.budgetMs;
       case "confirmThreshold":
         return s.confirmThreshold;
-      case "snapshotKeep":
-        return s.snapshotKeep;
       case "showTargetField":
         return s.showTargetField;
       default:
@@ -259,8 +269,6 @@ export class TransmuteSettingTab extends PluginSettingTab {
       case "confirmThreshold":
         s.confirmThreshold = Math.max(1, asInt(s.confirmThreshold));
         break;
-      case "snapshotKeep":
-        s.snapshotKeep = Math.max(0, asInt(s.snapshotKeep));
         break;
       case "showTargetField":
         s.showTargetField = Boolean(value);

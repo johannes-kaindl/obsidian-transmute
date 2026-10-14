@@ -129,21 +129,30 @@ export default class TransmutePlugin extends Plugin {
             maxHits: MAX_HITS,
           }),
           confirmThreshold: () => this.settings.confirmThreshold,
-          snapshotKeep: () => this.settings.snapshotKeep,
           getPresets: () => this.settings.presets,
         }),
     );
 
-    this.addRibbonIcon("replace", "Transmute", () => {
+    this.addRibbonIcon("replace", t("main.ribbon"), () => {
       void this.activatePanel();
     });
 
     // Ohne Default-Hotkey, ID ohne Plugin-Praefix, sentence-case (PROF-OBS-14).
     this.addCommand({
       id: "open-panel",
-      name: "Open panel",
+      name: t("main.openPanel"),
       callback: () => {
         void this.activatePanel();
+      },
+    });
+    this.addCommand({
+      id: "reset-panel",
+      name: t("main.resetPanel"),
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getLeavesOfType(VIEW_TYPE_TRANSMUTE)[0]?.view;
+        if (!(view instanceof TransmuteView)) return false;
+        if (!checking) void view.resetWithConfirm();
+        return true;
       },
     });
 

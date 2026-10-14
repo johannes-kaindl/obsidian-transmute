@@ -1,12 +1,11 @@
-import { isAlwaysOnThinker } from "../vendor/kit/reasoning";
+import { thinkToggleState } from "../vendor/kit/think-toggle";
 
 /**
- * Die drei Zustaende des Thinking-Schalters.
+ * Die drei Zustaende des Thinking-Schalters, abgebildet auf die Schluessel und Klassen dieses Plugins.
  *
- * Uebernommen aus image-to-markdown, `src/reasoning_toggle.ts` — dort ist es das
- * 2. Exemplar desselben Musters (pures Praedikat, das die UI nur noch abbildet). Der
- * dritte Zustand ist der wichtige: Modelle wie gpt-oss denken immer, egal was man
- * einstellt. Ein Schalter, der so tut, als koenne er das abstellen, luegt.
+ * Die Entscheidung (`thinkToggleState`) kommt aus dem Kit; hier bleibt nur die Zuordnung auf `view.thinking*` und die
+ * Zustandsklasse (der Zustand traegt Text UND Klasse, nicht nur Farbe). Der dritte Zustand ist der wichtige: Modelle wie
+ * gpt-oss denken immer, egal was man einstellt. Ein Schalter, der so tut, als koenne er das abstellen, luegt.
  */
 export type ThinkToggleView = {
   labelKey: "view.thinkingOn" | "view.thinkingOff" | "view.thinkingAlways";
@@ -14,15 +13,15 @@ export type ThinkToggleView = {
   disabled: boolean;
 };
 
-export function thinkToggleView(model: string, suppress: boolean): ThinkToggleView {
-  if (isAlwaysOnThinker(model)) return { labelKey: "view.thinkingAlways", cls: "is-disabled", disabled: true };
-  if (suppress) return { labelKey: "view.thinkingOff", cls: "is-off", disabled: false };
-  return { labelKey: "view.thinkingOn", cls: "", disabled: false };
-}
+const VIEW = {
+  on: { labelKey: "view.thinkingOn", cls: "" },
+  off: { labelKey: "view.thinkingOff", cls: "is-off" },
+  always: { labelKey: "view.thinkingAlways", cls: "is-disabled" },
+} as const;
 
-/** Was tatsaechlich an den Server geht — ein always-on-Modell laesst sich nicht bitten. */
-export function effectiveSuppress(model: string, suppress: boolean): boolean {
-  return suppress && !isAlwaysOnThinker(model);
+export function thinkToggleView(model: string, suppress: boolean): ThinkToggleView {
+  const state = thinkToggleState(model, suppress);
+  return { ...VIEW[state.mode], disabled: state.disabled };
 }
 
 /**

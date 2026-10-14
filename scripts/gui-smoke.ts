@@ -107,6 +107,7 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
     "Erstes Anwenden ersetzt beide Treffer in der Notiz",
     "Regex bleibt nach Anwenden stehen, statt zu leeren",
     "Zweites Anwenden mit Aenderung dazwischen greift ohne neues Pinnen",
+    "Zuruecksetzen fragt nach, Abbrechen laesst die Runde stehen",
     "Zuruecksetzen leert die Runde bewusst",
   ],
   Hub: [
@@ -585,7 +586,20 @@ async function abschnittDateiAnwenden(cdp: Cdp): Promise<void> {
     `„${nachZweitem ?? "(nichts)"}"`,
   );
 
+  // Mit Vorschau fragt „Reset“ nach (Funktions-Inventur): erst Abbrechen (Gegenprobe: die Runde bleibt), dann Bestaetigen.
+  const modalKlick = (label: string): Promise<boolean> => clickByText(cdp, ".modal-container", label);
   await clickByText(cdp, ".transmute-actions", labelReset);
+  await cdp.evaluate("await new Promise((r) => setTimeout(r, 300)); return true;");
+  const fragtNach = await exists(cdp, ".modal-container .modal-button-container");
+  const abgebrochen = fragtNach && (await modalKlick(sprache === "de" ? "Abbrechen" : "Cancel"));
+  await cdp.evaluate("await new Promise((r) => setTimeout(r, 300)); return true;");
+  const nachAbbruchGepinnt = await exists(cdp, ".transmute-pinned");
+  record("Zuruecksetzen fragt nach, Abbrechen laesst die Runde stehen", fragtNach && abgebrochen && nachAbbruchGepinnt,
+    `Rueckfrage ${fragtNach ? "da" : "FEHLT"}, Abbrechen ${abgebrochen ? "geklickt" : "nicht geklickt"}, Pinned-Hinweis ${nachAbbruchGepinnt ? "noch da" : "WEG"}`);
+
+  await clickByText(cdp, ".transmute-actions", labelReset);
+  await cdp.evaluate("await new Promise((r) => setTimeout(r, 300)); return true;");
+  await modalKlick(labelReset);
   await cdp.evaluate("await new Promise((r) => setTimeout(r, 300)); return true;");
   const nochGepinnt = await exists(cdp, ".transmute-pinned");
   record("Zuruecksetzen leert die Runde bewusst", !nochGepinnt, nochGepinnt ? "Pinned-Hinweis noch da" : "weg");
@@ -1343,11 +1357,14 @@ async function abschnittApple(cdp: Cdp): Promise<void> {
       `ohne Opt-in ${JSON.stringify(listen.ohne)}, mit Opt-in ${JSON.stringify(listen.mit)}`);
 
     // S2/S3 — der Baustein bietet Apple an (transports-Option); Wahl wie ein Nutzer: Dropdown setzen, change ausloesen
+    // Der Tab wird wie von einem Nutzer geoeffnet (sichtbar, am Dokument): ein `display()` auf einem abgehaengten
+    // Container misst einen Tab, den es so nie gibt — der Hinweis haengt an `isConnected`.
     const optionen = await cdp.evaluate<string[] | null>(`
+      app.setting.open();
+      app.setting.openTabById(${JSON.stringify(PLUGIN_ID)});
+      await new Promise((r) => setTimeout(r, 800));
       const tab = (app.setting?.pluginTabs ?? []).find((x) => x.id === ${JSON.stringify(PLUGIN_ID)});
       if (!tab) return null;
-      tab.display();
-      await new Promise((r) => setTimeout(r, 500));
       return [...tab.containerEl.querySelectorAll("select option")].map((o) => o.textContent || "");
     `);
     if (optionen === null) {
@@ -1355,23 +1372,33 @@ async function abschnittApple(cdp: Cdp): Promise<void> {
       unmeasured(NAMEN[2]!, "kein Einstellungs-Tab unter app.setting.pluginTabs gefunden");
     } else {
       record(NAMEN[1]!, optionen.some((o) => o.includes(APPLE_LABEL)), `Optionen: ${JSON.stringify(optionen)}`);
-      const hinweis = await cdp.evaluate<{ ok: boolean; hinweis: boolean }>(`
+      const hinweis = await cdp.evaluate<{ ok: boolean; vorher: boolean }>(`
         const tab = (app.setting?.pluginTabs ?? []).find((x) => x.id === ${JSON.stringify(PLUGIN_ID)});
         const sel = [...tab.containerEl.querySelectorAll("select")].find((s) => [...s.options].some((o) => (o.textContent || "").includes(${JSON.stringify(APPLE_LABEL)})));
-        if (!sel) return { ok: false, hinweis: false };
+        if (!sel) return { ok: false, vorher: false };
+        const vorher = (tab.containerEl.textContent || "").includes("4096");
         const opt = [...sel.options].find((o) => (o.textContent || "").includes(${JSON.stringify(APPLE_LABEL)}));
         sel.value = opt.value;
         sel.dispatchEvent(new Event("change", { bubbles: true }));
         const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
         const istKurzbefehl = async () => (await p.llm.resolve()).transport === "shortcuts";
         for (let i = 0; i < 32 && !(await istKurzbefehl()); i += 1) await new Promise((r) => setTimeout(r, 250));
-        tab.display();
-        await new Promise((r) => setTimeout(r, 500));
-        return { ok: await istKurzbefehl(), hinweis: (tab.containerEl.textContent || "").includes("4096") };
+        return { ok: await istKurzbefehl(), vorher };
       `);
-      record(NAMEN[2]!, hinweis.ok, hinweis.ok
-        ? `Quelle traegt transport shortcuts; Hinweis zur Grenze im Tab: ${hinweis.hinweis ? "da" : "FEHLT"}`
+      // Der Hinweis folgt der Wahl im OFFENEN Tab (kein erneutes Oeffnen): warten, nicht raten.
+      const hinweisDa = hinweis.ok && Boolean(await pollUntil<boolean>(cdp, `
+        const tab = (app.setting?.pluginTabs ?? []).find((x) => x.id === ${JSON.stringify(PLUGIN_ID)});
+        return (tab.containerEl.textContent || "").includes("4096");
+      `, 5_000, 250));
+      const diag = hinweisDa ? "" : JSON.stringify(await cdp.evaluate(`
+        const tab = (app.setting?.pluginTabs ?? []).find((x) => x.id === ${JSON.stringify(PLUGIN_ID)});
+        const h = tab.containerEl.querySelector(".transmute-connection-hint");
+        return { hintEl: !!h, connected: h ? h.isConnected : null, kinder: h ? h.children.length : null, tabVerbunden: tab.containerEl.isConnected };
+      `));
+      record(NAMEN[2]!, hinweis.ok && hinweisDa && !hinweis.vorher, hinweis.ok
+        ? `Quelle traegt transport shortcuts; Hinweis zur Grenze im offenen Tab: ${hinweisDa ? "da" : "FEHLT " + diag} (vor der Wahl: ${hinweis.vorher ? "schon da" : "nicht da"})`
         : "Quelle blieb HTTP — die Dropdown-Wahl kam nicht an");
+      await cdp.evaluate("app.setting.close(); return true;");
     }
 
     // S4/S5 — ein Lauf. `window.open`-Stub VOR dem Anstoss, Rueckbau im finally.

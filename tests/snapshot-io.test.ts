@@ -53,7 +53,7 @@ describe("writeSnapshot", () => {
     const { app, disk } = fakeApp();
     const dir = await writeSnapshot(app, "2026-08-14T17:02:11.000Z", RULE, ["a.md"],
       () => Promise.resolve("alt und alt"));
-    expect(dir).toBe("2026-08-14T17-02-11");
+    expect(dir).toBe("2026-08-14T17-02-11-000Z");
     const root = `${snapshotRoot(app)}/${dir}`;
     expect(disk[`${root}/files/a.md`]).toBe("alt und alt");
     const manifest = JSON.parse(disk[`${root}/manifest.json`]);
@@ -84,11 +84,13 @@ describe("rotateSnapshots", () => {
     const { app, dirs } = fakeApp();
     const root = snapshotRoot(app);
     dirs.add(root);
-    for (const name of ["2026-08-10T09-00-00", "2026-08-12T08-00-00", "2026-08-14T17-02-11"]) {
+    // Zwei Snapshots desselben Tages vor "heute": GFS behaelt den aeltesten je Tag, der zweite weicht.
+    for (const name of ["2026-08-10T09-00-00", "2026-08-10T15-00-00", "2026-08-14T17-02-11"]) {
       dirs.add(`${root}/${name}`);
     }
-    await rotateSnapshots(app, 2);
-    expect([...dirs]).not.toContain(`${root}/2026-08-10T09-00-00`);
+    await rotateSnapshots(app, Date.UTC(2026, 7, 14, 18, 0, 0));
+    expect([...dirs]).not.toContain(`${root}/2026-08-10T15-00-00`);
+    expect([...dirs]).toContain(`${root}/2026-08-10T09-00-00`);
     expect([...dirs]).toContain(`${root}/2026-08-14T17-02-11`);
   });
 });

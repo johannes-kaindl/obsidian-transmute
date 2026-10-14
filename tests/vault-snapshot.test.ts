@@ -3,6 +3,11 @@ import {
   hashText, restoreDecision, selectSnapshotsToDelete, snapshotDirName,
   type SnapshotEntry,
 } from "../src/core/vault/snapshot";
+import { utcCalendar } from "../src/vendor/kit/rotation";
+
+/** Gemessen am 2026-10-14 und gegen den Kalender gelesen: 14.–8.10. (heute + 6 Tage), dann der aelteste je Woche
+ *  (5.10., 28.9., 21.9.), der aelteste des Oktobers (1.10.), des Septembers (1.9.) und der des aeltesten Fensters (16.8.). */
+const GOLDEN_60 = ["2026-10-14", "2026-10-13", "2026-10-12", "2026-10-11", "2026-10-10", "2026-10-09", "2026-10-08", "2026-10-05", "2026-10-01", "2026-09-28", "2026-09-21", "2026-09-01", "2026-08-16"];
 
 const entry = (afterHash: string | null): SnapshotEntry => ({ path: "a.md", hits: 2, afterHash });
 
@@ -29,23 +34,39 @@ describe("hashText", () => {
 });
 
 describe("snapshotDirName", () => {
-  it("macht aus einem Zeitstempel einen dateisystemtauglichen Namen", () => {
-    expect(snapshotDirName("2026-08-14T17:02:11.123Z")).toBe("2026-08-14T17-02-11");
+  it("macht aus einem Zeitstempel einen dateisystemtauglichen Namen (UTC, mit Millisekunden)", () => {
+    expect(snapshotDirName("2026-08-14T17:02:11.123Z")).toBe("2026-08-14T17-02-11-123Z");
   });
 });
 
-describe("selectSnapshotsToDelete", () => {
-  it("behaelt die juengsten und nennt den Rest", () => {
-    const da = ["2026-08-10T09-00-00", "2026-08-14T17-02-11", "2026-08-12T08-00-00"];
-    expect(selectSnapshotsToDelete(da, 2)).toEqual(["2026-08-10T09-00-00"]);
+describe("selectSnapshotsToDelete (Kit-GFS)", () => {
+  const NOW = Date.UTC(2026, 9, 14, 13, 0, 0);
+  const DAY = 86_400_000;
+  // Ein Snapshot je Tag um 12:00 UTC, 60 Tage zurueck; die aelteren in der Schreibweise vor 0.14 (ohne Millisekunden).
+  const tage = Array.from({ length: 60 }, (_, i) => {
+    const time = Date.UTC(2026, 9, 14, 12, 0, 0) - i * DAY;
+    return { time, name: i >= 30 ? snapshotDirName(new Date(time).toISOString()).replace(/-000Z$/, "") : snapshotDirName(new Date(time).toISOString()) };
   });
 
-  it("loescht nichts, solange Platz ist", () => {
-    expect(selectSnapshotsToDelete(["2026-08-14T17-02-11"], 5)).toEqual([]);
+  it("Golden-Tabelle 60 Tage: GFS behaelt heute, die letzten 7 Tage, 4 Wochen und 6 Monate — die uebrigen weichen", () => {
+    const drop = selectSnapshotsToDelete(tage.map((t) => t.name), NOW, utcCalendar);
+    const kept = tage.filter((t) => !drop.includes(t.name)).map((t) => new Date(t.time).toISOString().slice(0, 10));
+    expect(kept).toEqual(GOLDEN_60);
   });
 
-  it("behaelt bei keep=0 nichts", () => {
-    expect(selectSnapshotsToDelete(["a", "b"], 0)).toHaveLength(2);
+  it("behaelt den juengsten Snapshot immer — das Rueckgaengigmachen haengt an ihm", () => {
+    const drop = selectSnapshotsToDelete(tage.map((t) => t.name), NOW + 400 * DAY, utcCalendar);
+    expect(drop).not.toContain(tage[0]!.name);
+  });
+
+  it("liest alte und neue Schreibweise mit demselben Namenspaar", () => {
+    const alt = "2026-08-14T17-02-11";
+    const neu = "2026-08-14T17-02-12-000Z";
+    expect(selectSnapshotsToDelete([alt, neu], Date.UTC(2026, 7, 14, 18, 0, 0), utcCalendar)).toEqual([]);
+  });
+
+  it("loescht nie einen Ordner, dessen Name keine Zeit traegt", () => {
+    expect(selectSnapshotsToDelete(["fremd", "notizen-2025"], NOW, utcCalendar)).toEqual([]);
   });
 });
 

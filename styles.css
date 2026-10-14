@@ -11,11 +11,14 @@
    mit staerkerem Gewicht — die Unterscheidung haengt nicht allein an der Farbe. */
 .transmute-scope {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--size-2-2);
 }
 
+/* min-width: 0 + Umbruch: in einer schmalen Sidebar (280 px) bricht die Leiste um, statt rechts abgeschnitten zu werden (UI-STANDARD §4). */
 .transmute-scope-btn {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .transmute-scope-btn.is-active {
@@ -262,12 +265,14 @@
 
 .transmute-model-row {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--size-2-2);
   align-items: center;
 }
 
+/* Basis 12em: das Dropdown behaelt genug Breite fuer einen Modellnamen und rutscht bei Enge in eine eigene Zeile. */
 .transmute-model {
-  flex: 1;
+  flex: 1 1 12em;
   min-width: 0;
 }
 

@@ -69,12 +69,12 @@ export async function finalizeSnapshot(app: App, dir: string, entries: SnapshotE
   );
 }
 
-export async function rotateSnapshots(app: App, keep: number): Promise<void> {
+export async function rotateSnapshots(app: App, now: number = Date.now()): Promise<void> {
   const root = snapshotRoot(app);
   if (!(await app.vault.adapter.exists(root))) return;
   const listing = await app.vault.adapter.list(root);
   const names = listing.folders.map((f) => f.slice(root.length + 1));
-  for (const name of selectSnapshotsToDelete(names, keep)) {
+  for (const name of selectSnapshotsToDelete(names, now)) {
     await app.vault.adapter.rmdir(`${root}/${name}`, true);
   }
 }

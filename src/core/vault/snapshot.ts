@@ -1,3 +1,4 @@
+import { selectGfsRetention, stampedName, timeFromStampedName, localCalendar, type GfsCalendar } from "../../vendor/kit/rotation";
 import type { RuleDraft } from "../types";
 
 export type SnapshotEntry = {
@@ -37,19 +38,25 @@ export function hashText(text: string): string {
   return `${text.length.toString(16)}-${h.toString(16).padStart(8, "0")}`;
 }
 
-/** Doppelpunkte sind auf Windows kein gueltiger Pfadbestandteil. */
+/** Name des Snapshot-Ordners: der Zeitstempel der Anwendung (UTC, mit Millisekunden), Doppelpunkte ersetzt
+ *  (auf Windows kein gueltiger Pfadbestandteil). Die Zeit steht im Namen, nicht im mtime: ein Sync setzt mtimes neu. */
 export function snapshotDirName(at: string): string {
-  return at.replace(/\.\d+Z?$/, "").replace(/:/g, "-");
+  return stampedName(Date.parse(at));
 }
 
 /**
- * Welche Snapshot-Ordner weichen muessen.
+ * Welche Snapshot-Ordner weichen muessen (Grossvater-Vater-Sohn, Kit `selectGfsRetention`).
  *
- * Die Namen sind sortierbare Zeitstempel — lexikografisch absteigend ist chronologisch
- * absteigend, ein Datums-Parser eruebrigt sich.
+ * Der juengste Snapshot bleibt immer: das Rueckgaengigmachen der letzten Anwendung haengt an ihm.
+ * Ordner, deren Name keine Zeit traegt, werden nie geloescht („unbekannt heisst behalten“). Aeltere Ordner
+ * (vor 0.14) tragen den Zeitstempel ohne Millisekunden; `-000Z` ergaenzt sie, damit dasselbe Namenspaar sie liest.
  */
-export function selectSnapshotsToDelete(existing: string[], keep: number): string[] {
-  return [...existing].sort().reverse().slice(keep);
+export function selectSnapshotsToDelete(existing: string[], now: number, calendar: GfsCalendar = localCalendar): string[] {
+  const entries = existing.flatMap((name) => {
+    const time = timeFromStampedName(name) ?? timeFromStampedName(`${name}-000Z`);
+    return time === null ? [] : [{ name, time }];
+  });
+  return selectGfsRetention(entries, now, { keepNewest: true, calendar }).drop;
 }
 
 /**

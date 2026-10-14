@@ -33,8 +33,6 @@ export type TransmuteSettings = {
   showTargetField: boolean;
   /** Ab wie vielen betroffenen Dateien vor dem Schreiben nachgefragt wird. */
   confirmThreshold: number;
-  /** Wie viele Snapshot-Ordner aufgehoben werden. */
-  snapshotKeep: number;
   /** In den Einstellungen angelegt, in der Sidebar per Klick abfeuerbar. */
   presets: PresetDef[];
 };
@@ -58,17 +56,16 @@ export const DEFAULT_SETTINGS: TransmuteSettings = {
   defaultScope: "file",
   showTargetField: false,
   confirmThreshold: 50,
-  snapshotKeep: 5,
   presets: [],
 };
 
 export function loadSettings(raw: unknown): TransmuteSettings {
-  // Die beiden abgeloesten Schluessel (timeoutMs, suppressReasoning) ueberleben mergeSettings als
+  // Die abgeloesten Schluessel (timeoutMs, suppressReasoning, snapshotKeep: das Kit rotiert Snapshots jetzt nach Tag/Woche/Monat) ueberleben mergeSettings als
   // Fremdfelder — hier raus, migrateRequest liest sie aus `raw`.
   // Dazu das globale Modell (Welle 17): es geht einmal in die Zeilen ohne Modell und faellt aus dem Ergebnis,
   // sonst liefe die Migration bei jedem Start erneut und fuellte eine absichtlich geleerte Zeile wieder.
-  const { timeoutMs: _timeoutMs, suppressReasoning: _suppressReasoning, model: legacyModel, ...merged } =
-    mergeSettings(DEFAULT_SETTINGS, raw) as TransmuteSettings & { timeoutMs?: unknown; suppressReasoning?: unknown; model?: unknown };
+  const { timeoutMs: _timeoutMs, suppressReasoning: _suppressReasoning, snapshotKeep: _snapshotKeep, model: legacyModel, ...merged } =
+    mergeSettings(DEFAULT_SETTINGS, raw) as TransmuteSettings & { timeoutMs?: unknown; suppressReasoning?: unknown; snapshotKeep?: unknown; model?: unknown };
   // mergeSettings ist ein shallow, typ-blinder Merge: `endpoints` kann aus einer data.json
   // von vor 0.5.0 noch string[] sein. migrateEndpointList ist die einzige Stelle, die das
   // geradezieht — danach ist der Typ im ganzen Repo verlässlich.

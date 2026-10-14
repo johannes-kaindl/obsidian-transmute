@@ -19,6 +19,9 @@ import { buildSample, chooseSampleSource } from "../core/vault/sample";
 import { allTags, listCandidates, makeReader, writeSelected } from "./vault-io";
 import { finalizeSnapshot, restoreSnapshot, rotateSnapshots, writeSnapshot } from "./snapshot-io";
 import { ConfirmModal } from "./confirm-modal";
+import { neutralizeModelMarkdown } from "../vendor/kit/safe-markdown";
+import { renderMarkdownGuarded } from "../vendor/kit-obsidian/dom-guard";
+import { confirmAction } from "../vendor/kit-obsidian/confirm";
 import type { VaultPanel } from "./view-render";
 import { buildHubInto, type HubController, type HubPanel } from "../vendor/kit-obsidian/hub";
 
@@ -50,7 +53,6 @@ export type TransmuteViewDeps = {
   /** Dieselben Werte, die auch die Sitzung bekommt (main.ts). */
   runOptions(): { sampleChars: number; budgetMs: number; maxHits: number };
   confirmThreshold(): number;
-  snapshotKeep(): number;
   getPresets(): PresetDef[];
 };
 
@@ -238,17 +240,12 @@ export class TransmuteView extends ItemView {
         this.deps.session().selectVersion(index);
       },
       onReset: () => {
-        // Die Anweisung bleibt stehen: geleert wird das Ergebnis, nicht der Gedanke.
-        this.clearEditTimer();
-        this.refinement = "";
-        this.pinned = null;
-        this.vault.files = [];
-        this.vault.totalHits = 0;
-        this.vault.expanded.clear();
-        this.vault.run = RUN_IDLE;
-        this.vault.outcome = { ...EMPTY_VAULT_OUTCOME };
-        this.lastSnapshot = null;
-        this.deps.session().reset();
+        void this.resetWithConfirm();
+      },
+      renderMarkdown: (el, text) => {
+        // Modell-Text: erst neutralisieren, dann rendern; scheitert der Renderer, bleibt der Rohtext.
+        void renderMarkdownGuarded(this.app, neutralizeModelMarkdown(text), el, "", this)
+          .catch(() => { (el).setText(text); });
       },
       onStartManual: () => {
         // Derselbe Weg wie beim Erzeugen — inklusive der Meldungen fuer Lesemodus,
@@ -651,7 +648,7 @@ export class TransmuteView extends ItemView {
       (done, _total, path) => this.setRun(runProgressed(this.vault.run, done, path)),
     );
     await finalizeSnapshot(this.app, dir, out.entries);
-    await rotateSnapshots(this.app, this.deps.snapshotKeep());
+    await rotateSnapshots(this.app);
 
     this.lastSnapshot = dir;
     this.vault.outcome = {
@@ -703,6 +700,34 @@ export class TransmuteView extends ItemView {
         ? { ...this.vault, hasRule: this.deps.session().activeVersion !== null }
         : undefined,
     };
+  }
+
+  /** „Zuruecksetzen“ verwirft eine Vorschau samt Verlauf; deshalb dort mit Rueckfrage. Ohne Vorschau gibt es nichts zu verlieren. */
+  async resetWithConfirm(): Promise<void> {
+    if (this.deps.session().state.phase === "preview") {
+      const ok = await confirmAction(this.app, {
+        title: t("view.resetConfirmTitle"),
+        message: t("view.resetConfirmBody"),
+        confirmLabel: t("view.reset"),
+        cancelLabel: t("view.cancel"),
+      });
+      if (!ok) return;
+    }
+    this.resetNow();
+  }
+
+  private resetNow(): void {
+    // Die Anweisung bleibt stehen: geleert wird das Ergebnis, nicht der Gedanke.
+    this.clearEditTimer();
+    this.refinement = "";
+    this.pinned = null;
+    this.vault.files = [];
+    this.vault.totalHits = 0;
+    this.vault.expanded.clear();
+    this.vault.run = RUN_IDLE;
+    this.vault.outcome = { ...EMPTY_VAULT_OUTCOME };
+    this.lastSnapshot = null;
+    this.deps.session().reset();
   }
 
   private draw(): void {
