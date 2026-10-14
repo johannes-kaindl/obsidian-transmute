@@ -19,6 +19,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **The warning about discarded request settings lists them sorted** instead of in the order they were stored (obsidian-kit 0.60.1, code-kit 0.27.1).
 - **The Apple Intelligence hint under the endpoint choice now appears when you pick that endpoint**, not only after reopening the settings.
 
 ## [0.13.1] — 2026-10-14
