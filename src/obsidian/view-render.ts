@@ -5,7 +5,7 @@ import { effectiveFlags } from "../core/regex/compile";
 import { CHEATSHEET } from "../core/cheatsheet";
 import { modelChoices } from "../core/reasoning-toggle";
 import { buildThinkingControl } from "../vendor/kit-obsidian/thinking-control";
-import type { FamilyId, ThinkingLevel } from "../vendor/kit/sampling-profiles";
+import type { BackendId, FamilyId, ThinkingLevel } from "../vendor/kit/sampling-profiles";
 import { clipContext } from "../core/snippet";
 import type { Hit, RuleDraft, RuleProblem, Version } from "../core/types";
 import { t } from "../vendor/kit/i18n";
@@ -30,6 +30,7 @@ export type PanelModel = {
   model: string;
   /** Familie des gewaehlten Modells (aus dem Namen) — sie sagt, ob „aus“ moeglich ist; null, solange kein Modell gewaehlt ist. */
   family: FamilyId | null;
+  backend?: BackendId | undefined;
   /** Denkstufe des Modus `structured` und die Stufe, auf die „an“ schaltet. */
   thinkingLevel: ThinkingLevel;
   thinkingOnLevel: ThinkingLevel;
@@ -118,6 +119,7 @@ function modelRow(parent: El, model: PanelModel, handlers: PanelHandlers): void 
   buildThinkingControl({
     containerEl: row,
     family: () => model.family,
+    backend: () => model.backend,
     current: () => model.thinkingLevel,
     onLevel: () => model.thinkingOnLevel,
     setLevel: (level) => { handlers.onThinkingLevel(level); return Promise.resolve(); },

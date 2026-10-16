@@ -2,7 +2,7 @@ import { ItemView, MarkdownView, Notice, Scope, type WorkspaceLeaf } from "obsid
 import type { TransmuteSession } from "../core/session";
 import type { PresetDef, ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
-import { familyFromName, type ThinkingLevel } from "../vendor/kit/sampling-profiles";
+import { familyFromName, type BackendId, type ThinkingLevel } from "../vendor/kit/sampling-profiles";
 import { copyToClipboard } from "../vendor/kit-obsidian/clipboard";
 import { locateRegion } from "../core/anchor";
 import { activeMarkdownView, applyHitsToEditor, readScope, viewForPath } from "./editor-io";
@@ -48,6 +48,8 @@ export type TransmuteViewDeps = {
   showTargetField(): boolean;
   listModels(): Promise<string[]>;
   getModel(): string;
+  /** Backend der aktiven Quelle (Kit 0.61.0): der Denk-Knopf zeigt damit „nicht ganz aus“ bei gemma4 auf LM Studio. */
+  getBackend?(): BackendId | undefined;
   setModel(model: string): void;
   /** Denkstufe des Modus `structured` und die Stufe, auf die „an“ schaltet. */
   getThinking(): { level: ThinkingLevel; onLevel: ThinkingLevel };
@@ -695,6 +697,7 @@ export class TransmuteView extends ItemView {
       models: this.models,
       model: this.deps.getModel(),
       family: this.deps.getModel() === "" ? null : familyFromName(this.deps.getModel()),
+      backend: this.deps.getBackend?.(),
       thinkingLevel: this.deps.getThinking().level,
       thinkingOnLevel: this.deps.getThinking().onLevel,
       reasoningOpen: this.reasoningOpen,

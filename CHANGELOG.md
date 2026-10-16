@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Vendored `obsidian-kit` 0.61.0 (was 0.60.1) and `code-kit` 0.28.0 (was 0.27.1). You will notice four things:
+- Gemma 4 in LM Studio no longer breaks a rule. LM Studio ignores "thinking off" for this model and writes the thought into the answer text, in front of the rule; the plugin now cuts it off, so the rule it reads is the model's answer and not a draft from its thinking.
+- With "thinking off" on Gemma 4 in LM Studio the plugin now sends the lowest thinking level, because LM Studio ignores "none" there. The model still thinks a little (a few more tokens and a bit more time). The thinking button says so ("cannot be fully turned off here"), and the "Request" section shows the same note.
+- When no endpoint answers and you use the local endpoint list, the message is now the kit's: "No endpoint reachable. Check the endpoint list in the settings — the test button says which one answers." It adds the hint about the test button. With the LLM Endpoint Manager the message still names the actual reason.
+- A backend or model family that this version does not know yet no longer makes a request fail; the "Request" section names it and sends only the standard fields.
+
 ## [0.14.0] — 2026-10-14
 
 ### Added

@@ -6,7 +6,7 @@ import type { ChatMessage } from "./core/types";
 import "./core/i18n/strings";
 import { getLang, pickLang, setLang, t } from "./vendor/kit/i18n";
 import { onLevelFor, thinkingFor } from "./vendor/kit/sampling-profiles";
-import { managerErrorText, resolveLlmConnectionStrings } from "./vendor/kit-obsidian/llm-connection-strings";
+import { noEndpointText, resolveLlmConnectionStrings } from "./vendor/kit-obsidian/llm-connection-strings";
 import { createLlmConnection, type LlmConnection, type LlmResult } from "./vendor/kit-obsidian/llm-connection";
 import { redactExchange } from "./vendor/kit-obsidian/chat-client";
 import { createShortcutsChatTransport, requestUrlTransport } from "./vendor/kit-obsidian/chat-transport";
@@ -111,6 +111,7 @@ export default class TransmutePlugin extends Plugin {
           // Die Modellwahl gehoert der Verbindung: mit Manager `choice.model`, ohne Manager das Modell der
           // aktiven Zeile; „Server waehlt“ ist `setModel("")`.
           getModel: () => this.llm.modelInUse(),
+          getBackend: () => this.llm.source().backend,
           setModel: (model: string) => {
             void this.llm.setModel(model);
           },
@@ -171,10 +172,8 @@ export default class TransmutePlugin extends Plugin {
   private toResult(r: LlmResult): CompleteResult {
     const shortcuts = r.source.transport === "shortcuts";
     if (!r.ok && r.kind === "no-endpoint" && !shortcuts) {
-      if (r.source.kind === "manager") {
-        return { ok: false, error: managerErrorText(resolveLlmConnectionStrings({ lang: getLang() }), r.detail) };
-      }
-      return { ok: false, error: t("error.noEndpoint") };
+      // Quelle Manager: der Text zum Grund; lokale Liste: der Kit-Text (Kit 0.61.0 `noEndpointText`).
+      return { ok: false, error: noEndpointText(resolveLlmConnectionStrings({ lang: getLang() }), r.source, r.detail) };
     }
     return toCompleteResult(r, shortcuts);
   }
