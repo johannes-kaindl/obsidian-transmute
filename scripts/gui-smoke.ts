@@ -130,6 +130,7 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
     "V3 Anfrage: ohne Stream, Temperatur 0, ohne Denken",
     "V4 Schwaerzung mit PEM: das JSON bleibt gueltig, das mehrzeilige Original ist da",
   ],
+  Gemma: ["K1 Gemma-Stub: Denken ohne Oeffner vor <channel|> im Antworttext, die Regel ist die Antwort, nicht ein Entwurf aus dem Denken"],
   Manager: [
     "M1 Einstellungen zeigen den Manager statt der lokalen Liste",
     "M2 Lauf nutzt den Manager-Endpunkt und dessen Standardmodell",
@@ -1063,6 +1064,53 @@ async function abschnittLlmLab(cdp: Cdp): Promise<void> {
   }
 }
 
+// --- Abschnitt: Gemma-Kanal (Welle 23) -------------------------------------------
+
+/** G1 — gemma-4 auf LM Studio ignoriert „none“ und schreibt sein Denken OHNE Oeffner in den Antworttext, beendet es mit `<channel|>`
+ *  (gemessen 2026-10-14). Transmute fragt ohne Stream und liest die Regel als JSON aus dem Antworttext; ohne den Kanal-Leser im
+ *  Chat-Client (Kit 0.60.3) steht das Denken vor dem JSON, und die Regel scheitert. Der Stub spielt das Format nach.
+ *  Auf dem Stand vor der Hebung ist dieser Punkt rot — die Gegenprobe: das Denken enthaelt einen verworfenen JSON-Entwurf, den ein Leser ohne Kanal-Erkennung als Regel nimmt. */
+async function abschnittGemma(cdp: Cdp): Promise<void> {
+  const NAME = ABSCHNITTE.Gemma![0]!;
+  const MODELL = "google/gemma-4-e4b";
+  const DENKEN = "The user wants me to replace foo with bar.\nA first draft: {\"regex\":\"fo+\",\"flags\":\"\",\"replacement\":\"baz\",\"explanation\":\"draft\"}\nNo, that is too broad. I will write the final rule as JSON.";
+  const draft = { regex: "foo", flags: "", replacement: "bar", explanation: "e" };
+  const stub = await startLlmStub({ models: [MODELL], antwort: () => ({ text: `${DENKEN}<channel|>${JSON.stringify(draft)}`, model: MODELL }) });
+  const vor = await cdp.evaluate<unknown>(`return app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.endpoints;`);
+  try {
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = [{ url: ${JSON.stringify(stub.url)}, model: ${JSON.stringify(MODELL)} }];
+      await p.saveSettings();
+      p.llm.invalidate();
+      await p.llm.resolve({ force: true });
+      void p.sessionInstance.generate("Smoke: ersetze foo", "foo bar");
+      return true;
+    `);
+    const fertig = await pollUntil<{ phase: string; regex: string | null; fehler: string }>(
+      cdp,
+      `
+        const st = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].sessionInstance.state;
+        if (st.phase === "preview") return { phase: st.phase, regex: st.versions[st.active].rule.regex, fehler: "" };
+        if (st.phase === "error") return { phase: st.phase, regex: null, fehler: String(st.error ?? st.message ?? "").slice(0, 120) };
+        return null;
+      `,
+      15_000,
+    );
+    record(NAME, fertig !== null && fertig.phase === "preview" && fertig.regex === "foo",
+      fertig === null ? "keine Antwort innerhalb 15s" : `Phase ${fertig.phase}, Regel „${fertig.regex ?? "(Fehler)"}“${fertig.fehler !== "" ? ` · ${fertig.fehler}` : ""}`);
+  } finally {
+    await stub.stop().catch(() => undefined);
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = ${JSON.stringify(vor)};
+      await p.saveSettings();
+      p.llm.invalidate();
+      return true;
+    `).catch(() => undefined);
+  }
+}
+
 // --- Abschnitt: Verbindung (Welle 15) -------------------------------------------
 
 /** Die Kit-Verbindung traegt drei Zusagen, die kein Unit-Test beruehrt: (V1) Schwaerzung — der
@@ -1890,6 +1938,7 @@ async function main(): Promise<void> {
     await abschnitt("Setter", () => abschnittSetter(cdp));
     await abschnitt("llm-lab", () => abschnittLlmLab(cdp));
     await abschnitt("Verbindung", () => abschnittVerbindung(cdp));
+    await abschnitt("Gemma", () => abschnittGemma(cdp));
     await abschnitt("Manager", () => abschnittManager(cdp));
     await abschnitt("Apple Intelligence", () => abschnittApple(cdp));
     await abschnitt("Hilfe", () => abschnittHilfe(cdp));
