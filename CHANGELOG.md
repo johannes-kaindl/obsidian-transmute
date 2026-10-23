@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.14.2] — 2026-10-23
+
 ### Changed
 
 - Kit update (code-kit 0.28.0 → 0.34.0). Whether a model on LM Studio thinks or sees images now comes from its metadata instead of only its name, so the thinking toggle can appear for more models. Claude models are recognised as models that take images and, from the Fable, Opus 4.7 and Sonnet 5 generations on, as models whose thinking cannot be switched off.
