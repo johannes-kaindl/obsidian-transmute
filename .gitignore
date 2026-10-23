@@ -8,3 +8,7 @@ data.json
 test-vault/
 .gui-smoke.mjs
 .shots.mjs
+
+# Claude Code: Regeldateien sind getrackt (CORE-AGENT-05)
+.claude/*
+!.claude/rules/

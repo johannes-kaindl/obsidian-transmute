@@ -1,30 +1,16 @@
 # AGENTS.md
 
-Orientierung für KI-Agenten (Claude Code, Codex, …) und Mitwirkende an diesem Repository.
-Workspace-weite Standards (comply-or-explain): siehe [`../../workspace/_docs/CONVENTIONS.md`](../../workspace/_docs/CONVENTIONS.md).
+Orientierung für KI-Agenten (Claude Code, Codex, …) und Mitwirkende an diesem Repository. Workspace-weite Standards (comply-or-explain): siehe [`../../workspace/_docs/CONVENTIONS.md`](../../workspace/_docs/CONVENTIONS.md).
 
 **Profil:** `ts-node` · `obsidian-plugin`.
 
-**Stand 2026-07-29: 0.3.0 im Community-Store, 0.4.0 in Arbeit.** Der Kit-first-Befund
-unten beschreibt, was übernommen wurde — er bleibt als Begründungs-Kontext stehen. Für
-neue Vorhaben gilt weiterhin: erst Kit-first-Sondierung, dann `superpowers:brainstorming`
-→ Spec → Plan → TDD.
-
 ## Project character
 
-**Projekt:** `transmute` (manifest-`id`) — Obsidian-Plugin für **Suchen & Ersetzen per Regex,
-ohne Regex schreiben zu müssen**. Nutzer:in beschreibt in natürlicher Sprache, was ersetzt
-werden soll; ein **lokales** LLM übersetzt das in Regex + Ersetzungsmuster + Klartext-Erklärung;
-das Plugin zeigt einen Diff-Preview; erst nach Bestätigung wird angewendet (Datei / Selektion /
-vault-weit gefiltert). Autor: Johannes Kaindl.
+**Projekt:** `transmute` (manifest-`id`) — Obsidian-Plugin für **Suchen & Ersetzen per Regex, ohne Regex schreiben zu müssen**. Nutzer:in beschreibt in natürlicher Sprache, was ersetzt werden soll; ein **lokales** LLM übersetzt das in Regex + Ersetzungsmuster + Klartext-Erklärung; das Plugin zeigt einen Diff-Preview; erst nach Bestätigung wird angewendet (Datei / Selektion / vault-weit gefiltert). Autor: Johannes Kaindl.
 
-**Warum es existiert:** Vault-weites Suchen & Ersetzen kann Obsidian nativ nicht (die Sidebar-Suche
-ist read-only). Die bestehenden Regex-Plugins (Regex Find/Replace, Search and Replace Regex,
-Apply Patterns) setzen Regex-Kenntnis voraus; die bestehenden AI-Plugins erzeugen Text oder
-beantworten Fragen, übersetzen aber keine Absicht in eine anwendbare Ersetzungsregel.
+**Warum es existiert:** Vault-weites Suchen & Ersetzen kann Obsidian nativ nicht (die Sidebar-Suche ist read-only). Die bestehenden Regex-Plugins (Regex Find/Replace, Search and Replace Regex, Apply Patterns) setzen Regex-Kenntnis voraus; die bestehenden AI-Plugins erzeugen Text oder beantworten Fragen, übersetzen aber keine Absicht in eine anwendbare Ersetzungsregel.
 
-**Das Produkt ist nicht „LLM generiert Regex", sondern Vertrauen in die Anwendung.**
-Diese sechs Punkte sind der Kern der Differenzierung — wer hier kürzt, kürzt das Produkt weg:
+**Das Produkt ist nicht „LLM generiert Regex", sondern Vertrauen in die Anwendung.** Diese sechs Punkte sind der Kern der Differenzierung — wer hier kürzt, kürzt das Produkt weg:
 
 1. **Preview/Diff vor Anwendung** — zeilenweise, mit Highlighting, nie blind.
 2. **Regex im Klartext erklärt** — ein Satz, was die Regex trifft.
@@ -33,278 +19,63 @@ Diese sechs Punkte sind der Kern der Differenzierung — wer hier kürzt, kürzt
 5. **Scope-Kontrolle** — Datei / Selektion / Vault, gefiltert nach Tag, Pfad, Frontmatter.
 6. **Lokales LLM als Default** — privacy-first (LM Studio / MLX / Ollama), Cloud optional.
 
-**Modellagnostik ist Pflicht, kein Nice-to-have** (wie in allen Schwester-Plugins): nirgends ein
-hartkodierter Modellname, kein Feature, das nur ein Server kann. Konkret:
+**Modellagnostik ist Pflicht, kein Nice-to-have** (wie in allen Schwester-Plugins): nirgends ein hartkodierter Modellname, kein Feature, das nur ein Server kann. Der JSON-Vertrag, das Auslesen der Modell-Liste und der Umgang mit Reasoning-Modellen stehen in `.claude/rules/llm-anbindung.md`.
 
-- Das Modell kommt **aus der Modell-Liste des Endpunkts** (`GET /v1/models` → `extractModelIds`),
-  nie aus einer Konstante. Default = leer/erstes verfügbares, nicht „qwen…".
-- **Kein `response_format: json_schema`-Zwang** — das können LM Studio, Ollama und MLX
-  unterschiedlich gut. Der JSON-Vertrag wird über den *Prompt* hergestellt und **tolerant geparst**
-  (Code-Fences strippen, erstes balanciertes JSON-Objekt nehmen), plus genau ein Retry mit dem
-  Fehler zurück ans Modell.
-- **Reasoning-Modelle mitdenken:** die lokal vorhandenen Qwen3.6 sind Thinker. `<think>`-Blöcke
-  müssen **vor** dem JSON-Parsen abgetrennt werden (Kit `think-splitter.ts`), und wo der Server es
-  unterstützt, wird Reasoning unterdrückt (Kit `reasoning.ts` `suppressParams`) — Regex-Generierung
-  braucht keine sichtbare Gedankenkette.
-- Ein Modell, das den Vertrag nicht hält, ist ein **Fehlerpfad mit klarer Meldung**, kein Crash.
+**Nicht-Ziele (MVP-Scope-Grenzen):** kein RAG/semantische Suche · keine allgemeine Vault-Hygiene-Suite · keine Chat-Oberfläche als Hauptinterface · kein „Apply ohne Preview" in v0.1.
 
-**Abgrenzung nach außen (gehört so in die README):** `ksawl/obsidian-alchemist` bewegt sich im
-selben Bildfeld (Alchemie/Transmutation, „vault hygiene"), deckt aber Vault-Hygiene allgemein ab
-— nicht NL→Regex-Replace. Explizit benennen, nicht ignorieren.
+## Architecture principles
 
-**Nicht-Ziele (MVP-Scope-Grenzen):** kein RAG/semantische Suche · keine allgemeine
-Vault-Hygiene-Suite · keine Chat-Oberfläche als Hauptinterface · kein „Apply ohne Preview" in v0.1.
-
-## Kit-first-Befund (Ergebnis)
-
-Die Sondierung vom 2026-07-25 war ungewöhnlich ertragreich: fast der gesamte LLM-Unterbau
-kam fertig aus dem Ökosystem, neu gebaut wurde im Wesentlichen die Regex-Domäne. Übernommen:
-
-- **Vendored aus `obsidian-kit`** (nie von Hand ändern — `tools/sync-kit.sh` schreibt beide
-  Bäume; die Liste hier ist vollständig zu halten):
-  - `src/vendor/kit/` (pure): `clipboard.ts`, `cooperative-yield.ts`, `endpoint.ts`,
-    `endpoint_config.ts`, `endpoint_diagnostics.ts`, `error_body.ts`, `i18n.ts`,
-    `reasoning.ts`, `run-state.ts`, `settings.ts`, `think-splitter.ts`, `timeout.ts`,
-    `model-choice.ts`, `sampling-profiles.ts`, `endpoint-source.ts`.
-  - `src/vendor/kit-obsidian/` (importiert `obsidian`): `clipboard.ts`, `folder-suggest.ts`,
-    `settings_walker.ts`, `model-picker.ts`, `endpoint-source.ts`, `hub.ts`.
-  - Seit Welle 15 (obsidian-kit 0.51.3, code-kit 0.15.4) dazu die Verbindung: `llm-connection`, `llm-connection-strings`, `backend-probe`, `collapsible`, `endpoint-list`, `endpoint-secrets`, `endpoint-secret-hook`, `request-section`, `request-session`, `secrets` (obsidian-kit) und `backend-probe`, `capabilities`, `model-list-cache`, `redact`, `secrets` (code-kit). Die `*_CSS`-Konstanten stehen wortgleich in `styles.css`; `tests/kit-css.test.ts` bewacht das.
-  - `tests/vendor/kit/obsidian-mock.ts` — der Obsidian-Mock (seit 0.6.0 gestempelt aus dem Kit-Tag, vorher eine ungestempelte Kopie von 0.15.0); `tests/__mocks__/obsidian.ts` re-exportiert nur.
-- **Aus Nachbar-Plugins übernommen:** Endpoint-Zeilen-Editor + pure Editor-Model
-  (`yijing-oracle`), EndpointResolver/Probe/Modell-Liste (`vim-dojo`), Chat-Response-Auswertung
-  (`vault-crews`), `raceTimeout` (`local-image-generator`), Inline-`eslint-disable`-Gate
-  (`markdown-presentation`), `debrief-lab`-Muster für Prompt-Tuning (`vim-dojo`).
-- **Neu gebaut (kein Vorbild im Ökosystem):** NL→Regex-Prompt + Antwort-Validierung ·
-  Regex-Ausführung mit Backtracking-Guard (`evaluate()`) · Scope-Auflösung · Snapshot/Undo.
-
-Die vollständige Sondierung (Quellen-Abwägungen, Registry-Zähler, Gotcha-Herleitungen) liegt
-im Cockpit (`$VAULT/25_Coding/obsidian-transmute/`). Für neue Vorhaben gilt weiterhin:
-erst Kit-first (`../AGENTS.md` + `../REGISTRY.md`), dann bauen.
-
-## Architecture principles (geplant)
-
-**PROF-OBS-03/04 — reiner Kern ohne `obsidian`-Import.** Alles, was Regex, Diff, Scope-Auswahl,
-Prompt-Bau und Antwort-Parsing macht, gehört nach `src/core/` und ist in Node ohne DOM-Mock
-testbar. Nur `main.ts`, Settings-Tab, Views/Modals und die HTTP-/Vault-Adapter importieren
-`obsidian`. Ein `check:pure`-Gate (Vorbild `yijing-oracle`) nagelt das fest.
-
-```
-src/
-├── core/
-│   ├── llm/          prompt · response (Regel/Diagnose lesen, JSON aus code-kit llm-json) · client
-│   ├── regex/        compile (allowRisky) · execute (Zeitbudget + maxHits) ·
-│   │                 guard · evaluate ← der EINE Ausführungspfad
-│   ├── vault/        scope (Kandidaten) · run (Lauf) · selection (zwei Ebenen) ·
-│   │                 snapshot · apply · sample · state — alles pure, IO injiziert
-│   ├── cheatsheet.ts statische Regex-Referenz (Syntax verbatim, Text als i18n-Key)
-│   ├── session.ts    Zustandsmaschine inkl. Handpfad
-│   └── settings.ts   Typ + defaults (mergeSettings aus dem Kit) · MAX_HITS
-├── obsidian/         main · settings-tab · view · view-render · vault-render ·
-│                     editor-io · vault-io · snapshot-io · confirm-modal
-├── vendor/kit/       gevendorte Kit-Module (pure) — nie von Hand ändern
-└── vendor/kit-obsidian/
-                      gevendorte Kit-Module, die `obsidian` importieren — nie von Hand
-                      ändern. Eigener Ordner, weil `obsidian/clipboard.ts` einen Querimport
-                      auf `pure/clipboard` trägt und beide Schichten eine `clipboard.ts`
-                      haben (Basenamen-Kollision). Beide Bäume schreibt `tools/sync-kit.sh`.
-```
-
-**`evaluate()` ist der einzige Ort, an dem kompiliert und ausgeführt wird** — Modell-Pfad,
-Handbearbeitung und Revalidierung vor dem Schreiben gehen alle hindurch. Drei getrennte
-Stellen würden auseinanderlaufen; genau so ist in 0.2.0 die Anzeige von der Ausführung
-abgedriftet. Wer einen vierten Ausführungsweg braucht, baut ihn **nicht** daneben.
-
-**Das Panel ist ein Hub aus dem Kit (`buildHubInto`, seit 0.13.0) mit zwei Tabs: „Arbeitsbereich“ (`work`) und „Bibliothek“ (`library`, die Presets als Listen-Zeilen mit Ausführen-Knopf, `renderLibrary`).** Der Hub wird einmal in `onOpen` gebaut (`buildHub` in `view.ts`); `draw()` zeichnet nur in den Container des Arbeitsbereichs, die Bibliothek zeichnet bei jedem Öffnen des Tabs neu (die Presets verwaltet der Settings-Tab, es gibt kein zweites Datenmodell). Ausführen aus der Bibliothek geht über `onLoadPreset` und wechselt danach mit `hub.setTab("work")` — und zeichnet vorher voll neu, weil `editRule` nur „edit“ meldet und die Regel-Felder sonst leer blieben. `HUB_CSS` steht wortgleich in `styles.css`.
-
-**Der Panel-Körper (im Arbeitsbereich) ist dreigeteilt** (`.transmute-history` / `.transmute-rule` /
-`.transmute-outcome`). `renderPanel` zeichnet alles, `renderOutcome` nur die äußeren
-beiden — die Regel-Felder bleiben stehen, weil ein `root.empty()` unter dem Cursor Fokus,
-Cursorposition und den Undo-Stack des Feldes mitnimmt. Welcher Weg dran ist, sagt die
-Session über `onChange(state, reason)`.
-
-**Struktur-Vertrag LLM:** Das Modell antwortet **JSON** (`regex`, `flags`, `replacement`,
-`explanation`, `confidence`) — nicht Prosa. Ungültige Regex geht **einmal** mit dem Syntaxfehler
-zurück ans Modell, danach Fehlermeldung an die Nutzer:in. Nie ungeprüft anwenden.
-
-**Safety ist Architektur, nicht Feature:**
-- Catastrophic-Backtracking-Guard mit hartem Timeout pro Regex-Ausführung.
-- Warnschwelle vor vault-weiten Änderungen (konfigurierbar, „betrifft 340 Dateien — sicher?").
-- Snapshot der betroffenen Dateien vor jeder Anwendung nach `.transmute/snapshots/<timestamp>/`.
+- **PROF-OBS-03/04 — reiner Kern ohne `obsidian`-Import.** Alles, was Regex, Diff, Scope-Auswahl, Prompt-Bau und Antwort-Parsing macht, gehört nach `src/core/` und ist in Node ohne DOM-Mock testbar. Nur `main.ts`, Settings-Tab, Views/Modals und die HTTP-/Vault-Adapter importieren `obsidian`. Ein `check:pure`-Gate (Vorbild `yijing-oracle`) nagelt das fest.
+- **Safety ist Architektur, nicht Feature:** Catastrophic-Backtracking-Guard mit hartem Timeout pro Regex-Ausführung · Warnschwelle vor vault-weiten Änderungen (konfigurierbar, „betrifft 340 Dateien — sicher?") · Snapshot der betroffenen Dateien vor jeder Anwendung nach `<configDir>/plugins/transmute/snapshots/<Zeitstempel>/`.
+- **Vendored Kit-Module** unter `src/vendor/` nie von Hand ändern; vendort wird mit `node ../tools/kit-sync/kit-sync.mjs` (Pins und Liste in `tools/kit-sync.json`).
 
 ## Commands
-
-`package.json` trägt 15 Scripts — die wichtigsten:
 
 ```bash
 npm run dev / build / deploy      # esbuild watch · prod-Bundle (tsc + esbuild) · Copy nach $OBSIDIAN_PLUGIN_DIR
 npm run lint                      # check-no-inline-disables + eslint src --max-warnings 0
-npm test                          # vitest run
+npm test                          # check-no-abs-paths + check-no-nul-bytes + vitest run
 npm run typecheck                 # tsc --noEmit (dazu: typecheck:test, typecheck:scripts)
 npm run check:pure                # scripts/check-pure.mjs — src/core darf `obsidian` nicht importieren
 npm run gate                      # lint + alle Typechecks + test + check:pure + build
+npm run smoke:gui -- --port <port>   # GUI-Smoke gegen eine Zweitinstanz (Rezept im Kopf von scripts/gui-smoke.ts)
 npm run lab:diagnose              # Diagnose-Lab gegen den lokalen Endpoint (scripts/diagnose-lab.ts)
 npm run release / version-bump / preflight   # delegieren ans zentrale ../tools/release/ (Dach)
 ```
 
-(Ein separates `lint:portal` gibt es seit 2026-08-13 nicht mehr: der template-verwaltete
-`eslint.config.mjs`-Kern **ist** der Store-Scanner-Spiegel, lokale Abweichungen stehen sichtbar
-in `eslint.overrides.mjs`. Ein zweiter, handgepflegter Spiegel war genau die Drift-Quelle,
-die er abfangen sollte.)
-
 ## Conventions
 
 - **TS strict + `noImplicitAny`** — keine `any`-Casts für neue Typen.
-- **TDD** (`superpowers:test-driven-development`): der reine Kern wird test-first gebaut.
-  Regex-Executor und Scope-Resolver ohne Tests sind nicht abnahmefähig.
-- **Tests:** vitest; Obsidian-Mock aus `obsidian-kit/testing` (Skill `obsidian-plugin-test-pattern`).
-  `npx tsc --noEmit` separat laufen lassen (vitest ≠ tsc).
-- **UI:** `../UI-STANDARD.md` ist verbindlich (Obsidian-nativ first, ein Frontend pro Plugin, nur
-  Theme-CSS-Variablen) — **vor** jeder View-/Modal-/Settings-Arbeit lesen.
+- **TDD** (`superpowers:test-driven-development`): der reine Kern wird test-first gebaut. Regex-Executor und Scope-Resolver ohne Tests sind nicht abnahmefähig.
+- **Tests:** vitest; Obsidian-Mock aus `obsidian-kit/testing` (Skill `obsidian-plugin-test-pattern`). `npx tsc --noEmit` separat laufen lassen (vitest ≠ tsc).
 - **i18n:** nutzersichtbare Strings via `t()`, EN kanonisch, EN/DE (PROF-OBS-07). Die Endpunkt-Texte (Status, Rolle, Anfrage-Abschnitt) kommen seit Welle 15 aus den zweisprachigen Kit-Texten von `renderSettings({ lang })`; eigene Statuskeys gibt es nicht mehr.
-- **Commits:** Conventional Commits, deutsche Beschreibung erlaubt. **Nur berührte Dateien stagen.**
-  Trailer bei substanziellem AI-Beitrag:
-  `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`.
+- **Commits:** Conventional Commits, deutsche Beschreibung erlaubt. **Nur berührte Dateien stagen.** Trailer bei substanziellem AI-Beitrag: `Co-Authored-By: <Modell> <noreply@anthropic.com>`.
+- **Nie absolute Pfade außerhalb des Repos in Repo-Dateien** — Platzhalter (`$VAULT/…`) verwenden.
 
-## Gotchas (antizipiert — aus Nachbar-Plugins geerbt, bevor sie hier weh tun)
+## Gotchas
 
-- **Die LLM-Anbindung ist `createLlmConnection` aus dem Kit (`this.llm` in `main.ts`, seit Welle 15), keine eigene Resolver-/Client-Schicht mehr.** Sie merkt sich die Auflösung des lokalen Endpunkts bis `llm.invalidate()` (der Manager wird nie gemerkt) — ein GUI-Smoke, der `settings.endpoints` zur Laufzeit auf einen Stub-Server umbiegt, ruft danach `p.llm.invalidate()`, sonst geht die Anfrage still an den alten Endpunkt und hängt in „generating“. Das Modell im Manager-Fall steht in `llm.complete(…).source.sentModel`, nicht in `settings.model`. Der Kurzbefehl-Endpunkt erkennt sich an `(await llm.resolve()).transport === "shortcuts"`. Transmute fragt `stream: false` über `requestUrlTransport` (`fallback: "none"`; der Standard wäre der XHR-Stream), im Modus `structured`, `truncated: "error"` und `restoreContent: "json"` (die Regel wird als JSON aus `content` geparst, ein geschwärzter mehrzeiliger Platzhalter wäre sonst ungültiges JSON). `temperature: 0` geht je Aufruf über `overrides` hinaus (die Regel „gleiche Eingabe, gleiche Regel“); der Anfrage-Abschnitt der Settings zeigt trotzdem die Profil-Temperatur des Modus. Das Panel-Schalterpaar „Denken“ bedient `settings.request.thinking.structured`. Der Abschnitt der Settings braucht einen eigenen Host-Container, weil die Verbindung ihn bei jedem Neuzeichnen leert (`renderConnection` in `settings-tab.ts`).
-- **Das eingebaute Preset „Zeilenumbrueche in Absaetzen entfernen" (`src/core/presets/remove-newlines.ts`)
-  erkennt nur ZWEI benachbarte Zeilen, kein „bin ich innerhalb eines Codeblocks" ueber mehrere
-  Zeilen hinweg.** Die Fence-Zeilen selbst (` ``` `) bleiben stehen, Zeilen DAZWISCHEN wuerden
-  trotzdem zusammengezogen, weil eine zustandslose Regex das nicht unterscheiden kann. Bewusst
-  in Kauf genommen — die Pflicht-Vorschau vor jeder Anwendung (Differenzierungspunkt 1) faengt
-  genau diesen Fall auf, bevor geschrieben wird.
-- **Endpoint mit `/v1`-Suffix:** `normalizeEndpoint()` strippt ein trailing `/v1`, sonst baut der
-  Client `…/v1/v1/chat/completions`. **LM Studio antwortet auf falsche Pfade mit HTTP 200 + Fehler-Body**
-  → `res.ok` true, Antwort leer, stiller Fehlschlag.
-- **LM Studio ignoriert das `model`-Feld** → das tatsächliche Modell aus `response.model` lesen.
-- **`requestUrl` kennt weder Timeout noch Abort** → eigener `Promise.race`-Wrapper.
-- **Obsidian verbietet Web-Worker** im Renderer (gleiche Wurzel wie der Draco-/`AsyncUnzipInflate`-Befund
-  bei `3d-codeblocks`/`apple-health`). **Das trifft den Backtracking-Guard direkt:** der naheliegende
-  „Regex im Worker mit Kill-Switch" aus der Spec ist so **nicht** umsetzbar. Alternativen vor der
-  Implementierung bewerten: Regex-Analyse *vor* der Ausführung (Redos-Heuristik auf dem Pattern) +
-  Chunking mit Zeit-Budget-Check zwischen den Dateien, statt einen laufenden Match abzubrechen.
-- **`eslint src` gibt bei Warnungen exit 0**, während der Store-Scanner sie als Befund
-  meldet — deshalb läuft `lint` mit `--max-warnings 0` (2026-07-27; die `sentence-case`-Regel
-  hatte den Flag-Knopf `g` angemahnt und stand grün im Gate).
-- **`obsidianmd/ui/sentence-case` prüft String-Literale, keine Variablen.** Syntax, die
-  kein UI-Text ist (Regex-Flags, Muster), gehört in ein `<code>` und den Literalwert in
-  eine benannte Konstante — **kein** Inline-`disable`, das bricht am Gate.
-- **Ein Muster, das den Leerstring trifft** (`a*`, `\b`, `^`), liefert einen Treffer pro
-  Position, jeden mit der vollen Zeile in `before`/`after`. `collect()` schiebt `lastIndex`
-  korrekt vor, es hängt also nicht — aber ohne `maxHits` (500) wären das Tausende
-  DOM-Zeilen bei jedem Tastendruck.
-- **Das Zeitbudget in `runRule` greift nur ZWISCHEN Zeilen.** Ein einzelner entgleister
-  Match auf *einer* Zeile kommt nie zurück, und Obsidian kann ihn nicht abbrechen (keine
-  Web-Worker). Deshalb läuft vor einer Risiko-Freigabe `probeRisky()` — dasselbe Muster auf
-  20 Zeichen, mit Zeitmessung. **Ohne diesen Kanarienvogel ist jede Freigabe ein Knopf, der
-  das Fenster einfriert** (real eingetreten, GUI-Durchlauf 2026-07-27).
-- **Was in den `.transmute-rule`-Container gerendert wird, altert.** Der Container ist vom
-  Teil-Draw ausgenommen — dort gehört nur hinein, was sich beim Tippen *nicht* ändern
-  darf (die Felder selbst, der Spickzettel). Jede abgeleitete Anzeige (`/muster/flags`,
-  Erklärung, Treffer) gehört in `.transmute-outcome`. Beides ist schon einmal
-  falsch herum gewesen.
-- **Die Antwortsprache ist eine Modellfrage, keine Promptfrage.** Gemessen 2026-07-30 mit
-  `npm run lab:diagnose` (fünf Fälle, deutsche Oberfläche, Zielsprache ausdrücklich im
-  Prompt): `qwen/qwen3.6-35b-a3b` antwortet **5 von 5** deutsch, `google/gemma-4-e2b`
-  **4 von 5**. Ein 2B-Modell lässt eine Nebenbedingung fallen, während es gleichzeitig ein
-  JSON-Format treffen muss — **nicht** am Prompt schrauben, sondern das Modell empfehlen.
-- **Ein Reparaturvorschlag, der dem Muster gleicht, wird verworfen** (`session.diagnose`).
-  Kleine Modelle geben genau das nicht treffende Muster zurück; ein Knopf, der nichts
-  ändert, sieht wie ein Ausweg aus.
-- **Eine gelockerte Fassung eines Musters darf nie ausgeführt werden, ohne durch
-  `evaluate()` zu gehen.** Die Sonden in `relax.ts` lockern genau eine Bedingung und laufen
-  mit demselben Zeitbudget, derselben Obergrenze und ohne Risiko-Freigabe. Eine Lockerung,
-  die der Guard ablehnt, meldet **nichts** — ein fehlender Befund ist immer harmloser als
-  ein ausgeführtes Muster, das niemand geprüft hat.
-- **`[\b]` ist ein Backspace, kein Wortgrenzen-Anker**, und `[^abc]` beginnt nicht mit
-  einem Zeilenanker. Wer Muster per Text umbaut, muss Zeichenklassen kennen, sonst entsteht
-  ein anderes Muster als das geschriebene.
-- **Ein leerer `content` bei gefülltem `reasoning` ist keine leere Modellantwort**, sondern
-  ein Modell, das sein Token-Budget vollständig ins Denken gesteckt hat (gemessen: 512 von
-  551 Tokens, qwen3.6 unter LM Studio). `suppressParams` schickt `reasoning_effort: "none"`,
-  greift aber nur bei ausgeschaltetem Thinking-Schalter — deshalb hat der Fall eine eigene
-  Meldung (`CompleteResult.thoughtOnly`).
-- **`makeFakeEl()` aus dem Obsidian-Mock kennt kein `querySelector`.** Der Mock ist ein aus
-  fünf Plugins gepflegtes Superset und wird nicht lokal erweitert — die Suche liegt in
-  `tests/helpers/dom.ts` (`findByClass`/`findAllByTag`).
-- **Ein vault-weiter Lauf ohne `yieldToUi` hat einen Abbrechen-Knopf, der nichts tut.**
-  `cachedRead` löst oft aus dem Cache auf und erzeugt nur einen Mikrotask — der Renderer
-  kommt nie zum Zeichnen und stellt den Klick nie zu. Der Fortschrittszähler muss auf
-  demselben Zeit-Gate feuern (250 ms), nicht pro Datei, sonst steht er bei großen Notizen
-  und sieht aus wie ein Freeze. Muster geerbt aus `apple-health/src/core/pipeline.ts`.
-- **Der Drift-Schutz gehört in den `vault.process`-Callback**, nicht davor: dort liegt der
-  frische Inhalt vor, und read-modify-write ist atomar. Verglichen wird die
-  **Treffermenge** (`sameHits`), nie der Text — ein Linter, der `updated:` ins Frontmatter
-  schreibt, verschiebt jeden Offset (Regression 0.2.0).
-- **`metadataCache.getTags()` gibt es in den offiziellen Typen nicht.** Die Tag-Liste für
-  die Vervollständigung wird aus den Datei-Caches gesammelt (`allTags` in `vault-io.ts`).
-  Undokumentierte APIs sind im Store-Review ein Befund, keine Abkürzung.
-- **Der Umfangs-Block gehört in den Panel-Rumpf, nicht in `.transmute-rule`.** Den
-  Regel-Container gibt es erst im Preview-Zustand — der Umfang wird aber *vorher* gewählt.
-- **Handler nicht als Referenz weiterreichen** (`onFilter: handlers.onFilter`): das bricht
-  am `unbound-method`-Lint. Arrow-Wrapper verwenden.
-- **Eine additive Union-Erweiterung braucht die Suche nach ihren Konsumenten.** `ScopeKind`
-  um `"vault"` zu erweitern ließ Typecheck und Tests grün — der Setter im Settings-Tab
-  (`String(value) === "selection" ? … : "file"`) hätte die neue Variante still auf `file`
-  zurückgesetzt. Derselbe Mechanismus wie beim `unauthorized`-Bug in 0.4.0.
-- **Fortschritt und UI-Freigabe gehören ans Ende JEDER Schleifeniteration** — nie hinter
-  ein `continue`. In `runOverFiles` lagen sie hinter dem Zweig für „zu viele Treffer", und
-  ein Muster wie `[a-z]` reißt die Obergrenze in *jeder* Datei: die Oberfläche wurde
-  ausgerechnet im teuersten Fall nie freigegeben (GUI-Smoke 2026-08-16, 403 grüne
-  Unit-Tests sahen es nicht). Zwei Regressionstests decken beide Ausprägungen ab.
-- **Während eines Laufs wird die Trefferliste nicht gezeichnet** (`renderVaultBody`). Der
-  Fortschritt feuert im 250-ms-Takt; jedes Zeichnen baute die komplette Liste neu — bei
-  11.770 Dateien teurer als der Lauf selbst.
-- **Der GUI-Smoke misst die UI-Freigabe direkt** (instrumentiertes `setTimeout`), nicht
-  über ihre Nebenwirkung. Drei Anläufe über „laufen fremde Makrotasks?" waren irreführend:
-  Chromium drosselt Timer in einem `hidden` Fenster auf 1 Hz — das ergibt exakt
-  „0 Runden in 998 ms" und sieht aus wie eine Arbeitslast. `document.hidden` allein taugt
-  nicht als Wächter (meldete false, während die Kette stand); der Prüfpunkt **eicht** die
-  Timer-Kette und meldet seine Bedingungen mit.
-- **`data.json`** ist git-ignored (Obsidian-persistierte Konfig), **`main.js`** ist Build-Artefakt.
-- **Release-CI ist GitHub-only** (`.github/` wird von Forgejo ignoriert).
+- **`obsidianmd/ui/sentence-case` prüft String-Literale, keine Variablen.** Syntax, die kein UI-Text ist (Regex-Flags, Muster), gehört in ein `<code>` und den Literalwert in eine benannte Konstante — **kein** Inline-`disable`, das bricht am Gate.
+- **Eine additive Union-Erweiterung braucht die Suche nach ihren Konsumenten.** `ScopeKind` um `"vault"` zu erweitern ließ Typecheck und Tests grün — der Setter im Settings-Tab (`String(value) === "selection" ? … : "file"`) hätte die neue Variante still auf `file` zurückgesetzt. Derselbe Mechanismus wie beim `unauthorized`-Bug in 0.4.0.
+- **Eine Warnung im `eslint src`-Lauf bricht das Gate** (PROF-TS-05: `--max-warnings 0`), weil `eslint` bei Warnungen Exit 0 gibt, der Store-Scanner sie aber als Befund meldet; die `sentence-case`-Regel hatte den Flag-Knopf `g` angemahnt und stand grün im Gate (2026-07-27).
+
+## Context index
+
+- Bevor du den Modellaufruf, die Verbindung, Antworten oder den Prompt änderst: `.claude/rules/llm-anbindung.md`.
+- Bevor du die Regex-Ausführung (`evaluate()` ist der EINE Ausführungspfad, dazu Guard, Probe, Lockerung), Presets oder die Diagnose änderst: `.claude/rules/regex-ausfuehrung.md`.
+- Bevor du das Panel, den Hub oder die Teil-Draws änderst oder DOM-Tests schreibst: `.claude/rules/panel-und-view.md`.
+- Bevor du den vault-weiten Lauf, Snapshot, Drift-Schutz oder die UI-Freigabe änderst: `.claude/rules/vault-lauf.md`.
+- Vor Änderungen am Aufbau (Verzeichnisse, Schichten, Struktur-Vertrag zum Modell): `docs/internal/architecture.md`.
+- Bevor du eine Altentscheidung übernimmst (Kit-first-Befund, Modellagnostik, Lizenz, Release): `docs/internal/decisions.md`.
+- Vor einem GUI-Smoke: `docs/SMOKE.md`; Obsidian-Instanz, Lock, Treiber und Staging-Vaults stehen als Pfadregeln im Dach unter `../.claude/rules/`.
+
+## Memory
+
+- **Cockpit:** `$VAULT/25_Coding/obsidian-transmute/` (Stand, Tasks, Session-Log, Entscheidungen — mnemetisches Substrat/SSOT). **SDD-Artefakte (Spec/Plan) liegen dort unter `_SDD/`, nicht im Repo** (CORE-META-14) — das Repo behält die verdichtete Design-Essenz in `docs/internal/` und im CHANGELOG.
 
 ## UI-Abweichungen
 
 Keine. Die eigene Endpunkt-Liste (`endpoint-list`) ist mit dem Verbindungs-Tausch der Welle 15 entfallen; Endpunkte, Modell und Anfrage-Abschnitt kommen aus `createLlmConnection.renderSettings`.
 
-## Offene Entscheidungen
+## Abweichungen von der Leitkonvention
 
-Aus der Repo-Spec (Vault-Cockpit `_SDD/transmute-repo-spec.md`) §9 — nach Workspace-Standard bereits **entschieden**:
-
-- **Repo-Slug bleibt `obsidian-transmute`** (konsistent mit `obsidian-letterhead`/`obsidian-paperize`);
-  manifest-`id` `transmute`, Anzeigename „Transmute". Der Store verbietet „Obsidian" im *Plugin*-Namen,
-  nicht im Repo-Namen.
-- **Hosting: Forgejo = `origin`/Quelle, GitHub = Push-Mirror** (CORE-GIT-01). Release über das
-  **zentrale** `../tools/release/` (Dual-Push) — nicht `release.mjs` aus einem Nachbarn kopieren
-  (offene Lesson vom 2026-07-25: die vendorte Variante pusht Tag-zuerst und triggert auf einem
-  leeren Remote keinen Workflow). Einrichtung über den Dach-Skill `plugin-release-setup`.
-- **Lizenz: AGPL-3.0 (`LICENSE`) + CC BY-SA 4.0 (`LICENSE-DOCS`)** — Workspace-Konsistenz.
-
-- **Modellagnostisch, mit dem was lokal da ist** (Entscheidung Johannes 2026-07-25) — kein Modell wird
-  für dieses Plugin nachgeladen, kein Modellname wird hartkodiert. Die Spec-Frage „4-bit vs. 8-bit"
-  ist damit gegenstandslos: Referenz-Setup ist die vorhandene **LM-Studio-Instanz auf `:1234`**
-  (Bestand 2026-07-25: `qwen/qwen3.6-35b-a3b` — der Spec-Kandidat, MoE also schnell —
-  `qwen/qwen3.6-27b`, `google/gemma-4-31b-qat`, `google/gemma-4-26b-a4b-qat`, `gemma-4-e4b`,
-  `gemma-4-e2b`; dazu Embeddings, für uns irrelevant). Ollama `:11434` hält nur ein
-  Embedding-Modell, MLX `:8080` läuft nicht — beides bleibt trotzdem über die Endpunkt-Liste
-  ansprechbar.
-
-Offen für Johannes:
-
-- **Nichts Blockierendes.** Die verbleibende empirische Frage — hält der NL→Regex-Prompt über
-  *mehrere* der vorhandenen Modelle? — ist eine Mess-, keine Entscheidungsaufgabe (TaskNote im
-  Cockpit; Werkzeug: `debrief-lab`-Muster, Prompt-Tuning ohne Plugin-Rebuild).
-
-## Dach-Kontext (obsidian-plugins)
-
-Dieses Repo liegt unter dem Koordinations-Dach `obsidian-plugins/` (Elternverzeichnis) und ist ein
-**eigenständiges Git-Repo** (PROF-OBS-09: kein Monorepo, eigener Release-Takt, Kit per git-Tag).
-**Vor dem Lösen eines Problems:** `../AGENTS.md` (Kit-first-Regel) und `../REGISTRY.md`
-(Lösungs-Registry) prüfen. **Vor jeder UI-Arbeit:** `../UI-STANDARD.md`.
-
-**Cockpit:** `$VAULT/25_Coding/obsidian-transmute/` (Stand, Tasks, Session-Log, Entscheidungen —
-mnemetisches Substrat/SSOT). **SDD-Artefakte (Spec/Plan) liegen dort unter `_SDD/`, nicht im Repo**
-(CORE-META-14) — das Repo behält die verdichtete Design-Essenz hier und im CHANGELOG.
-**Nie absolute Pfade außerhalb des Repos in Repo-Dateien** — Platzhalter (`$VAULT/…`) verwenden.
+Keine.
