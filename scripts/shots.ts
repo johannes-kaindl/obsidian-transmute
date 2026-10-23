@@ -26,7 +26,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { attachTo, bereiteInstanzVor, closeExtraLeaves, openExisting, pollUntil, requireVisible, setAppConfig, setPluginSetting, type Cdp } from "../../tools/obsidian-cdp/cdp.js";
+import { attachTo, bereiteInstanzVor, closeExtraLeaves, openExisting, pollUntil, requireVisible, schliesseEinstellungen, setAppConfig, setPluginSetting, type Cdp } from "../../tools/obsidian-cdp/cdp.js";
 import { boxAround, boxOf, capture, setWindowSize, writeShot } from "../../tools/obsidian-cdp/shot.js";
 import { buildVault, stagingVaultDir } from "../../tools/obsidian-cdp/vault.js";
 
@@ -260,7 +260,7 @@ async function shotSettings(cdp: Cdp): Promise<void> {
   });
   console.log(`  ${hinweis}`);
   fenster?.close();
-  await cdp.evaluate(`app.setting.close(); return true;`);
+  await schliesseEinstellungen(cdp);
 }
 
 const BILDER: Record<string, (cdp: Cdp) => Promise<void>> = {

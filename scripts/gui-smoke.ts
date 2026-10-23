@@ -42,7 +42,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { attachTo, beimAbbruch, bereiteInstanzVor, Cdp, entferneFakeManager, installFakeManager, closeExtraLeaves, istAbgebrochen, klicke, notices, pollUntil, releaseAlwaysOnTop, requireVisible, setPluginSetting }
+import { attachTo, beimAbbruch, bereiteInstanzVor, Cdp, entferneFakeManager, installFakeManager, closeExtraLeaves, istAbgebrochen, klicke, notices, pollUntil, releaseAlwaysOnTop, requireVisible, schliesseEinstellungen, setPluginSetting }
   from "../../tools/obsidian-cdp/cdp.js";
 import { boxOf, capture } from "../../tools/obsidian-cdp/shot.js";
 import { startLlmStub } from "../../tools/obsidian-cdp/llm-stub.js";
@@ -1476,7 +1476,7 @@ async function abschnittApple(cdp: Cdp): Promise<void> {
       record(NAMEN[2]!, hinweis.ok && hinweisDa && !hinweis.vorher, hinweis.ok
         ? `Quelle traegt transport shortcuts; Hinweis zur Grenze im offenen Tab: ${hinweisDa ? "da" : "FEHLT " + diag} (vor der Wahl: ${hinweis.vorher ? "schon da" : "nicht da"})`
         : "Quelle blieb HTTP — die Dropdown-Wahl kam nicht an");
-      await cdp.evaluate("app.setting.close(); return true;");
+      await schliesseEinstellungen(cdp);
     }
 
     // S4/S5 — ein Lauf. `window.open`-Stub VOR dem Anstoss, Rueckbau im finally.
