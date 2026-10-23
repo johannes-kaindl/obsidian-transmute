@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Kit update (code-kit 0.28.0 → 0.34.0). Whether a model on LM Studio thinks or sees images now comes from its metadata instead of only its name, so the thinking toggle can appear for more models. Claude models are recognised as models that take images and, from the Fable, Opus 4.7 and Sonnet 5 generations on, as models whose thinking cannot be switched off.
+- The folder filter of a vault-wide run uses the shared kit module `folder-scope`: whole folder names only (`10_Not` no longer reaches into `10_Notizen`), names that differ only in Unicode normal form match, and a folder containing `..` holds nothing. With an empty folder and "include subfolders" switched off, only the notes in the top level of the vault are taken; before, every note in every folder was taken.
+- The selection a rule was previewed on is found again by the shared kit module `text-anchor`, and the context around a hit is clipped by `clip-context`; both answer as the local versions did, nothing changes on screen.
+
 ## [0.14.1] — 2026-10-16
 
 ### Changed

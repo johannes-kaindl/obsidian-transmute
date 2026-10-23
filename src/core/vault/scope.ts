@@ -1,3 +1,5 @@
+import { isInFolder } from "../../vendor/kit/folder-scope";
+
 /** Welche Notizen ein vault-weiter Lauf anfasst. Alle gesetzten Bedingungen sind verundet. */
 export type VaultFilter = {
   /** null = ganzer Vault. Ohne fuehrenden/abschliessenden Schraegstrich. */
@@ -58,12 +60,10 @@ function fieldMatches(value: unknown, wanted: string): boolean {
   return false;
 }
 
+/** Liegt der Pfad im Ordner? Kit `folder-scope`: ganze Namen, Unicode-Normalform C, ein Ordner mit `..` enthält nichts. Ein leerer Ordner ist die
+ *  Wurzel (`root: true`) und kennt wie jeder andere die Unterordner-Einstellung (vorher: alle Tiefen, auch bei ausgeschalteten Unterordnern). */
 function inFolder(path: string, folder: string, includeSubfolders: boolean): boolean {
-  const prefix = folder.replace(/^\/+|\/+$/g, "");
-  if (prefix === "") return true;
-  if (!path.startsWith(`${prefix}/`)) return false;
-  if (includeSubfolders) return true;
-  return !path.slice(prefix.length + 1).includes("/");
+  return isInFolder(path, folder, { root: true, recursive: includeSubfolders });
 }
 
 export function selectCandidates(all: Candidate[], filter: VaultFilter): string[] {

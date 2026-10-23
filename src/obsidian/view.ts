@@ -4,7 +4,7 @@ import type { PresetDef, ScopeKind } from "../core/settings";
 import { t } from "../vendor/kit/i18n";
 import { familyFromName, type BackendId, type ThinkingLevel } from "../vendor/kit/sampling-profiles";
 import { copyToClipboard } from "../vendor/kit-obsidian/clipboard";
-import { locateRegion } from "../core/anchor";
+import { locateQuote } from "../vendor/kit/text-anchor";
 import { activeMarkdownView, applyHitsToEditor, readScope, viewForPath } from "./editor-io";
 import { renderLibrary, renderOutcome, renderPanel, type PanelHandlers, type PanelModel, type PanelParts } from "./view-render";
 import { effectiveFlags } from "../core/regex/compile";
@@ -393,8 +393,8 @@ export class TransmuteView extends ItemView {
     if (this.pinned === null) return null;
     if (this.pinned.scope !== "selection") return { text: documentText, offset: 0 };
 
-    const offset = locateRegion(documentText, this.pinned.baseOffset, this.pinned.text);
-    return offset === null ? null : { text: this.pinned.text, offset };
+    const found = locateQuote(documentText, { exact: this.pinned.text }, this.pinned.baseOffset);
+    return found.kind === "found" ? { text: this.pinned.text, offset: found.start } : null;
   }
 
   /** Die gemerkte Notiz wiederfinden — welcher Reiter Fokus hat, ist dabei egal. */

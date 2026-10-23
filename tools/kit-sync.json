@@ -1,12 +1,12 @@
 {
   "sources": {
     "obsidian-kit": { "ref": "0.61.0" },
-    "code-kit": { "ref": "0.28.0" }
+    "code-kit": { "ref": "0.34.0" }
   },
   "targets": [
     {
       "dir": "src/vendor/kit", "source": "code-kit", "from": "src/ts/pure",
-      "modules": ["backend-probe", "capabilities", "cooperative-yield", "endpoint", "endpoint_config", "endpoint_diagnostics", "error_body", "i18n", "model-choice", "model-list-cache", "reasoning", "redact", "rounds", "run-state", "model-context", "embeddings-client", "llm-json", "sampling-profiles", "rotation", "safe-markdown", "secrets", "settings", "sse", "think-splitter", "timeout"]
+      "modules": ["backend-probe", "capabilities", "cooperative-yield", "endpoint", "endpoint_config", "endpoint_diagnostics", "error_body", "i18n", "model-choice", "model-list-cache", "reasoning", "redact", "rounds", "run-state", "model-context", "embeddings-client", "llm-json", "sampling-profiles", "rotation", "safe-markdown", "secrets", "settings", "sse", "think-splitter", "timeout", "rel-path", "folder-scope", "text-anchor", "clip-context"]
     },
     {
       "dir": "src/vendor/kit", "source": "code-kit", "from": "src/ts/web",

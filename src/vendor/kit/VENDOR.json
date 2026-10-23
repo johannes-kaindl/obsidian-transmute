@@ -1,9 +1,9 @@
 {
   "source": "code-kit",
-  "version": "0.28.0",
-  "sha": "642b791",
+  "version": "0.34.0",
+  "sha": "065b068",
   "code_kit_version": "0.7.0",
-  "vendored": "backend-probe.ts, capabilities.ts, cooperative-yield.ts, endpoint.ts, endpoint_config.ts, endpoint_diagnostics.ts, error_body.ts, i18n.ts, model-choice.ts, model-list-cache.ts, reasoning.ts, redact.ts, rounds.ts, run-state.ts, model-context.ts, embeddings-client.ts, llm-json.ts, sampling-profiles.ts, rotation.ts, safe-markdown.ts, secrets.ts, settings.ts, sse.ts, think-splitter.ts, timeout.ts, clipboard.ts, remote-resources.ts",
+  "vendored": "backend-probe.ts, capabilities.ts, cooperative-yield.ts, endpoint.ts, endpoint_config.ts, endpoint_diagnostics.ts, error_body.ts, i18n.ts, model-choice.ts, model-list-cache.ts, reasoning.ts, redact.ts, rounds.ts, run-state.ts, model-context.ts, embeddings-client.ts, llm-json.ts, sampling-profiles.ts, rotation.ts, safe-markdown.ts, secrets.ts, settings.ts, sse.ts, think-splitter.ts, timeout.ts, rel-path.ts, folder-scope.ts, text-anchor.ts, clip-context.ts, clipboard.ts, remote-resources.ts",
   "note": "Verbatim snapshot aus ZWEI Quellen (obsidian-kit + code-kit); welche Datei woher stammt, sagt ihr eigener Kopf. Never hand-edit. Pins in tools/kit-sync.json, re-vendor via tools/sync-kit.sh (zentrales kit-sync im Dach). version/sha gelten AUSSCHLIESSLICH fuer die unter \"vendored\" gelisteten Dateien. kit-obsidian/ siehe dortige VENDOR.json.",
   "obsidian_kit_version": "0.61.0",
   "obsidian_kit_sha": "9afb096",

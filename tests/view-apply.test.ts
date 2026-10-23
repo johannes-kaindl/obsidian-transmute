@@ -133,3 +133,32 @@ describe("Anwenden im Geltungsbereich Datei", () => {
     expect(editor.getValue()).toBe("neue Schreibweise");
   });
 });
+
+// Wiederfinden der gemerkten Auswahl (Kit `text-anchor` statt der Eigenfassung `locateRegion`, Welle 25): dieselben Antworten wie vorher.
+describe("Wiederfinden der gemerkten Auswahl", () => {
+  function regionOf(documentText: string, baseOffset: number, text: string): { text: string; offset: number } | null {
+    const editor = fakeEditor(documentText);
+    const view = new TransmuteView({ app: fakeApp(editor, "notiz.md") } as unknown as WorkspaceLeaf, deps(new TransmuteSession(
+      { complete: () => Promise.resolve({ ok: true as const, content: "", reasoning: null, truncated: false }), now: () => 0, newTurnId: () => "t" },
+      () => ({ sampleChars: 400, budgetMs: 2000, maxHits: 500 }),
+    )));
+    (view as unknown as { pinned: unknown }).pinned = { scope: "selection", baseOffset, text, path: "notiz.md", name: "notiz" };
+    return (view as unknown as { currentRegion(t: string): { text: string; offset: number } | null }).currentRegion(documentText);
+  }
+
+  it("findet den Ausschnitt an seiner Stelle", () => {
+    expect(regionOf("aaaZIELbbb", 3, "ZIEL")).toEqual({ text: "ZIEL", offset: 3 });
+  });
+
+  it("findet den verschobenen Ausschnitt (Linter schreibt Frontmatter davor)", () => {
+    expect(regionOf("---\nx: 1\n---\naaaZIELbbb", 3, "ZIEL")).toEqual({ text: "ZIEL", offset: 16 });
+  });
+
+  it("gibt auf, wenn der Ausschnitt verschwunden ist", () => {
+    expect(regionOf("nichts davon", 0, "ZIEL")).toBeNull();
+  });
+
+  it("gibt auf, wenn der Ausschnitt mehrdeutig ist", () => {
+    expect(regionOf("ZIEL und nochmal ZIEL", 99, "ZIEL")).toBeNull();
+  });
+});

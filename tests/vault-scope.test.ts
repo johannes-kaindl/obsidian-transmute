@@ -26,6 +26,34 @@ describe("selectCandidates", () => {
     expect(got).toEqual(["10_Notizen/Projekt A.md"]);
   });
 
+  // Kit `folder-scope` (Welle 25): ein leerer Ordner ist die Wurzel, die Unterordner-Einstellung gilt auch dort.
+  it("leerer Ordner und Unterordner aus: nur die oberste Ebene (vorher: alle Tiefen)", () => {
+    const got = selectCandidates(ALL, { ...EMPTY_FILTER, folder: "", includeSubfolders: false });
+    expect(got).toEqual(["Lose.md"]);
+  });
+
+  it("leerer Ordner und Unterordner an: der ganze Vault", () => {
+    expect(selectCandidates(ALL, { ...EMPTY_FILTER, folder: "", includeSubfolders: true })).toHaveLength(4);
+  });
+
+  it("Schrägstriche am Rand des Ordners ändern nichts", () => {
+    const got = selectCandidates(ALL, { ...EMPTY_FILTER, folder: "/10_Notizen/", includeSubfolders: false });
+    expect(got).toEqual(["10_Notizen/Projekt A.md"]);
+  });
+
+  it("trifft ganze Ordnernamen, kein Namenspräfix", () => {
+    expect(selectCandidates(ALL, { ...EMPTY_FILTER, folder: "10_Not", includeSubfolders: true })).toEqual([]);
+  });
+
+  it("Ordnernamen, die sich nur in der Unicode-Normalform unterscheiden, sind derselbe Ordner", () => {
+    const vault = [c("B\u00fcro/a.md")];
+    expect(selectCandidates(vault, { ...EMPTY_FILTER, folder: "Bu\u0308ro", includeSubfolders: true })).toEqual(["B\u00fcro/a.md"]);
+  });
+
+  it("ein Ordner mit .. enthält nichts", () => {
+    expect(selectCandidates(ALL, { ...EMPTY_FILTER, folder: "10_Notizen/../90_Archiv", includeSubfolders: true })).toEqual([]);
+  });
+
   it("trifft mit einem Eltern-Tag auch verschachtelte Tags", () => {
     const got = selectCandidates(ALL, { ...EMPTY_FILTER, tag: "#projekt" });
     expect(got).toEqual(["10_Notizen/Projekt A.md", "10_Notizen/tief/Projekt B.md"]);

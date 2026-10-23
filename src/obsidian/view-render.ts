@@ -6,7 +6,7 @@ import { CHEATSHEET } from "../core/cheatsheet";
 import { modelChoices } from "../core/reasoning-toggle";
 import { buildThinkingControl } from "../vendor/kit-obsidian/thinking-control";
 import type { BackendId, FamilyId, ThinkingLevel } from "../vendor/kit/sampling-profiles";
-import { clipContext } from "../core/snippet";
+import { clipContext } from "../vendor/kit/clip-context";
 import type { Hit, RuleDraft, RuleProblem, Version } from "../core/types";
 import { t } from "../vendor/kit/i18n";
 import type { VaultFilter } from "../core/vault/scope";
