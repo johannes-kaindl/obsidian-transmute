@@ -60,6 +60,9 @@ export default class TransmutePlugin extends Plugin {
         http: requestUrlTransport,
         fallback: "none",
         shortcuts: (shortcut) => createShortcutsChatTransport({ bridge: this.shortcutsBridge, shortcut }),
+        // Opt-in auf Claude: ein Manager-Endpunkt mit provider „anthropic“ wird dem Plugin angeboten, die Anfrage geht an die
+        // Messages-API von Anthropic (über `http` oben, ohne Strom). Ohne diese Zeile sieht das Plugin keinen.
+        anthropic: true,
       },
       // „Am Limit ohne Text“ ist hier eine eigene Fehlerart (error.truncatedEmpty), kein Ergebnis.
       truncated: "error",
@@ -81,6 +84,8 @@ export default class TransmutePlugin extends Plugin {
         complete: async (messages, feature, turnId) => {
           const started = Date.now();
           // Eine Regel soll bei gleicher Eingabe gleich ausfallen: Temperatur 0 je Aufruf, das Profil gaebe 0.1.
+          // Auf Claude entfaellt das: die API lehnt `temperature` ab (Modelle ab 4.7), der Kit sendet den Wert dort nicht und
+          // meldet ihn in „Letzte Anfrage“ als `override-dropped`. Dort gilt die Absicht „gleiche Eingabe, gleiche Regel“ nicht.
           const r = await this.llm.complete({ messages }, { overrides: { temperature: 0 } });
           const res = this.toResult(r);
           this.reportToLab({

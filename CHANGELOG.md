@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Transmute can now use Claude (Anthropic) when the LLM Endpoint Manager lists a Claude entry. This is an opt-in in the plugin (`transports.anthropic`); without the manager nothing changes, and a Claude entry never appears in the plugin's own endpoint list. **The instruction, the text sample (the open note, or up to the first three notes of the scope with their paths) and, when refining, the earlier instructions, rules and up to three matching lines then go to Anthropic**, not to a local model. Choice trap: with the choice on "Automatic" the manager's list order decides, the first reachable, enabled chat entry wins, so a Claude entry above your local one is used first; pick your local endpoint explicitly in the settings, or move it up in the manager, to stay local. The README, `SECURITY.md` (which used to say that note content goes only to a local endpoint) and the manual say so.
+- **Behaviour on Claude:** the fixed temperature 0 of a run is not sent (the API rejects it on Claude 4.7 and newer; "Last request" shows it as `override-dropped`). So the intent "same input, same rule" does not hold there: the same instruction can give a different rule. The preview before anything is written stays as it is.
+
 ### Changed
 
 - Kit pins raised to obsidian-kit 0.69.1 / code-kit 0.36.0 (from 0.61.0 / 0.34.0); the four modules the newer connection needs (`anthropic-wire`, `override-guard`, `anthropic-transport`, `plugin-api`) are vendored, the bundle grows by about 16 KB.

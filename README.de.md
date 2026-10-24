@@ -17,7 +17,7 @@
 
 ## Funktionen
 
-- **Suchen & Ersetzen in natürlicher Sprache.** Beschreibe die Änderung in eigenen Worten; ein lokales OpenAI-kompatibles LLM macht daraus einen regulären Ausdruck, eine Ersetzung und eine Klartext-Erklärung.
+- **Suchen & Ersetzen in natürlicher Sprache.** Beschreibe die Änderung in eigenen Worten; ein lokales OpenAI-kompatibles LLM (oder Claude über den LLM Endpoint Manager) macht daraus einen regulären Ausdruck, eine Ersetzung und eine Klartext-Erklärung.
 - **Vorschau, bevor irgendetwas geschrieben wird.** Jeder Treffer wird vorher/nachher mit eigener Checkbox gezeigt — nur die angehakten werden geschrieben.
 - **Ein Undo-Schritt.** Das Anwenden läuft über den Editor, **Cmd+Z** macht es in einem Schritt rückgängig.
 - **Nachschärfen.** Mit einer Anschluss-Anweisung wie „aber nicht in Codeblöcken“ weiterarbeiten.
@@ -32,7 +32,8 @@ Alle Funktionen im Einzelnen: [Funktionen und Verwendung](https://github.com/joh
 ## Voraussetzungen
 
 - **Obsidian 1.8.7+** (Desktop oder Mobile).
-- **Ein OpenAI-kompatibler lokaler Server** (z. B. [LM Studio](https://lmstudio.ai) oder [Ollama](https://ollama.com)) mit einem geladenen Chat-fähigen Modell. Neu bei lokalen LLMs? Die **[Anleitung für den lokalen LLM-Aufbau](https://uplink.jkaindl.de/llm-setup)** führt einmal komplett durch Server, Modell und mobilen Zugriff. Endpunkt und Modell werden in den Plugin-Einstellungen konfiguriert — nichts verlässt die Maschine.
+- **Ein OpenAI-kompatibler lokaler Server** (z. B. [LM Studio](https://lmstudio.ai) oder [Ollama](https://ollama.com)) mit einem geladenen Chat-fähigen Modell. Neu bei lokalen LLMs? Die **[Anleitung für den lokalen LLM-Aufbau](https://uplink.jkaindl.de/llm-setup)** führt einmal komplett durch Server, Modell und mobilen Zugriff. Endpunkt und Modell werden in den Plugin-Einstellungen konfiguriert — mit einem lokalen Server verlässt nichts die Maschine.
+- **Optional: Claude (Anthropic).** Mit dem Plugin **LLM Endpoint Manager** und einem Claude-Eintrag darin kann Transmute statt eines lokalen Modells Claude nutzen; dann gehen die Anweisung, eine Textprobe (die offene Notiz, wenn sie im Umfang liegt, sonst bis zu die ersten drei Notizen des Umfangs mit ihren Pfaden, begrenzt durch „Text sample sent to the model“, standardmäßig 2000 Zeichen) und beim Verfeinern deine früheren Anweisungen und Regeln sowie bis zu drei Trefferzeilen an Anthropic. Ein vault-weiter Lauf schickt dieselbe Art Probe, nicht den ganzen Vault. Transmute sieht einen Claude-Eintrag nur über den Manager, und bei der Wahl „Automatisch“ gewinnt der erste erreichbare, aktivierte Chat-Eintrag in der Reihenfolge der Manager-Liste, ein Claude-Eintrag über deinem lokalen wird also zuerst genommen; wähle deinen lokalen Endpunkt ausdrücklich in den Einstellungen oder schiebe ihn in der Liste des Managers nach oben, um lokal zu bleiben. Die feste Temperatur 0 eines Laufs wird an Claude nicht gesendet (die API lehnt sie ab), „gleiche Eingabe, gleiche Regel“ ist dort also nicht gesichert.
 
 ## Installation
 
@@ -73,7 +74,7 @@ Der ganze Weg und alle Einstellungen: [Funktionen und Verwendung](https://github
 
 **Einstellungen → Community-Plugins → Transmute** öffnen; die Einstellungen sind unter **„Connection“** und **„Behaviour“** gruppiert. Die ersten, die du anfasst:
 
-- **Endpoints** — geordnete Liste OpenAI-kompatibler Server (lokal oder gehostet, je mit optionalem API-Schlüssel); der erste erreichbare wird genutzt. Ist das Plugin **LLM Endpoint Manager** installiert, kommen Endpunkte und Schlüssel von dort. Die Basis-URL ohne abschließendes `/v1` eintragen.
+- **Endpoints** — geordnete Liste OpenAI-kompatibler Server (lokal oder gehostet, je mit optionalem API-Schlüssel); der erste erreichbare wird genutzt. Ist das Plugin **LLM Endpoint Manager** installiert, kommen Endpunkte und Schlüssel von dort, und auch ein Claude-Eintrag des Managers ist nutzbar (der Notizinhalt geht dann an Anthropic, siehe Voraussetzungen). Die Basis-URL ohne abschließendes `/v1` eintragen.
 - **Modell** (je Endpunkt-Zeile) — jede Zeile trägt ihr eigenes Modell; leer lässt den Server das geladene Modell wählen. Die Modellwahl im Panel schreibt in die aktive Zeile.
 - **Request timeout (ms)** — wie lange auf die Antwort des Modells gewartet wird (Standard `120000`).
 - **Default scope** — „Ganze Notiz“, „Auswahl“ oder „Ganzer Vault“.

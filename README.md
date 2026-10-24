@@ -13,7 +13,7 @@
 
 ## Features
 
-- **Natural-language search & replace.** Describe the change in your own words; a local OpenAI-compatible LLM turns it into a regular expression, a replacement and a plain-language explanation.
+- **Natural-language search & replace.** Describe the change in your own words; a local OpenAI-compatible LLM (or Claude, through the LLM Endpoint Manager) turns it into a regular expression, a replacement and a plain-language explanation.
 - **Preview before anything is written.** Every match is shown before/after with its own checkbox — only the checked ones are written.
 - **One undo step.** Applying goes through the editor, so **Cmd+Z** reverts it in one step.
 - **Refine and go back.** Follow up with "but not inside code blocks"; every round is kept in a history you can return to.
@@ -32,7 +32,8 @@ All features in detail: [Features and usage](https://github.com/johannes-kaindl/
 ## Requirements
 
 - **Obsidian 1.8.7+** (desktop or mobile).
-- **An OpenAI-compatible local server** (e.g. [LM Studio](https://lmstudio.ai) or [Ollama](https://ollama.com)) with a chat-capable model loaded. New to local LLMs? The **[local LLM setup guide](https://uplink.jkaindl.de/llm-setup)** walks you through server, model and mobile access end to end. The endpoint and model are configured in the plugin settings — nothing leaves your machine.
+- **An OpenAI-compatible local server** (e.g. [LM Studio](https://lmstudio.ai) or [Ollama](https://ollama.com)) with a chat-capable model loaded. New to local LLMs? The **[local LLM setup guide](https://uplink.jkaindl.de/llm-setup)** walks you through server, model and mobile access end to end. The endpoint and model are configured in the plugin settings — with a local server nothing leaves your machine.
+- **Optional: Claude (Anthropic).** With the **LLM Endpoint Manager** plugin and a Claude entry in it, Transmute can use Claude instead of a local model; then the instruction, a text sample (the open note if it is in scope, otherwise up to the first three notes of the scope with their paths, capped by "Text sample sent to the model", 2000 characters by default), and when you refine, your earlier instructions and rules and up to three matching lines go to Anthropic. A vault-wide run sends the same kind of sample, not the whole vault. Transmute sees a Claude entry only through the manager, and with the choice on "Automatic" the first reachable, enabled chat entry in the manager's list order wins, so a Claude entry above your local one is used first; pick your local endpoint explicitly in the settings, or move it up in the manager's list, to stay local. The fixed temperature 0 of a run is not sent to Claude (the API rejects it), so "same input, same rule" is not guaranteed there.
 - **On model size, if your interface is not English.** Transmute names the target language in every prompt, but a very small model may still drop that instruction while it is busy hitting the JSON format. Measured against a local LM Studio: a 35B mixture-of-experts model answered in German 5 times out of 5, a 2B model 4 out of 5. Patterns are unaffected — this is about the plain-language explanation and diagnosis. If you want reliable explanations in your own language, give it a mid-size model.
 
 ## Install
@@ -74,7 +75,7 @@ Open **Settings → Community plugins → Transmute**; the settings are grouped 
 <img src="https://raw.githubusercontent.com/johannes-kaindl/obsidian-transmute/main/docs/images/settings.png" width="600" alt="The plugin settings: the endpoint list with a reachability status per row, model selection, and the behaviour options">
 
 
-- **Endpoints** — an ordered list of OpenAI-compatible servers (local or hosted, each with an optional API key); the first reachable one is used. With the **LLM Endpoint Manager** plugin installed, endpoints and keys come from there. Enter the base URL without a trailing `/v1`.
+- **Endpoints** — an ordered list of OpenAI-compatible servers (local or hosted, each with an optional API key); the first reachable one is used. With the **LLM Endpoint Manager** plugin installed, endpoints and keys come from there, and a Claude entry of the manager can be used too (the note content then goes to Anthropic, see Requirements). Enter the base URL without a trailing `/v1`.
 - **Model** (per endpoint row) — each row carries its own model; empty lets the server pick whatever is loaded. The panel's model dropdown writes into the active row.
 - **Request** — the sampling values and the thinking level that are sent (collapsible).
 - **Default scope** — "Whole note", "Selection" or "Whole vault".

@@ -22,7 +22,7 @@ Let's go.
 
 Transmute does not include an AI model. It talks to an OpenAI-compatible server that
 *you* run on your own machine, and that server does the actual work of turning your
-instruction into a regular expression. For this tutorial we will use
+instruction into a regular expression. (With the LLM Endpoint Manager plugin it can also use Claude; the text sample then goes to Anthropic, so this tutorial uses a local server.) For this tutorial we will use
 [LM Studio](https://lmstudio.ai), because it has a friendly interface and a built-in
 model browser — but [Ollama](https://ollama.com) works just as well.
 
