@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Kit pins raised to obsidian-kit 0.69.1 / code-kit 0.36.0 (from 0.61.0 / 0.34.0); the four modules the newer connection needs (`anthropic-wire`, `override-guard`, `anthropic-transport`, `plugin-api`) are vendored, the bundle grows by about 16 KB.
+- Settings, "Request" section: when a request would make LM Studio load a different model and push a loaded one out (JIT loading), the section warns about it. Next to the hint "model family detected" there is a button "Set family in the manager" that opens the LLM Endpoint Manager's settings. Where "off" is not possible (Gemma 4 on LM Studio, Claude), the thinking control reads "Thinking: lowest level" and the reason is in its tooltip; for Claude the field is called "Thinking effort (effort)". New styles for the section are in `styles.css` (`REQUEST_SECTION_CSS`).
+- Code-kit 0.36.0 adds the endpoint role "used for search, does not write" and makes the folder filter fail closed on an unreadable path. Neither changes anything here: this plugin has no search-only endpoints, and the folder filter answers the same for every path checked (sibling folders, `..`, NUL).
+
 ## [0.14.2] — 2026-10-23
 
 ### Changed

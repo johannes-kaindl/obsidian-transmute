@@ -1,7 +1,7 @@
 {
   "sources": {
-    "obsidian-kit": { "ref": "0.61.0" },
-    "code-kit": { "ref": "0.34.0" }
+    "obsidian-kit": { "ref": "0.69.1" },
+    "code-kit": { "ref": "0.36.0" }
   },
   "targets": [
     {
@@ -15,12 +15,12 @@
     },
     {
       "dir": "src/vendor/kit", "source": "obsidian-kit", "from": "src/pure",
-      "modules": ["endpoint-secret-hook", "endpoint-source", "shortcut-failure"],
+      "modules": ["anthropic-wire", "endpoint-secret-hook", "endpoint-source", "override-guard", "shortcut-failure"],
       "rewrite": [["../vendor/code-kit/pure/", "./"]]
     },
     {
       "dir": "src/vendor/kit-obsidian", "source": "obsidian-kit", "from": "src/obsidian",
-      "modules": ["backend-probe", "chat-client", "chat-transport", "clipboard", "clock", "collapsible", "endpoint-list", "endpoint-secrets", "endpoint-source", "folder-suggest", "help-setting", "hub", "lab-client", "llm-connection", "llm-connection-strings", "endpoint-status-text", "endpoint-plumbing", "embedding-connection", "confirm", "dom-guard", "thinking-control", "model-picker", "request-section", "request-session", "secrets", "settings_walker", "shortcuts-bridge"],
+      "modules": ["anthropic-transport", "backend-probe", "chat-client", "chat-transport", "clipboard", "clock", "collapsible", "endpoint-list", "endpoint-secrets", "endpoint-source", "folder-suggest", "help-setting", "hub", "lab-client", "llm-connection", "llm-connection-strings", "endpoint-status-text", "endpoint-plumbing", "embedding-connection", "confirm", "dom-guard", "thinking-control", "model-picker", "plugin-api", "request-section", "request-session", "secrets", "settings_walker", "shortcuts-bridge"],
       "rewrite": [["../pure/", "../kit/"], ["../vendor/code-kit/pure/", "../kit/"], ["../vendor/code-kit/web/", "../kit/"]]
     },
     {
