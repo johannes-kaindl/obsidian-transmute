@@ -4,11 +4,11 @@ import type { PresetDef, ScopeKind } from "../core/settings";
 import { effectiveFlags } from "../core/regex/compile";
 import { CHEATSHEET } from "../core/cheatsheet";
 import { modelChoices } from "../core/reasoning-toggle";
-import { buildThinkingControl } from "../vendor/kit-obsidian/thinking-control";
+import { buildThinkingControl, thinkingOffTexts } from "../vendor/kit-obsidian/thinking-control";
 import type { BackendId, FamilyId, ThinkingLevel } from "../vendor/kit/sampling-profiles";
 import { clipContext } from "../vendor/kit/clip-context";
 import type { Hit, RuleDraft, RuleProblem, Version } from "../core/types";
-import { t } from "../vendor/kit/i18n";
+import { getLang, t } from "../vendor/kit/i18n";
 import type { VaultFilter } from "../core/vault/scope";
 import {
   renderScopeBlock, renderVaultBody,
@@ -125,7 +125,9 @@ function modelRow(parent: El, model: PanelModel, handlers: PanelHandlers): void 
     setLevel: (level) => { handlers.onThinkingLevel(level); return Promise.resolve(); },
     levelPicker: () => false,
     strings: {
-      button: (level, offNotPossible) => (level === "off" ? t(offNotPossible ? "view.thinkingMinimal" : "view.thinkingOff") : t("view.thinkingOn")),
+      button: (level) => (level === "off" ? t("view.thinkingOff") : t("view.thinkingOn")),
+      // "aus nicht moeglich": Beschriftung und Hinweis aus dem Kit (gpt-oss, gemma 4 auf LM Studio, Claude), in der Sprache der Oberflaeche.
+      offNotPossible: thinkingOffTexts(getLang()),
       level: (level) => t(`view.thinkingLevel.${level}`),
       pickerLabel: t("view.thinkingPicker"),
     },

@@ -343,14 +343,19 @@ describe("renderPanel — Modellzeile", () => {
     expect(findByClass<any>(on, "okit-thinking-toggle")?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  // gpt-oss kennt kein „aus“: der Schalter wechselt zwischen minimal und der gewaehlten Stufe — das Label sagt es, es behauptet keine Sperre.
-  it("nennt bei Modellen ohne „aus“ die tatsaechliche Stufe statt „Thinking off“ — und der Klick bleibt wirksam", () => {
+  // gpt-oss kennt kein „aus“: der Schalter wechselt zwischen der niedrigsten Stufe und der gewaehlten — das Label sagt es (Text aus dem Kit,
+  // `thinkingOffTexts`), der Grund steht im aria-label; es behauptet keine Sperre.
+  it("nennt bei Modellen ohne „aus“ die niedrigste Stufe statt „Thinking off“, mit dem Grund im aria-label — und der Klick bleibt wirksam", () => {
     const onThinkingLevel = vi.fn();
     const root = makeFakeEl();
     renderPanel(root, { ...base, model: "gpt-oss-20b", family: "gpt-oss", thinkingOnLevel: "low", state: { phase: "idle" } }, { ...handlers, onThinkingLevel });
-    expect(root.textContent).toContain("Thinking: minimal");
+    expect(root.textContent).toContain("Thinking: lowest level");
+    expect(root.textContent).not.toContain("Thinking: minimal");
     expect(root.textContent).not.toContain("Thinking off");
     expect(root.textContent).not.toContain("Always thinks");
+    const aria = findByClass<any>(root, "okit-thinking-toggle")?.getAttribute("aria-label") as string;
+    expect(aria).toContain("Thinking: lowest level.");
+    expect(aria).toContain("Thinking can't be fully turned off here");
     (findByClass<any>(root, "okit-thinking-toggle") as { click(): void }).click();
     expect(onThinkingLevel).toHaveBeenCalledWith("low");
   });

@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **For a model that cannot switch thinking off, the button reads "Thinking: lowest level"** instead of "Thinking: minimal", and its tooltip and screen-reader name give the reason ("Thinking can't be fully turned off here; the lowest available level is sent."). The text now comes from the shared kit, so it is the same in every plugin that has the button, in German as well ("Denken: niedrigste Stufe").
+
 ## [0.15.0] — 2026-10-25
 
 ### Added

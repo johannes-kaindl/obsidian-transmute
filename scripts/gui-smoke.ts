@@ -153,7 +153,7 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
   Hilfe: ["H1 Hilfe-Zeile ist die erste Zeile der Einstellungen"],
   Denken: [
     "D1 Denk-Knopf (Kit-Baustein) schaltet die Stufe des Modus structured und zeigt den Zustand",
-    "D2 Modell ohne „aus“ (gpt-oss): das Label nennt „minimal“ statt „Thinking off“, der Knopf bleibt bedienbar",
+    "D2 Modell ohne „aus“ (gpt-oss): das Label nennt „lowest level“ samt Hinweis im aria-label statt „Thinking off“, der Knopf bleibt bedienbar",
   ],
   "Globales Modell": [
     "G1 Altwert wandert in die Zeile, kein globales Modell in den Einstellungen",
@@ -1748,14 +1748,14 @@ async function abschnittDenken(cdp: Cdp): Promise<void> {
   }
 }
 
-/** D2: Ein Modell der Familie gpt-oss kennt kein „aus“. Der Knopf bleibt wirksam (er wechselt zwischen minimal und der gewaehlten Stufe);
- *  das Label sagt „Thinking: minimal“ und behauptet keine Sperre. Das Modell steht in der Endpunkt-Zeile, der Vorwert wird zurueckgesetzt. */
+/** D2: Ein Modell der Familie gpt-oss kennt kein „aus“. Der Knopf bleibt wirksam (er wechselt zwischen der niedrigsten und der gewaehlten Stufe);
+ *  das Label sagt „Thinking: lowest level“ (Text des Kits, `thinkingOffTexts`), der Grund steht im aria-label; es behauptet keine Sperre. Das Modell steht in der Endpunkt-Zeile, der Vorwert wird zurueckgesetzt. */
 async function denkenOhneAus(cdp: Cdp): Promise<void> {
-  const NAME = "D2 Modell ohne „aus“ (gpt-oss): das Label nennt „minimal“ statt „Thinking off“, der Knopf bleibt bedienbar";
+  const NAME = "D2 Modell ohne „aus“ (gpt-oss): das Label nennt „lowest level“ samt Hinweis im aria-label statt „Thinking off“, der Knopf bleibt bedienbar";
   const vor = await cdp.evaluate<string>(`return JSON.stringify(app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.endpoints);`);
-  const lese = (): Promise<{ da: boolean; label: string; disabled: boolean; pressed: string | null }> => cdp.evaluate(`
+  const lese = (): Promise<{ da: boolean; label: string; aria: string; disabled: boolean; pressed: string | null }> => cdp.evaluate(`
     const b = document.querySelector(".okit-thinking-toggle");
-    return { da: !!b, label: b ? b.textContent.trim() : "", disabled: b ? b.disabled : true, pressed: b ? b.getAttribute("aria-pressed") : null };
+    return { da: !!b, label: b ? b.textContent.trim() : "", aria: b ? (b.getAttribute("aria-label") ?? "") : "", disabled: b ? b.disabled : true, pressed: b ? b.getAttribute("aria-pressed") : null };
   `);
   try {
     await cdp.evaluate(`
@@ -1780,8 +1780,9 @@ async function denkenOhneAus(cdp: Cdp): Promise<void> {
     await klickAusdruck(cdp, `document.querySelector(".okit-thinking-toggle")`);
     await new Promise((r) => setTimeout(r, 500));
     const an = await lese();
-    record(NAME, aus.label === "Thinking: minimal" && !aus.disabled && an.label === "Thinking on" && !an.disabled,
-      `Ausgang „${aus.label}“ (gesperrt: ${aus.disabled}); nach Klick „${an.label}“ (gesperrt: ${an.disabled})`);
+    const hinweis = aus.aria.startsWith("Thinking: lowest level.") && aus.aria.includes("can't be fully turned off");
+    record(NAME, aus.label === "Thinking: lowest level" && hinweis && !aus.disabled && an.label === "Thinking on" && !an.disabled,
+      `Ausgang „${aus.label}“ (gesperrt: ${aus.disabled}, aria-label „${aus.aria}“); nach Klick „${an.label}“ (gesperrt: ${an.disabled})`);
   } finally {
     await cdp.evaluate(`
       const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
