@@ -157,9 +157,9 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
   ],
   Modellzeile: [
     "MZ1 Modellzeile im Panel (Fake-Manager, zwei Modelle): Liste, Standard-Modell im Namen von Automatisch, ein Wechsel schreibt choice.model, Automatisch leert sie",
-    "MZ2 Ein Voll-Draw (Wechsel des Bereichs) laesst die Zeile stehen: dasselbe Element, Fokus und Wahl bleiben (Gegenprobe: ein Feld im gezeichneten Bereich wird ersetzt)",
+    "MZ2 Ein Voll-Draw (draw() der View, wie beim Phasenwechsel) laesst die Zeile stehen: dasselbe Element, Fokus und Wahl bleiben (Gegenprobe: ein Feld im gezeichneten Bereich wird ersetzt)",
     "MZ3 Die Zeile ist waehrend der Erzeugung gesperrt und danach wieder bedienbar",
-    "MZ4 Der Denk-Knopf folgt der Familie der Quelle: Claude via Manager (Modellname ohne Familie) nennt die niedrigste Stufe, derselbe Name ohne Manager nicht",
+    "MZ4 Der Denk-Knopf in der Zeile folgt der Quelle: Claude via Manager nennt die niedrigste Stufe mit dem Grund, ein lokales Modell ohne bekannte Familie bleibt bei „Thinking off“",
   ],
   "Globales Modell": [
     "G1 Altwert wandert in die Zeile, kein globales Modell in den Einstellungen",
@@ -1702,7 +1702,7 @@ async function abschnittGlobalesModell(cdp: Cdp): Promise<void> {
         await p.llm.resolve({ force: true });
         return true;
       `);
-      if (!(await zeileOeffnen(cdp, "panel-wahl-smoke"))) { unmeasured(NAME2, "die Modellzeile mit den Modellen des Stubs kam nicht ins Panel"); return; }
+      if (!(await zeileOeffnen(cdp, "panel-wahl-smoke"))) { record(NAME2, false, "Die Modellzeile mit den Modellen des Stubs kam in 10 s nicht ins Panel"); return; }
       await zeileWaehlen(cdp, "panel-wahl-smoke");
       const gewaehlt = await pollUntil<{ gewaehlt: unknown; inUse: string }>(cdp, `
         const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
@@ -1969,12 +1969,26 @@ const ZEILE_SELECT = ".okit-model-bar .okit-model-bar-select";
 /** Panel frisch oeffnen (Blatt zu, neu auf) und warten, bis die Modellzeile `erwartet` als Option fuehrt. */
 async function zeileOeffnen(cdp: Cdp, erwartet: string): Promise<boolean> {
   await closeExtraLeaves(cdp);
-  await cdp.evaluate(`app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].llm.invalidate(); return true;`);
+  // Das Panel-Blatt der Seitenleiste bleibt von `closeExtraLeaves` unberuehrt und traegt seine Liste vom Oeffnen: zu, damit ein frisches Panel
+  // gegen den jetzigen Endpunkt baut (Gattung des Zustandslecks, slide-deck `d5bad02`; wie D2).
+  await cdp.evaluate(`
+    for (const l of app.workspace.getLeavesOfType(${JSON.stringify(VIEW_TYPE)})) l.detach();
+    app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].llm.invalidate();
+    return true;
+  `);
   await panelOeffnen(cdp);
   const da = await pollUntil<boolean>(cdp, `
     const sel = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
     return sel && [...sel.options].some((o) => o.value === ${JSON.stringify(erwartet)}) ? true : null;
   `, 10_000, 200);
+  if (da !== true) {
+    const stand = await cdp.evaluate<string>(`
+      const sel = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
+      return JSON.stringify({ leaves: app.workspace.getLeavesOfType(${JSON.stringify(VIEW_TYPE)}).length, host: !!document.querySelector(".transmute-model-host"),
+        optionen: sel ? [...sel.options].map((o) => o.value) : null, erwartet: ${JSON.stringify(erwartet)} });
+    `);
+    console.log(`  Modellzeile nicht wie erwartet: ${stand}`);
+  }
   return da === true;
 }
 
@@ -2059,7 +2073,8 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
         document.querySelector(".transmute-instruction").__mz2 = 1;
         return true;
       `);
-      await bereichWaehlen(cdp, "Whole note");
+      // Der Voll-Draw kommt ohne Klick (ein echter Mausklick nimmt den Fokus selbst): `draw()` der View, wie bei jedem Phasenwechsel der Sitzung.
+      await cdp.evaluate(`app.workspace.getLeavesOfType(${JSON.stringify(VIEW_TYPE)})[0].view.draw(); return true;`);
       await new Promise((r) => setTimeout(r, 400));
       const nachDraw = await cdp.evaluate<{ gleich: boolean; fokus: boolean; wert: string; feldErsetzt: boolean }>(`
         const sel = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
@@ -2087,11 +2102,23 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
     }
 
     // ---- MZ4: Familie aus der Quelle (Claude via Manager, Modellname ohne Familie) gegen denselben Namen ohne Manager
-    const ALIAS = "alias-ohne-familie";
-    const label = (): Promise<{ label: string; aria: string } | null> => pollUntil<{ label: string; aria: string }>(cdp, `
-      const b = document.querySelector(".okit-model-bar .okit-thinking-toggle");
-      return b ? { label: (b.textContent ?? "").trim(), aria: b.getAttribute("aria-label") ?? "" } : null;
-    `, 10_000, 250);
+    // Der Fake-Manager traegt keine Familie je Endpunkt (nur Anbieter und Backend): die Familie kommt hier aus dem Namen des Claude-Modells.
+    // „Familie aus der Quelle, nicht aus dem Namen“ ist am Fake nicht messbar (Zeiger in der Abschlussmeldung); der Unit-Test der View hat es mit einem Namen ohne Familie.
+    const ALIAS = CLAUDE_MODELL;
+    const LOKAL = "mz-a";
+    // Der Denk-Knopf zeichnet sich nach der ersten Aufloesung neu (Familie): `erwartet` wartet, bis das Label so lautet, sonst gilt der letzte Stand.
+    const label = async (erwartet: string | null): Promise<{ label: string; aria: string } | null> => {
+      const lies = (): Promise<{ label: string; aria: string } | null> => cdp.evaluate(`
+        const b = document.querySelector(".okit-model-bar .okit-thinking-toggle");
+        return b ? { label: (b.textContent ?? "").trim(), aria: b.getAttribute("aria-label") ?? "" } : null;
+      `);
+      let stand = await lies();
+      for (let i = 0; i < 32 && (stand === null || (erwartet !== null && stand.label !== erwartet)); i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        stand = await lies();
+      }
+      return stand;
+    };
     const claude = await startLlmStub({
       anbieter: "anthropic", schluessel: CLAUDE_SCHLUESSEL,
       models: [{ id: ALIAS, capabilities: { effort: { supported: true }, thinking: { types: { adaptive: { supported: true } } } } }],
@@ -2099,6 +2126,7 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
     });
     let mitManager: { label: string; aria: string } | null = null;
     let ohneManager: { label: string; aria: string } | null = null;
+    let zeileDa = true;
     try {
       await cdp.evaluate(`${P}.settings.request.thinking = { ...(${P}.settings.request.thinking ?? {}), structured: "off" }; await ${P}.saveSettings(); return true;`);
       await installFakeManager(cdp, {
@@ -2110,31 +2138,33 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
         invalidiere: [PLUGIN_ID],
       });
       await cdp.evaluate(`${P}.settings.choice = {}; await ${P}.saveSettings(); ${P}.llm.invalidate(); await ${P}.llm.resolve({ force: true }); return true;`);
-      if (!(await zeileOeffnen(cdp, ALIAS))) throw new Error("die Modellzeile mit dem Claude-Alias kam nicht ins Panel");
-      // Der Denk-Knopf zeichnet sich nach der Aufloesung neu (Familie): kurz warten, bis das Label steht.
-      await new Promise((r) => setTimeout(r, 600));
-      mitManager = await label();
+      zeileDa = await zeileOeffnen(cdp, ALIAS);
+      if (zeileDa) {
+        // Der Denk-Knopf zeichnet sich nach der Aufloesung neu (Familie): kurz warten, bis das Label steht.
+        mitManager = await label("Thinking: lowest level");
+      }
       await fakeManagerAus(cdp);
       await cdp.evaluate(`
         const p = ${P};
-        p.settings.endpoints = [{ url: ${JSON.stringify(stub.url)}, model: ${JSON.stringify(ALIAS)} }];
+        p.settings.endpoints = [{ url: ${JSON.stringify(stub.url)}, model: ${JSON.stringify(LOKAL)} }];
         p.settings.choice = {};
         await p.saveSettings();
         p.llm.invalidate();
         await p.llm.resolve({ force: true });
         return true;
       `);
-      stub.konfiguriere({ models: [ALIAS] });
-      if (!(await zeileOeffnen(cdp, ALIAS))) throw new Error("die Modellzeile mit dem Alias (ohne Manager) kam nicht ins Panel");
-      await new Promise((r) => setTimeout(r, 600));
-      ohneManager = await label();
+      if (await zeileOeffnen(cdp, LOKAL)) {
+        // Gegenprobe: ohne Familie bleibt es bei „Thinking off“; die Zeit gibt der Aufloesung Gelegenheit, es zu aendern.
+        await new Promise((r) => setTimeout(r, 1500));
+        ohneManager = await label(null);
+      } else zeileDa = false;
     } finally {
       await claude.stop().catch(() => undefined);
     }
     record(MZ4,
-      mitManager !== null && mitManager.label === "Thinking: lowest level" && mitManager.aria.includes("can't be fully turned off")
+      zeileDa && mitManager !== null && mitManager.label === "Thinking: lowest level" && mitManager.aria.includes("can't be fully turned off")
         && ohneManager !== null && ohneManager.label === "Thinking off",
-      `Claude via Manager, Modell „${ALIAS}“: „${mitManager?.label ?? "kein Knopf"}“ (aria-label „${(mitManager?.aria ?? "").slice(0, 70)}“); derselbe Name ohne Manager: „${ohneManager?.label ?? "kein Knopf"}“`);
+      `${zeileDa ? "" : "Die Modellzeile kam in 10 s nicht ins Panel. "}Claude via Manager, Modell „${ALIAS}“: „${mitManager?.label ?? "kein Knopf"}“ (aria-label „${(mitManager?.aria ?? "").slice(0, 70)}“); lokales Modell „${LOKAL}“ ohne Manager: „${ohneManager?.label ?? "kein Knopf"}“`);
   } catch (e) {
     for (const n of ABSCHNITTE.Modellzeile!) if (!bilanz.eintraege().some((x) => x.name === n)) unmeasured(n, `Messung abgebrochen: ${(e as Error).message}`);
   } finally {
