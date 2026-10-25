@@ -155,9 +155,15 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
     "D1 Denk-Knopf (Kit-Baustein) schaltet die Stufe des Modus structured und zeigt den Zustand",
     "D2 Modell ohne „aus“ (gpt-oss): das Label nennt „lowest level“ samt Hinweis im aria-label statt „Thinking off“, der Knopf bleibt bedienbar",
   ],
+  Modellzeile: [
+    "MZ1 Modellzeile im Panel (Fake-Manager, zwei Modelle): Liste, Standard-Modell im Namen von Automatisch, ein Wechsel schreibt choice.model, Automatisch leert sie",
+    "MZ2 Ein Voll-Draw (Wechsel des Bereichs) laesst die Zeile stehen: dasselbe Element, Fokus und Wahl bleiben (Gegenprobe: ein Feld im gezeichneten Bereich wird ersetzt)",
+    "MZ3 Die Zeile ist waehrend der Erzeugung gesperrt und danach wieder bedienbar",
+    "MZ4 Der Denk-Knopf folgt der Familie der Quelle: Claude via Manager (Modellname ohne Familie) nennt die niedrigste Stufe, derselbe Name ohne Manager nicht",
+  ],
   "Globales Modell": [
     "G1 Altwert wandert in die Zeile, kein globales Modell in den Einstellungen",
-    "G2 Panel-Modellwahl schreibt in die aktive Zeile, „Server waehlt“ leert sie",
+    "G2 Panel-Modellwahl (ueber das Dropdown der Modellzeile) schreibt in die aktive Zeile, Automatisch leert sie",
   ],
   i18n: ["Panel zeigt keinen rohen Uebersetzungs-Schluessel"],
 };
@@ -1660,7 +1666,7 @@ async function abschnittClaude(cdp: Cdp): Promise<void> {
 async function abschnittGlobalesModell(cdp: Cdp): Promise<void> {
   const NAME = "G1 Altwert wandert in die Zeile, kein globales Modell in den Einstellungen";
   const ALTWERT = "smoke-altmodell";
-  const NAME2 = "G2 Panel-Modellwahl schreibt in die aktive Zeile, „Server waehlt“ leert sie";
+  const NAME2 = "G2 Panel-Modellwahl (ueber das Dropdown der Modellzeile) schreibt in die aktive Zeile, Automatisch leert sie";
   const pfad = `.obsidian/plugins/${PLUGIN_ID}/data.json`;
   const vor = await cdp.evaluate<string | null>(`
     return (await app.vault.adapter.exists(${JSON.stringify(pfad)})) ? await app.vault.adapter.read(${JSON.stringify(pfad)}) : null;
@@ -1684,16 +1690,34 @@ async function abschnittGlobalesModell(cdp: Cdp): Promise<void> {
     const keineZeile = !ergebnis.namen.includes("Model");
     record(NAME, ergebnis.zeilenModell === ALTWERT && !ergebnis.hatAltschluessel && keineOption && keineZeile,
       `Zeilen-Modell „${String(ergebnis.zeilenModell)}“ (erwartet „${ALTWERT}“), Altschluessel ${ergebnis.hatAltschluessel ? "noch da" : "weg"}, Option „global model“ ${keineOption ? "weg" : "noch da"}, Zeile „Model“ ${keineZeile ? "weg" : "noch da"}`);
-    const panel = await cdp.evaluate<{ gewaehlt: unknown; inUse: string; geleert: unknown; inUseLeer: string }>(`
-      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
-      await p.llm.setModel("panel-wahl-smoke");
-      const gewaehlt = p.settings.endpoints[0]?.model;
-      const inUse = p.llm.modelInUse();
-      await p.llm.setModel("");
-      return { gewaehlt, inUse, geleert: p.settings.endpoints[0]?.model, inUseLeer: p.llm.modelInUse() };
-    `);
-    record(NAME2, panel.gewaehlt === "panel-wahl-smoke" && panel.inUse === "panel-wahl-smoke" && (panel.geleert ?? "") === "",
-      `Zeile nach Wahl „${String(panel.gewaehlt)}“, modelInUse „${panel.inUse}“; nach „Server waehlt“ Zeile „${String(panel.geleert ?? "")}“, modelInUse „${panel.inUseLeer}“`);
+    // G2 ueber das Dropdown der Modellzeile (Kit): kein direkter `llm.setModel` mehr, der das Panel nie beruehrt haette.
+    const stubG2 = await startLlmStub({ models: ["panel-wahl-smoke", "anderes-modell"] });
+    try {
+      await cdp.evaluate(`
+        const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+        p.settings.endpoints = [{ url: ${JSON.stringify(stubG2.url)}, model: "anderes-modell" }];
+        p.settings.choice = {};
+        await p.saveSettings();
+        p.llm.invalidate();
+        await p.llm.resolve({ force: true });
+        return true;
+      `);
+      if (!(await zeileOeffnen(cdp, "panel-wahl-smoke"))) { unmeasured(NAME2, "die Modellzeile mit den Modellen des Stubs kam nicht ins Panel"); return; }
+      await zeileWaehlen(cdp, "panel-wahl-smoke");
+      const gewaehlt = await pollUntil<{ gewaehlt: unknown; inUse: string }>(cdp, `
+        const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+        return p.settings.endpoints[0]?.model === "panel-wahl-smoke" ? { gewaehlt: p.settings.endpoints[0].model, inUse: p.llm.modelInUse() } : null;
+      `, 6_000, 200);
+      await zeileWaehlen(cdp, "");
+      const geleert = await pollUntil<{ geleert: unknown; inUseLeer: string; zeile: string }>(cdp, `
+        const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+        return (p.settings.endpoints[0]?.model ?? "") === "" ? { geleert: p.settings.endpoints[0]?.model, inUseLeer: p.llm.modelInUse(), zeile: document.querySelector(".okit-model-bar-select")?.value ?? "?" } : null;
+      `, 6_000, 200);
+      record(NAME2, gewaehlt !== null && gewaehlt.gewaehlt === "panel-wahl-smoke" && gewaehlt.inUse === "panel-wahl-smoke" && geleert !== null && geleert.zeile === "",
+        `Zeile nach Wahl „${String(gewaehlt?.gewaehlt ?? "nicht umgestellt")}“, modelInUse „${gewaehlt?.inUse ?? "-"}“; nach Automatisch Zeile „${String(geleert?.geleert ?? "")}“, modelInUse „${geleert?.inUseLeer ?? "-"}“, Dropdown „${geleert?.zeile ?? "nicht umgestellt"}“`);
+    } finally {
+      await stubG2.stop().catch(() => undefined);
+    }
   } finally {
     await cdp.evaluate(`
       await app.vault.adapter.write(${JSON.stringify(pfad)}, ${JSON.stringify(vor ?? "{}")});
@@ -1938,6 +1962,188 @@ async function abschnitt(name: string, lauf: () => Promise<void>): Promise<void>
   }
 }
 
+// --- Abschnitt: Modellzeile (Kit-Baustein im Panel) ---------------------------------------------------
+
+const ZEILE_SELECT = ".okit-model-bar .okit-model-bar-select";
+
+/** Panel frisch oeffnen (Blatt zu, neu auf) und warten, bis die Modellzeile `erwartet` als Option fuehrt. */
+async function zeileOeffnen(cdp: Cdp, erwartet: string): Promise<boolean> {
+  await closeExtraLeaves(cdp);
+  await cdp.evaluate(`app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].llm.invalidate(); return true;`);
+  await panelOeffnen(cdp);
+  const da = await pollUntil<boolean>(cdp, `
+    const sel = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
+    return sel && [...sel.options].some((o) => o.value === ${JSON.stringify(erwartet)}) ? true : null;
+  `, 10_000, 200);
+  return da === true;
+}
+
+/** Eine Option des Dropdowns waehlen, wie es ein Nutzer tut (Wert setzen, `change`). */
+async function zeileWaehlen(cdp: Cdp, wert: string): Promise<void> {
+  await cdp.evaluate(`
+    const sel = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
+    sel.value = ${JSON.stringify(wert)};
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  `);
+}
+
+/** MZ1–MZ4: die Modellzeile im Panel (Kit `buildModelBar`). Die Zeile steht AUSSERHALB des Bereichs, den `renderPanel` bei jedem
+ *  Voll-Draw leert (MZ2 misst das), ist waehrend der Erzeugung gesperrt (MZ3) und liest die Familie fuer den Denk-Knopf aus der
+ *  Quelle, nicht aus dem Modellnamen (MZ4). Das Panel loest nur beim Oeffnen auf: nach jeder Aenderung am Manager Blatt zu und neu auf. */
+async function abschnittModellzeile(cdp: Cdp): Promise<void> {
+  const [MZ1, MZ2, MZ3, MZ4] = ABSCHNITTE.Modellzeile!;
+  const P = `app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}]`;
+  const draft = { regex: "foo", flags: "", replacement: "bar", explanation: "e" };
+  const vor = await cdp.evaluate<{ endpoints: unknown; choice: unknown; request: unknown }>(`const s = ${P}.settings; return { endpoints: s.endpoints, choice: s.choice, request: s.request };`);
+  const stellWieder = (): Promise<unknown> => cdp.evaluate(`
+    const p = ${P};
+    p.settings.endpoints = ${JSON.stringify(vor.endpoints)};
+    p.settings.choice = ${JSON.stringify(vor.choice)};
+    p.settings.request = ${JSON.stringify(vor.request)};
+    await p.saveSettings();
+    p.llm.invalidate();
+    return true;
+  `).catch(() => undefined);
+  const stub = await startLlmStub({
+    models: ["mz-a", "mz-b"], verzoegerungMs: 2500, standard: { text: JSON.stringify(draft) },
+  });
+  try {
+    // ---- MZ1: Fake-Manager mit zwei Modellen
+    await fakeManagerEin(cdp, stub.url);
+    await cdp.evaluate(`${P}.settings.choice = {}; await ${P}.saveSettings(); ${P}.llm.invalidate(); return true;`);
+    if (!(await zeileOeffnen(cdp, MANAGER_CHOICE_MODEL))) {
+      record(MZ1, false, "Die Modellzeile mit den Modellen des Managers kam in 10 s nicht ins Panel");
+    } else {
+      const start = await cdp.evaluate<{ texte: string[]; werte: string[] }>(`
+        const sel = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
+        return { texte: [...sel.options].map((o) => o.textContent), werte: [...sel.options].map((o) => o.value) };
+      `);
+      await zeileWaehlen(cdp, MANAGER_CHOICE_MODEL);
+      const gewaehlt = await pollUntil<{ choice: unknown; inUse: string }>(cdp, `
+        const p = ${P};
+        return p.settings.choice?.model === ${JSON.stringify(MANAGER_CHOICE_MODEL)} ? { choice: p.settings.choice.model, inUse: p.llm.modelInUse() } : null;
+      `, 6_000, 200);
+      await zeileWaehlen(cdp, "");
+      const leer = await pollUntil<{ choice: unknown }>(cdp, `
+        const p = ${P};
+        return (p.settings.choice?.model ?? "") === "" ? { choice: p.settings.choice?.model ?? "" } : null;
+      `, 6_000, 200);
+      const auto = start.texte[start.werte.indexOf("")] ?? "";
+      record(MZ1,
+        start.werte.includes(MANAGER_DEFAULT_MODEL) && start.werte.includes(MANAGER_CHOICE_MODEL) && auto.includes(MANAGER_DEFAULT_MODEL)
+          && gewaehlt !== null && gewaehlt.inUse === MANAGER_CHOICE_MODEL && leer !== null,
+        `Optionen ${JSON.stringify(start.texte)}; Automatisch „${auto}“; nach Wahl choice.model „${String(gewaehlt?.choice ?? "nicht gesetzt")}“ (modelInUse „${gewaehlt?.inUse ?? "-"}“); nach Automatisch choice.model „${String(leer?.choice ?? "nicht geleert")}“`);
+    }
+    await fakeManagerAus(cdp);
+
+    // ---- MZ2 + MZ3: lokaler Endpunkt auf dem Stub
+    await cdp.evaluate(`
+      const p = ${P};
+      p.settings.endpoints = [{ url: ${JSON.stringify(stub.url)}, model: "mz-a" }];
+      p.settings.choice = {};
+      await p.saveSettings();
+      p.llm.invalidate();
+      await p.llm.resolve({ force: true });
+      return true;
+    `);
+    if (!(await zeileOeffnen(cdp, "mz-b"))) {
+      for (const n of [MZ2, MZ3]) record(n!, false, "Die Modellzeile mit den Modellen des Stubs kam in 10 s nicht ins Panel");
+    } else {
+      // MZ2 — ein Voll-Draw: Bereich wechseln. Die Zeile markieren und fokussieren; ein Feld im gezeichneten Bereich als Gegenprobe markieren.
+      await zeileWaehlen(cdp, "mz-b");
+      await pollUntil<boolean>(cdp, `return ${P}.llm.modelInUse() === "mz-b" ? true : null;`, 6_000, 200);
+      await cdp.evaluate(`
+        const sel = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
+        sel.__mz2 = 1; sel.focus();
+        document.querySelector(".transmute-instruction").__mz2 = 1;
+        return true;
+      `);
+      await bereichWaehlen(cdp, "Whole note");
+      await new Promise((r) => setTimeout(r, 400));
+      const nachDraw = await cdp.evaluate<{ gleich: boolean; fokus: boolean; wert: string; feldErsetzt: boolean }>(`
+        const sel = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
+        const feld = document.querySelector(".transmute-instruction");
+        return { gleich: !!sel && sel.__mz2 === 1, fokus: !!sel && document.activeElement === sel, wert: sel?.value ?? "", feldErsetzt: !!feld && feld.__mz2 !== 1 };
+      `);
+      record(MZ2, nachDraw.gleich && nachDraw.fokus && nachDraw.wert === "mz-b" && nachDraw.feldErsetzt,
+        `nach dem Voll-Draw: Zeile ${nachDraw.gleich ? "dasselbe Element" : "NEU GEBAUT"}, Fokus ${nachDraw.fokus ? "bleibt" : "VERLOREN"}, Wahl „${nachDraw.wert}“; Gegenprobe (Anweisungsfeld im gezeichneten Bereich): ${nachDraw.feldErsetzt ? "ersetzt, der Draw lief" : "NICHT ersetzt, der Draw lief nicht"}`);
+
+      // MZ3 — ein Lauf mit 2,5 s Verzoegerung: waehrenddessen gesperrt, danach bedienbar.
+      await cdp.evaluate(`void ${P}.sessionInstance.generate("Smoke-Test: ersetze foo", "foo bar"); return true;`);
+      const waehrend = await pollUntil<{ phase: string; gesperrt: boolean; knopf: boolean }>(cdp, `
+        const st = ${P}.sessionInstance.state;
+        const sel = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
+        const rf = document.querySelector(".okit-model-bar-refresh");
+        return st.phase === "generating" && sel ? { phase: st.phase, gesperrt: sel.disabled, knopf: !!rf && rf.disabled } : null;
+      `, 6_000, 100);
+      const danach = await pollUntil<{ phase: string; gesperrt: boolean }>(cdp, `
+        const st = ${P}.sessionInstance.state;
+        const sel = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
+        return st.phase !== "generating" && sel ? { phase: st.phase, gesperrt: sel.disabled } : null;
+      `, 20_000, 200);
+      record(MZ3, waehrend !== null && waehrend.gesperrt && waehrend.knopf && danach !== null && !danach.gesperrt,
+        `waehrend der Erzeugung (${waehrend?.phase ?? "nie generating gesehen"}): Dropdown ${waehrend?.gesperrt ? "gesperrt" : "NICHT gesperrt"}, Neu laden ${waehrend?.knopf ? "gesperrt" : "NICHT gesperrt"}; danach (${danach?.phase ?? "kein Ende"}): ${danach === null ? "-" : danach.gesperrt ? "BLEIBT gesperrt" : "bedienbar"}`);
+    }
+
+    // ---- MZ4: Familie aus der Quelle (Claude via Manager, Modellname ohne Familie) gegen denselben Namen ohne Manager
+    const ALIAS = "alias-ohne-familie";
+    const label = (): Promise<{ label: string; aria: string } | null> => pollUntil<{ label: string; aria: string }>(cdp, `
+      const b = document.querySelector(".okit-model-bar .okit-thinking-toggle");
+      return b ? { label: (b.textContent ?? "").trim(), aria: b.getAttribute("aria-label") ?? "" } : null;
+    `, 10_000, 250);
+    const claude = await startLlmStub({
+      anbieter: "anthropic", schluessel: CLAUDE_SCHLUESSEL,
+      models: [{ id: ALIAS, capabilities: { effort: { supported: true }, thinking: { types: { adaptive: { supported: true } } } } }],
+      standard: { text: JSON.stringify(draft), model: ALIAS },
+    });
+    let mitManager: { label: string; aria: string } | null = null;
+    let ohneManager: { label: string; aria: string } | null = null;
+    try {
+      await cdp.evaluate(`${P}.settings.request.thinking = { ...(${P}.settings.request.thinking ?? {}), structured: "off" }; await ${P}.saveSettings(); return true;`);
+      await installFakeManager(cdp, {
+        pluginId: MANAGER_PLUGIN_ID,
+        endpunkte: [{
+          id: "fake-claude", label: "Claude API", url: claude.url, models: [ALIAS], defaultModel: ALIAS, configModel: "default",
+          provider: "anthropic", backend: "anthropic", apiKey: CLAUDE_SCHLUESSEL, hasSecret: true, transport: "anthropic",
+        }],
+        invalidiere: [PLUGIN_ID],
+      });
+      await cdp.evaluate(`${P}.settings.choice = {}; await ${P}.saveSettings(); ${P}.llm.invalidate(); await ${P}.llm.resolve({ force: true }); return true;`);
+      if (!(await zeileOeffnen(cdp, ALIAS))) throw new Error("die Modellzeile mit dem Claude-Alias kam nicht ins Panel");
+      // Der Denk-Knopf zeichnet sich nach der Aufloesung neu (Familie): kurz warten, bis das Label steht.
+      await new Promise((r) => setTimeout(r, 600));
+      mitManager = await label();
+      await fakeManagerAus(cdp);
+      await cdp.evaluate(`
+        const p = ${P};
+        p.settings.endpoints = [{ url: ${JSON.stringify(stub.url)}, model: ${JSON.stringify(ALIAS)} }];
+        p.settings.choice = {};
+        await p.saveSettings();
+        p.llm.invalidate();
+        await p.llm.resolve({ force: true });
+        return true;
+      `);
+      stub.konfiguriere({ models: [ALIAS] });
+      if (!(await zeileOeffnen(cdp, ALIAS))) throw new Error("die Modellzeile mit dem Alias (ohne Manager) kam nicht ins Panel");
+      await new Promise((r) => setTimeout(r, 600));
+      ohneManager = await label();
+    } finally {
+      await claude.stop().catch(() => undefined);
+    }
+    record(MZ4,
+      mitManager !== null && mitManager.label === "Thinking: lowest level" && mitManager.aria.includes("can't be fully turned off")
+        && ohneManager !== null && ohneManager.label === "Thinking off",
+      `Claude via Manager, Modell „${ALIAS}“: „${mitManager?.label ?? "kein Knopf"}“ (aria-label „${(mitManager?.aria ?? "").slice(0, 70)}“); derselbe Name ohne Manager: „${ohneManager?.label ?? "kein Knopf"}“`);
+  } catch (e) {
+    for (const n of ABSCHNITTE.Modellzeile!) if (!bilanz.eintraege().some((x) => x.name === n)) unmeasured(n, `Messung abgebrochen: ${(e as Error).message}`);
+  } finally {
+    await fakeManagerAus(cdp).catch(() => undefined);
+    await stellWieder();
+    await stub.stop().catch(() => undefined);
+  }
+}
+
 async function main(): Promise<void> {
   // attachTo statt Cdp.attach: Obsidian gibt dem Einstellungen-Fenster denselben
   // Vault-Namen im Titel, ein Titel-Filter waere also mehrdeutig (und sprachabhaengig).
@@ -2079,6 +2285,7 @@ async function main(): Promise<void> {
     await abschnitt("Claude", () => abschnittClaude(cdp));
     await abschnitt("Hilfe", () => abschnittHilfe(cdp));
     await abschnitt("Denken", () => abschnittDenken(cdp));
+    await abschnitt("Modellzeile", () => abschnittModellzeile(cdp));
     await abschnitt("Globales Modell", () => abschnittGlobalesModell(cdp));
     await abschnitt("i18n", () => abschnittI18n(cdp));
   } finally {

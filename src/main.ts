@@ -5,7 +5,7 @@ import { DEFAULT_SETTINGS, loadSettings, MAX_HITS, type TransmuteSettings } from
 import type { ChatMessage } from "./core/types";
 import "./core/i18n/strings";
 import { getLang, pickLang, setLang, t } from "./vendor/kit/i18n";
-import { onLevelFor, thinkingFor } from "./vendor/kit/sampling-profiles";
+import { onLevelFor, thinkingFor, withThinkingLevel } from "./vendor/kit/sampling-profiles";
 import { noEndpointText, resolveLlmConnectionStrings } from "./vendor/kit-obsidian/llm-connection-strings";
 import { createLlmConnection, type LlmConnection, type LlmResult } from "./vendor/kit-obsidian/llm-connection";
 import { redactExchange } from "./vendor/kit-obsidian/chat-client";
@@ -112,23 +112,17 @@ export default class TransmutePlugin extends Plugin {
           session: () => this.sessionInstance,
           defaultScope: () => this.settings.defaultScope,
           showTargetField: () => this.settings.showTargetField,
-          listModels: async () => (await this.llm.models({ force: true })).models,
-          // Die Modellwahl gehoert der Verbindung: mit Manager `choice.model`, ohne Manager das Modell der
-          // aktiven Zeile; „Server waehlt“ ist `setModel("")`.
-          getModel: () => this.llm.modelInUse(),
-          getBackend: () => this.llm.source().backend,
-          setModel: (model: string) => {
-            void this.llm.setModel(model);
-          },
-          // Der Denk-Knopf im Panel bedient die Denkstufe des Modus „structured“ (Settings → Request):
-          // aus = „off“, an = die zuletzt gewaehlte Stufe.
-          getThinking: () => ({ level: thinkingFor(this.settings.request, "structured"), onLevel: onLevelFor(this.settings.request, "structured") }),
-          setThinking: (level) => {
-            const req = this.settings.request;
-            const current = thinkingFor(req, "structured");
-            if (current !== "off") req.lastOnLevel.structured = current;
-            req.thinking.structured = level;
-            void this.saveSettings();
+          // Die Verbindung gehoert der Modellzeile (Kit): Liste, Wahl (mit Manager `choice.model`, ohne Manager das Modell der aktiven Zeile;
+          // „Server waehlt“ ist `setModel("")`) und die Familie fuer den Denk-Knopf.
+          llm: this.llm,
+          // Der Denk-Knopf bedient die Denkstufe des Modus „structured“ (Settings → Request): aus = „off“, an = die zuletzt gewaehlte Stufe.
+          thinking: {
+            current: () => thinkingFor(this.settings.request, "structured"),
+            onLevel: () => onLevelFor(this.settings.request, "structured"),
+            setLevel: async (level) => {
+              this.settings.request = withThinkingLevel(this.settings.request, "structured", level);
+              await this.saveSettings();
+            },
           },
           runOptions: () => ({
             sampleChars: this.settings.sampleChars,

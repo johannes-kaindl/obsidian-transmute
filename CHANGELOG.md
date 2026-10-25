@@ -8,7 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
-- **Kit pin raised to obsidian-kit 0.70.0 and code-kit 0.37.5.** Nothing else of the kit's chat window changes is used here.
+- **Kit pin raised to obsidian-kit 0.70.0 and code-kit 0.37.5.** The chat-window changes of that release are not used here; the other effects are listed below.
+- **The model row at the top of the panel is the kit's model row.** The dropdown lists the models of the active endpoint; *Automatic* names the endpoint's default model when it reports one; a saved model the endpoint no longer lists stays selected and is marked *saved* (the "no longer offers" notice is gone); the refresh button announces how many models it found; with the LLM Endpoint Manager installed, the last entry **Other endpoint …** opens the manager's settings (it never switches the endpoint by itself). The row is locked while a rule is being generated and is no longer redrawn with the panel, so it keeps its focus.
+- **The family that decides whether thinking can be switched off comes from the endpoint source, not from the model name.** A Claude endpoint (or any family the manager reports) now reads "Thinking: lowest level" even when the model is called something the name guess does not know.
 - **Links in rendered model answers lose dangerous targets.** The panel renders answers through the kit's guard, which now also strips link targets: `javascript:`, `data:`, `vbscript:`, `file:` and `app:` always, and `obsidian://` links unless allowed (off by default). A link that is stripped keeps its look but has no target. Pictures were never affected here (model Markdown images are already turned into text before rendering). `http`, `https`, `mailto` and note links stay.
 - **For a model that cannot switch thinking off, the button reads "Thinking: lowest level"** instead of "Thinking: minimal", and its tooltip and screen-reader name give the reason ("Thinking can't be fully turned off here; the lowest available level is sent."). The text now comes from the shared kit, so it is the same in every plugin that has the button, in German as well ("Denken: niedrigste Stufe").
 

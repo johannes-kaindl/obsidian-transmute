@@ -263,17 +263,9 @@
   flex-shrink: 0;
 }
 
-.transmute-model-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--size-2-2);
-  align-items: center;
-}
-
-/* Basis 12em: das Dropdown behaelt genug Breite fuer einen Modellnamen und rutscht bei Enge in eine eigene Zeile. */
-.transmute-model {
-  flex: 1 1 12em;
-  min-width: 0;
+/* Behaelter der Modellzeile (Kit-Baustein, MODEL_BAR_CSS unten): steht ueber dem Arbeitsbereich und bekommt dieselben Seitenraender. */
+.transmute-model-host {
+  padding: var(--size-4-3) var(--size-4-4) 0;
 }
 
 /* Denk-Knopf: Kit-Baustein (THINKING_CONTROL_CSS, wortgleich kopiert — Kit-Vertrag). */

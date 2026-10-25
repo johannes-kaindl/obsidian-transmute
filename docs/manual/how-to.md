@@ -152,9 +152,10 @@ Notes:
 
 Each endpoint row carries its own model. By default it is empty, which lets the server use whichever model is currently loaded.
 
-1. Open the Transmute panel in the sidebar and use the model dropdown at the top. It is populated from the active endpoint's `/v1/models`; the choice is written into the active endpoint row.
-2. If you've since loaded a different model on the server, click the reload icon (`refresh-cw`) next to the dropdown to refresh the list.
-3. To go back to "let the server choose", pick the empty option at the top of the dropdown.
+1. Open the Transmute panel in the sidebar and use the model row at the top. Its dropdown is populated from the active endpoint's `/v1/models`; the choice is written into the active endpoint row (or, with the LLM Endpoint Manager, into the plugin's choice). A saved model the endpoint no longer lists stays selected and is marked *saved*.
+2. If you've since loaded a different model on the server, click the reload icon (`refresh-cw`) in the row; it announces how many models it found.
+3. To go back to "let the server choose", pick **Automatic** at the top of the dropdown (it names the endpoint's default model when it reports one). With the LLM Endpoint Manager installed, the last entry, **Other endpoint …**, opens the manager's settings.
+3a. The row is locked while a rule is being generated.
 4. You can also set the model per row under **Settings → Community plugins → Transmute → Connection**.
 
 ---

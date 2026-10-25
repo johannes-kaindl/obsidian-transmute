@@ -1,8 +1,10 @@
 import { ItemView, MarkdownView, Notice, Scope, type WorkspaceLeaf } from "obsidian";
 import type { TransmuteSession } from "../core/session";
 import type { PresetDef, ScopeKind } from "../core/settings";
-import { t } from "../vendor/kit/i18n";
-import { familyFromName, type BackendId, type ThinkingLevel } from "../vendor/kit/sampling-profiles";
+import { getLang, t } from "../vendor/kit/i18n";
+import type { BackendId, FamilyId, ThinkingLevel } from "../vendor/kit/sampling-profiles";
+import { buildModelBar, type ModelBar, type ModelBarConnection } from "../vendor/kit-obsidian/model-bar";
+import { thinkingOffTexts } from "../vendor/kit-obsidian/thinking-control";
 import { copyToClipboard } from "../vendor/kit-obsidian/clipboard";
 import { locateQuote } from "../vendor/kit/text-anchor";
 import { activeMarkdownView, applyHitsToEditor, readScope, viewForPath } from "./editor-io";
@@ -46,14 +48,11 @@ export type TransmuteViewDeps = {
   session(): TransmuteSession;
   defaultScope(): ScopeKind;
   showTargetField(): boolean;
-  listModels(): Promise<string[]>;
-  getModel(): string;
-  /** Backend der aktiven Quelle (Kit 0.61.0): der Denk-Knopf zeigt damit „nicht ganz aus“ bei gemma4 auf LM Studio. */
-  getBackend?(): BackendId | undefined;
-  setModel(model: string): void;
-  /** Denkstufe des Modus `structured` und die Stufe, auf die „an“ schaltet. */
-  getThinking(): { level: ThinkingLevel; onLevel: ThinkingLevel };
-  setThinking(level: ThinkingLevel): void;
+  /** Die Verbindung zum Endpunkt: die Modellzeile (Kit-Baustein) liest Liste, Wahl und Standard-Modell daraus; Familie und Backend der Quelle
+   *  sagen dem Denk-Knopf, ob „aus“ moeglich ist (nicht der Modellname). Eine `LlmConnection` passt hinein. */
+  llm: Omit<ModelBarConnection, "source"> & { source(): { defaultModel?: string; family: FamilyId | null; backend: BackendId } };
+  /** Denkstufe des Modus `structured` (Settings → Request): `onLevel` ist die Stufe, auf die „an“ schaltet. */
+  thinking: { current(): ThinkingLevel; onLevel(): ThinkingLevel; setLevel(level: ThinkingLevel): Promise<void> };
   /** Dieselben Werte, die auch die Sitzung bekommt (main.ts). */
   runOptions(): { sampleChars: number; budgetMs: number; maxHits: number };
   confirmThreshold(): number;
@@ -73,13 +72,14 @@ export class TransmuteView extends ItemView {
   private refinement = "";
   private target = "";
   private pinned: Pinned | null = null;
-  private models: string[] = [];
   /** Container fuer den Teil-Draw, aus dem letzten Voll-Draw. */
   private parts: PanelParts = null;
   private editTimer: number | null = null;
   /** Hub (einmal gebaut) und die Container seiner Panels; jeder Inhalt darf neu gezeichnet werden. */
   private hub: HubController<TabId> | null = null;
   private workEl: HTMLElement | null = null;
+  /** Die Modellzeile (Kit): einmal gebaut, ausserhalb des Voll-Draws, in `onClose` abgemeldet. */
+  private bar: ModelBar | null = null;
   private libraryEl: HTMLElement | null = null;
   private reasoningOpen = false;
 
@@ -148,7 +148,6 @@ export class TransmuteView extends ItemView {
     // NACH `draw()`, nicht statt: `refreshCandidates` liest fuer den Beispieltext Dateien
     // und zeichnet erst am Ende — sonst bliebe das Panel bis dahin leer.
     if (this.scopeKind === "vault") void this.refreshCandidates();
-    void this.refreshModels();
     return Promise.resolve();
   }
 
@@ -156,6 +155,8 @@ export class TransmuteView extends ItemView {
    *  Der Timer dagegen muss weg, sonst feuert er in ein geleertes Panel. */
   protected onClose(): Promise<void> {
     this.clearEditTimer();
+    this.bar?.destroy();
+    this.bar = null;
     this.hub?.destroy();
     this.hub = null;
     return Promise.resolve();
@@ -172,7 +173,11 @@ export class TransmuteView extends ItemView {
       destroy: () => {},
     });
     this.hub = buildHubInto(this.contentEl, [
-      panel("work", () => t("view.tabWork"), "replace", (el) => { this.workEl = el; }),
+      // Zwei Kinder: oben die Modellzeile (einmal gebaut), darunter der Arbeitsbereich, den `renderPanel` bei jedem Voll-Draw leert.
+      panel("work", () => t("view.tabWork"), "replace", (el) => {
+        this.bar = this.buildBar(el.createDiv({ cls: "transmute-model-host" }));
+        this.workEl = el.createDiv();
+      }),
       // Presets werden in den Einstellungen verwaltet — beim Oeffnen des Tabs frisch lesen.
       panel("library", () => t("view.tabLibrary"), "library", (el) => { this.libraryEl = el; }, () => { this.drawLibrary(); }),
     ], "work");
@@ -228,17 +233,6 @@ export class TransmuteView extends ItemView {
       },
       onApply: () => {
         this.apply();
-      },
-      onModel: (model) => {
-        this.deps.setModel(model);
-        this.draw();
-      },
-      onRefreshModels: () => {
-        void this.refreshModels(true);
-      },
-      onThinkingLevel: (level) => {
-        this.deps.setThinking(level);
-        this.draw();
       },
       onSelectVersion: (index) => {
         this.deps.session().selectVersion(index);
@@ -313,24 +307,6 @@ export class TransmuteView extends ItemView {
         this.deps.session().setAll(value);
       },
     };
-  }
-
-  /**
-   * Modell-Liste vom Endpunkt holen.
-   *
-   * Ein eingestelltes Modell, das der Endpunkt nicht mehr kennt, wird gemeldet statt
-   * stillschweigend ersetzt — sonst laeuft die naechste Anfrage gegen ein anderes Modell,
-   * als im Panel steht. (Muster aus image-to-markdown, `refreshModels`.)
-   */
-  private async refreshModels(userTriggered = false): Promise<void> {
-    this.models = await this.deps.listModels();
-    const current = this.deps.getModel();
-    if (current.length > 0 && !this.models.includes(current)) {
-      new Notice(t("view.modelGone", current));
-    } else if (userTriggered) {
-      new Notice(t("view.modelsLoaded", String(this.models.length)));
-    }
-    this.draw();
   }
 
   /**
@@ -694,12 +670,6 @@ export class TransmuteView extends ItemView {
       showTarget: this.deps.showTargetField(),
       target: this.target,
       pinnedName: this.pinned?.name ?? null,
-      models: this.models,
-      model: this.deps.getModel(),
-      family: this.deps.getModel() === "" ? null : familyFromName(this.deps.getModel()),
-      backend: this.deps.getBackend?.(),
-      thinkingLevel: this.deps.getThinking().level,
-      thinkingOnLevel: this.deps.getThinking().onLevel,
       reasoningOpen: this.reasoningOpen,
       // `hasRule` kommt aus derselben Quelle, die `computeVaultPreview` prueft — nicht
       // aus einer zweiten Bedingung, die dasselbe zu wissen glaubt.
@@ -740,6 +710,35 @@ export class TransmuteView extends ItemView {
   private draw(): void {
     if (this.workEl === null) return;
     this.parts = renderPanel(this.workEl, this.panelModel(), this.handlers());
+    // Die Sperre haengt an der Phase (`generating`): die Zeile zeichnet sich aus dem Zustand neu, ohne neu gebaut zu werden.
+    this.bar?.update();
+  }
+
+  /** Die Modellzeile des Kits (`buildModelBar`, UI-STANDARD §8) samt Denk-Knopf; gesperrt, solange ein Lauf laeuft. */
+  private buildBar(host: HTMLElement): ModelBar {
+    const { llm, thinking } = this.deps;
+    return buildModelBar({
+      app: this.app,
+      containerEl: host,
+      llm,
+      strings: { lang: getLang() },
+      disabled: () => this.deps.session().state.phase === "generating",
+      thinking: {
+        family: () => llm.source().family,
+        backend: () => llm.source().backend,
+        current: () => thinking.current(),
+        onLevel: () => thinking.onLevel(),
+        setLevel: (level) => thinking.setLevel(level),
+        levelPicker: () => false,
+        strings: {
+          button: (level) => (level === "off" ? t("view.thinkingOff") : t("view.thinkingOn")),
+          // „Aus“ nicht moeglich (Claude, gpt-oss, gemma 4 auf LM Studio): Beschriftung und Hinweis aus dem Kit, in der Sprache der Oberflaeche.
+          offNotPossible: thinkingOffTexts(getLang()),
+          level: (level) => t(`view.thinkingLevel.${level}`),
+          pickerLabel: t("view.thinkingPicker"),
+        },
+      },
+    });
   }
 
   private drawLibrary(): void {

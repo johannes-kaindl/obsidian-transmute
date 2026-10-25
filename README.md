@@ -76,7 +76,7 @@ Open **Settings → Community plugins → Transmute**; the settings are grouped 
 
 
 - **Endpoints** — an ordered list of OpenAI-compatible servers (local or hosted, each with an optional API key); the first reachable one is used. With the **LLM Endpoint Manager** plugin installed, endpoints and keys come from there, and a Claude entry of the manager can be used too (the note content then goes to Anthropic, see Requirements). Enter the base URL without a trailing `/v1`.
-- **Model** (per endpoint row) — each row carries its own model; empty lets the server pick whatever is loaded. The panel's model dropdown writes into the active row.
+- **Model** (per endpoint row) — each row carries its own model; empty lets the server pick whatever is loaded. The model row at the top of the panel (dropdown, refresh button, thinking toggle) writes into the active row.
 - **Request** — the sampling values and the thinking level that are sent (collapsible).
 - **Default scope** — "Whole note", "Selection" or "Whole vault".
 - **Thinking** (in the **Request** section, also a toggle in the panel) — off by default; faster and more reliable answers from reasoning-capable local models.

@@ -18,9 +18,6 @@ const handlers: PanelHandlers = {
   onToggle: vi.fn(),
   onReset: vi.fn(),
   onSelectVersion: vi.fn(),
-  onModel: vi.fn(),
-  onRefreshModels: vi.fn(),
-  onThinkingLevel: vi.fn(),
   onSetAll: vi.fn(),
   onStartManual: vi.fn(),
   onEditRule: vi.fn(),
@@ -46,11 +43,6 @@ const base: Omit<PanelModel, "state"> = {
   showTarget: false,
   target: "",
   pinnedName: null,
-  models: [],
-  model: "",
-  family: null,
-  thinkingLevel: "off" as const,
-  thinkingOnLevel: "low" as const,
   reasoningOpen: false,
 };
 
@@ -308,69 +300,14 @@ describe("renderPanel — Verlauf", () => {
   });
 });
 
-describe("renderPanel — Modellzeile", () => {
-  it("bietet die geladenen Modelle zur Auswahl", () => {
+describe("renderPanel — keine Modellzeile im gezeichneten Bereich", () => {
+  // Die Zeile gehoert dem Kit-Baustein und steht ausserhalb (view.ts, Hub-Panel „work“): renderPanel leert seinen Container bei jedem Voll-Draw.
+  it("zeichnet weder Modell-Dropdown noch Denk-Knopf", () => {
     const root = makeFakeEl();
-    renderPanel(root, { ...base, models: ["qwen", "gemma"], state: { phase: "idle" } }, handlers);
-    expect(root.textContent).toContain("qwen");
-    expect(root.textContent).toContain("gemma");
-  });
-
-  // Sonst waehlt die Anzeige stillschweigend ein anderes Modell aus.
-  it("behaelt ein eingestelltes, aber nicht geladenes Modell in der Liste", () => {
-    const root = makeFakeEl();
-    renderPanel(root, { ...base, models: ["qwen"], model: "weg", state: { phase: "idle" } }, handlers);
-    expect(root.textContent).toContain("weg");
-  });
-
-  it("zeigt den Thinking-Zustand als Text, nicht nur als Farbe", () => {
-    const off = makeFakeEl();
-    renderPanel(off, { ...base, model: "qwen", state: { phase: "idle" } }, handlers);
-    expect(off.textContent).toContain("Thinking off");
-
-    const on = makeFakeEl();
-    renderPanel(on, { ...base, model: "qwen", thinkingLevel: "low", state: { phase: "idle" } }, handlers);
-    expect(on.textContent).toContain("Thinking on");
-  });
-
-  it("Thinking-Knopf (Kit-Baustein) traegt aria-pressed passend zum Zustand (UI-STANDARD 8)", () => {
-    const off = makeFakeEl();
-    renderPanel(off, { ...base, model: "qwen", state: { phase: "idle" } }, handlers);
-    expect(findByClass<any>(off, "okit-thinking-toggle")?.getAttribute("aria-pressed")).toBe("false");
-
-    const on = makeFakeEl();
-    renderPanel(on, { ...base, model: "qwen", thinkingLevel: "low", state: { phase: "idle" } }, handlers);
-    expect(findByClass<any>(on, "okit-thinking-toggle")?.getAttribute("aria-pressed")).toBe("true");
-  });
-
-  // gpt-oss kennt kein „aus“: der Schalter wechselt zwischen der niedrigsten Stufe und der gewaehlten — das Label sagt es (Text aus dem Kit,
-  // `thinkingOffTexts`), der Grund steht im aria-label; es behauptet keine Sperre.
-  it("nennt bei Modellen ohne „aus“ die niedrigste Stufe statt „Thinking off“, mit dem Grund im aria-label — und der Klick bleibt wirksam", () => {
-    const onThinkingLevel = vi.fn();
-    const root = makeFakeEl();
-    renderPanel(root, { ...base, model: "gpt-oss-20b", family: "gpt-oss", thinkingOnLevel: "low", state: { phase: "idle" } }, { ...handlers, onThinkingLevel });
-    expect(root.textContent).toContain("Thinking: lowest level");
-    expect(root.textContent).not.toContain("Thinking: minimal");
-    expect(root.textContent).not.toContain("Thinking off");
-    expect(root.textContent).not.toContain("Always thinks");
-    const aria = findByClass<any>(root, "okit-thinking-toggle")?.getAttribute("aria-label") as string;
-    expect(aria).toContain("Thinking: lowest level.");
-    expect(aria).toContain("Thinking can't be fully turned off here");
-    (findByClass<any>(root, "okit-thinking-toggle") as { click(): void }).click();
-    expect(onThinkingLevel).toHaveBeenCalledWith("low");
-  });
-
-  it("meldet den Klick als Stufenwechsel: an → aus, aus → zuletzt gewaehlte Stufe", () => {
-    const onThinkingLevel = vi.fn();
-    const off = makeFakeEl();
-    renderPanel(off, { ...base, model: "qwen", thinkingOnLevel: "medium", state: { phase: "idle" } }, { ...handlers, onThinkingLevel });
-    (findByClass<any>(off, "okit-thinking-toggle") as { click(): void }).click();
-    expect(onThinkingLevel).toHaveBeenLastCalledWith("medium");
-
-    const on = makeFakeEl();
-    renderPanel(on, { ...base, model: "qwen", thinkingLevel: "high", state: { phase: "idle" } }, { ...handlers, onThinkingLevel });
-    (findByClass<any>(on, "okit-thinking-toggle") as { click(): void }).click();
-    expect(onThinkingLevel).toHaveBeenLastCalledWith("off");
+    renderPanel(root, { ...base, state: { phase: "idle" } }, handlers);
+    expect(findByClass(root, "okit-model-bar")).toBeNull();
+    expect(findByClass(root, "okit-thinking-control")).toBeNull();
+    expect(findByClass(root, "transmute-model-row")).toBeNull();
   });
 });
 

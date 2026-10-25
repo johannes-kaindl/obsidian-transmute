@@ -19,7 +19,6 @@ src/
 │   ├── i18n/         strings (EN kanonisch, DE)
 │   ├── anchor.ts     sameMatches (gleiche Ersetzungen in Vorschau und Anwendung)
 │   ├── cheatsheet.ts statische Regex-Referenz (Syntax verbatim, Text als i18n-Key)
-│   ├── reasoning-toggle.ts   modelChoices: Modell-Liste mit dem eingestellten, aber nicht geladenen Modell zuerst
 │   ├── types.ts      gemeinsame Typen (Regel-Entwurf, Treffer, …)
 │   ├── session.ts    Zustandsmaschine inkl. Handpfad
 │   └── settings.ts   Typ + defaults (mergeSettings aus dem Kit) · MAX_HITS

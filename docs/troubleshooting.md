@@ -137,11 +137,11 @@ The endpoint **Apple Intelligence (on-device)** answers through an Apple Shortcu
 
 **Fix:** generate again and let it finish.
 
-## The model list stays empty, or the model is "no longer offered"
+## The model list stays empty, or the model is marked "saved"
 
-**Cause:** The dropdown reads `GET /v1/models` from the active endpoint. The message "The endpoint no longer offers "…". Pick another model." means the saved model is not loaded any more.
+**Cause:** The dropdown reads `GET /v1/models` from the active endpoint. A model entry marked *saved* means the endpoint no longer lists the saved model (it is not loaded any more); the row keeps it selected instead of swapping it silently.
 
-**Fix:** Load the model on the server, use the reload button next to the model dropdown, or pick another model.
+**Fix:** Load the model on the server, use the reload button in the panel's model row, or pick another model.
 
 ## Getting help
 

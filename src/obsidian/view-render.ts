@@ -3,12 +3,9 @@ import type { SessionState } from "../core/session";
 import type { PresetDef, ScopeKind } from "../core/settings";
 import { effectiveFlags } from "../core/regex/compile";
 import { CHEATSHEET } from "../core/cheatsheet";
-import { modelChoices } from "../core/reasoning-toggle";
-import { buildThinkingControl, thinkingOffTexts } from "../vendor/kit-obsidian/thinking-control";
-import type { BackendId, FamilyId, ThinkingLevel } from "../vendor/kit/sampling-profiles";
 import { clipContext } from "../vendor/kit/clip-context";
 import type { Hit, RuleDraft, RuleProblem, Version } from "../core/types";
-import { getLang, t } from "../vendor/kit/i18n";
+import { t } from "../vendor/kit/i18n";
 import type { VaultFilter } from "../core/vault/scope";
 import {
   renderScopeBlock, renderVaultBody,
@@ -25,15 +22,6 @@ export type PanelModel = {
   target: string;
   /** Name der Notiz, an der die Runde haengt — null, solange keine gemerkt ist. */
   pinnedName: string | null;
-  /** Zuletzt vom Endpunkt geladene Modelle; leer, solange nichts geladen wurde. */
-  models: string[];
-  model: string;
-  /** Familie des gewaehlten Modells (aus dem Namen) — sie sagt, ob „aus“ moeglich ist; null, solange kein Modell gewaehlt ist. */
-  family: FamilyId | null;
-  backend?: BackendId | undefined;
-  /** Denkstufe des Modus `structured` und die Stufe, auf die „an“ schaltet. */
-  thinkingLevel: ThinkingLevel;
-  thinkingOnLevel: ThinkingLevel;
   /** Gehoert ins Modell, nicht ins DOM: der Ergebnis-Container wird bei jedem
    *  Live-Update neu gezeichnet und wuerde ein offenes <details> sonst zuklappen. */
   reasoningOpen: boolean;
@@ -64,9 +52,6 @@ export type PanelHandlers = {
   /** Rendert Modell-Text als Markdown in `el` (neutralisiert, mit DOM-Waechter). Fehlt der Haken, bleibt der Text roh in einem <pre>. */
   renderMarkdown?(el: El, text: string): void;
   onSelectVersion(index: number): void;
-  onModel(model: string): void;
-  onRefreshModels(): void;
-  onThinkingLevel(level: ThinkingLevel): void;
   onToggle(index: number): void;
   onSetAll(value: boolean): void;
   onStartManual(): void;
@@ -90,49 +75,6 @@ type El = HTMLElement;
 
 /** Die Container, die ein Teil-Draw neu zeichnen darf. Null ausserhalb der Vorschau. */
 export type PanelParts = { history: El; outcome: El } | null;
-
-/**
- * Modellwahl und Thinking-Schalter direkt im Panel.
- *
- * Beides steht auch in den Einstellungen — aber wer beim Ausprobieren merkt, dass ein
- * anderes Modell besser passt, will nicht durch zwei Dialoge. (Muster aus
- * image-to-markdown, `refreshModels` / `renderThinkToggle`.)
- */
-function modelRow(parent: El, model: PanelModel, handlers: PanelHandlers): void {
-  const row = parent.createDiv({ cls: "transmute-model-row" });
-
-  const select = row.createEl("select", { cls: "transmute-model dropdown" });
-  select.setAttribute("aria-label", t("set.model"));
-  select.createEl("option", { text: t("set.modelAuto"), value: "" });
-  for (const id of modelChoices(model.models, model.model)) {
-    select.createEl("option", { text: id, value: id });
-  }
-  select.value = model.model;
-  select.addEventListener("change", () => handlers.onModel(select.value));
-
-  const refresh = row.createEl("button", { cls: "transmute-model-refresh clickable-icon" });
-  refresh.setAttribute("aria-label", t("set.modelReload"));
-  setIcon(refresh, "refresh-cw");
-  refresh.addEventListener("click", () => handlers.onRefreshModels());
-
-  // Der Denk-Knopf ist der Kit-Baustein (Zustand traegt Text, Icon und aria-pressed, nicht nur Farbe — WCAG 1.4.1).
-  buildThinkingControl({
-    containerEl: row,
-    family: () => model.family,
-    backend: () => model.backend,
-    current: () => model.thinkingLevel,
-    onLevel: () => model.thinkingOnLevel,
-    setLevel: (level) => { handlers.onThinkingLevel(level); return Promise.resolve(); },
-    levelPicker: () => false,
-    strings: {
-      button: (level) => (level === "off" ? t("view.thinkingOff") : t("view.thinkingOn")),
-      // "aus nicht moeglich": Beschriftung und Hinweis aus dem Kit (gpt-oss, gemma 4 auf LM Studio, Claude), in der Sprache der Oberflaeche.
-      offNotPossible: thinkingOffTexts(getLang()),
-      level: (level) => t(`view.thinkingLevel.${level}`),
-      pickerLabel: t("view.thinkingPicker"),
-    },
-  });
-}
 
 function scopeSwitch(parent: El, model: PanelModel, handlers: PanelHandlers): void {
   const row = parent.createDiv({ cls: "transmute-scope" });
@@ -570,8 +512,8 @@ export function renderPanel(root: El, model: PanelModel, handlers: PanelHandlers
   root.empty();
   root.addClass("transmute-panel");
 
-  // Kein eigener Titel: der Reiter traegt ihn bereits (Obsidian-Konvention fuer Panels).
-  modelRow(root, model, handlers);
+  // Kein eigener Titel: der Reiter traegt ihn bereits (Obsidian-Konvention fuer Panels). Die Modellzeile (Kit-Baustein) steht NICHT hier:
+  // dieser Container wird bei jedem Voll-Draw geleert, die Zeile gehoert in einen Behaelter daneben (view.ts, Hub-Panel „work“).
   scopeSwitch(root, model, handlers);
 
   // Der Umfang wird gewaehlt, BEVOR eine Regel existiert — der Block gehoert deshalb in
