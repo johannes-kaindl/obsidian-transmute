@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-10-25
+
 ### Changed
 
 - **Kit pin raised to obsidian-kit 0.70.0 and code-kit 0.37.5.** The chat-window changes of that release are not used here; the other effects are listed below.
