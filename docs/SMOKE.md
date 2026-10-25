@@ -52,7 +52,7 @@ aus der **laufenden** Instanz (`app.vault.adapter.basePath`), nicht aus einer Ko
 er dockt per `--vault` an ein beliebiges Fenster an, und ein konfigurierter Pfad prüfte
 sonst eine Datei, die mit dem Lauf nichts zu tun hat.
 
-## Prüfpunkte (25)
+## Prüfpunkte (nach Bereichen)
 
 | Bereich | Was gemessen wird |
 |---|---|
