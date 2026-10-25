@@ -65,6 +65,7 @@ sonst eine Datei, die mit dem Lauf nichts zu tun hat.
 | Event-Loop | **Renderer atmet während des Laufs** (s. u.) |
 | Einstellungen | Bereich „Vault" überlebt Setter **und** Neuladen |
 | i18n | kein roher Übersetzungs-Schlüssel im Panel |
+| Claude (CL1–CL3) | der Claude-Eintrag des Managers kommt nur mit Opt-in und das Plugin wählt ihn · Lauf gegen den Anthropic-Stub: `x-api-key`, `anthropic-version`, `model`, `max_tokens`, **kein `temperature` im Body**, `override-dropped` in „Letzte Anfrage“ · 529 `overloaded_error` endet im Fehlerzustand mit der Meldung der API |
 
 ### Der Prüfpunkt, um den es eigentlich geht
 
@@ -75,6 +76,12 @@ zweimal war der Lauf schlicht kürzer als der Freigabe-Takt. Der Punkt eicht des
 die Timer-Kette des Fensters und meldet die Bedingungen im Ergebnis mit.
 
 ## Durchläufe
+
+### 2026-10-25 — Obsidian 1.14.5, Welle 26 (Pin obsidian-kit 0.69.1 / code-kit 0.36.0, Claude-Opt-in) · **56 grün · 0 rot · 2 übersprungen · 0 nichts gemessen von 58**
+
+Vorher (Baseline, Pin 0.61.0/0.34.0, Staging-Vault `obsidian-transmute` neu mit `lab:vault --notes 400` angelegt): 53 grün · 0 rot · 1 übersprungen · 1 nichts gemessen von 55. Die zwei Punkte „Renderer atmet“ und „Abbrechen“ sind im 400-Notizen-Vault nicht messbar (der Lauf ist nach 65 bis 92 ms durch, unter dem Freigabe-Takt von 250 ms) und kamen in den späteren Läufen als „übersprungen“, im ersten Baseline-Lauf als „nichts gemessen“; wie vor Welle 20 zwei Übersprungene, kein Befund am Plugin. Neu sind CL1–CL3 (Abschnitt `Claude`): der Fake-Manager mit `transport: "anthropic"` und der Anthropic-Modus des zentralen Stubs. CL2 liest „Letzte Anfrage“ aus `display()` des Einstellungs-Tabs (`.okit-request-deviation`): „Request values not sent, the model does not accept them: temperature.“ CL3 braucht zwei 529-Antworten, denn der Client wiederholt bei 5xx einmal; mit nur einer kam die Regel durch und der Punkt war rot (Treiberfehler, behoben).
+
+Gegenprobe, jeder Punkt einzeln rot gemacht: (A) falscher Schlüssel im Fake-Manager → CL2 und CL3 rot (`invalid x-api-key`); (B) keine 529-Antwort → CL3 rot, CL1/CL2 grün; (C) `anthropic: true` aus dem Build entfernt, gebaut und deployt, frischer Prozess → CL1, CL2, CL3 rot (Backend `unknown`, 0 Anfragen am Stub, CL3 meldet „has no usable endpoint“). Danach Build und Treiber wie vorher.
 
 ### 2026-10-12 — Obsidian 1.14.4, Welle 20 (B2: Pin obsidian-kit 0.59.0, Brücke `fc71211`) · **48 grün · 0 rot · 2 übersprungen von 50**
 

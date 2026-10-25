@@ -145,6 +145,11 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
     "S4 Lauf oeffnet die shortcuts://-URL mit dem gefalteten Prompt",
     "S5 Zeitueberschreitung des Kurzbefehls zeigt die Kurzbefehl-Meldung",
   ],
+  Claude: [
+    "CL1 Fake-Manager mit Anbieter anthropic: der Endpunkt kommt nur mit Opt-in, das Plugin waehlt ihn",
+    "CL2 Lauf gegen den Claude-Stub: Messages-API mit Schluessel, kein temperature im Body, override-dropped in Letzte Anfrage, die Regel kommt zurueck",
+    "CL3 Fehler der API (529 overloaded): der Lauf endet im Fehlerzustand mit der Meldung der API",
+  ],
   Hilfe: ["H1 Hilfe-Zeile ist die erste Zeile der Einstellungen"],
   Denken: [
     "D1 Denk-Knopf (Kit-Baustein) schaltet die Stufe des Modus structured und zeigt den Zustand",
@@ -1520,6 +1525,135 @@ async function abschnittApple(cdp: Cdp): Promise<void> {
   }
 }
 
+/** CL1–CL3 — Claude (Anthropic API) ueber den LLM Endpoint Manager (Kit 0.62.0, Opt-in `transports.anthropic` in `src/main.ts`).
+ *  Gegenstelle: der zentrale LLM-Stub im Anthropic-Modus (Messages-API; geprueft werden `x-api-key`, `anthropic-version`, `model`,
+ *  `max_tokens`). Kein Aufruf an api.anthropic.com, kein Schluessel, kein Modell. Der Weg ist ohne Strom (`stream: false`, Antwort als
+ *  eine Nachricht). Der Fake-Manager liefert den Claude-Eintrag in `list()` und `resolve()` nur, wenn der Aufrufer `transports` mit
+ *  `anthropic` verlangt; entfernt man den Opt-in aus `main.ts`, sieht das Plugin ihn nie (CL1 rot). */
+const CLAUDE_MODELL = "claude-haiku-5-5";
+const CLAUDE_SCHLUESSEL = "sk-ant-smoke-transmute";
+
+async function abschnittClaude(cdp: Cdp): Promise<void> {
+  const [CL1, CL2, CL3] = ABSCHNITTE.Claude as [string, string, string];
+  if (await cdp.evaluate<boolean>(`return !!app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}];`)) {
+    for (const n of [CL1, CL2, CL3]) unmeasured(n, "ein llm-endpoint-manager ist im Vault aktiv; die Fake-API wuerde ihn verdecken");
+    return;
+  }
+  const draft = { regex: "foo", flags: "", replacement: "bar", explanation: "e" };
+  const stub = await startLlmStub({
+    anbieter: "anthropic",
+    schluessel: CLAUDE_SCHLUESSEL,
+    models: [{ id: CLAUDE_MODELL, capabilities: { effort: { supported: true }, thinking: { types: { adaptive: { supported: true } } } } }],
+    standard: { text: JSON.stringify(draft), model: CLAUDE_MODELL },
+  });
+  const vor = await cdp.evaluate<{ endpoints: unknown; choice: unknown }>(
+    `const s = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings; return { endpoints: s.endpoints, choice: s.choice };`,
+  );
+  try {
+    await installFakeManager(cdp, {
+      pluginId: MANAGER_PLUGIN_ID,
+      endpunkte: [{
+        id: "fake-claude", label: "Claude API", url: stub.url, models: [CLAUDE_MODELL], defaultModel: CLAUDE_MODELL, configModel: "default",
+        provider: "anthropic", backend: "anthropic", apiKey: CLAUDE_SCHLUESSEL, hasSecret: true, transport: "anthropic",
+      }],
+      invalidiere: [PLUGIN_ID],
+    });
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.choice = {};
+      await p.saveSettings();
+      p.llm.invalidate();
+      return true;
+    `);
+
+    // CL1 — `ohne`/`mit` messen nur den Filter des Fakes (Kontrolle am Fake); die Verdrahtung beweist `plugin.llm.source()`.
+    const sicht = await cdp.evaluate<{ ohne: number; mit: number; quelle: string; modell: string; familie: string | null; backend: string }>(`
+      const api = app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}].api;
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.llm.invalidate();
+      await p.llm.resolve({ force: true });
+      const src = p.llm.source();
+      return {
+        ohne: api.list({ capability: "chat" }).length,
+        mit: api.list({ capability: "chat", transports: ["http", "anthropic"] }).length,
+        quelle: src.backendSource, modell: src.model, familie: src.family, backend: src.backend,
+      };
+    `);
+    record(CL1, sicht.ohne === 0 && sicht.mit === 1 && sicht.quelle === "manager" && sicht.modell === CLAUDE_MODELL && sicht.backend === "anthropic" && sicht.familie === "claude",
+      `Kontrolle am Fake: list() ohne transports ${sicht.ohne}, mit ["http","anthropic"] ${sicht.mit}; Plugin: Backend ${sicht.backend} (Quelle ${sicht.quelle}), Familie ${sicht.familie}, Modell ${sicht.modell}`);
+
+    // CL2 — ein Lauf wie vom Generieren-Knopf; danach die Anfrage am Stub und „Letzte Anfrage“ in den Einstellungen.
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      void p.sessionInstance.generate("Smoke-Test: ersetze foo", "foo bar");
+      return true;
+    `);
+    const ergebnis = await pollUntil<{ phase: string; regex: string | null }>(
+      cdp,
+      `const st = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].sessionInstance.state;
+       if (st.phase === "preview") return { phase: st.phase, regex: st.versions[st.active].rule.regex };
+       if (st.phase === "error") return { phase: st.phase, regex: null };
+       return null;`,
+      15_000,
+      250,
+    );
+    const nachrichten = stub.anfragen().filter((a) => a.route === "messages");
+    const letzte = nachrichten.at(-1);
+    const body = (letzte?.json ?? {}) as Record<string, unknown>;
+    const kopf = letzte?.header ?? {};
+    const verboten = ["temperature", "top_p", "top_k", "min_p", "presence_penalty"].filter((k) => k in body);
+    const abweichungen = await cdp.evaluate<string[] | null>(`
+      const tab = (app.setting?.pluginTabs ?? []).find((x) => x.id === ${JSON.stringify(PLUGIN_ID)});
+      if (!tab) return null;
+      tab.display();
+      return [...tab.containerEl.querySelectorAll(".okit-request-deviation")].map((e) => e.textContent || "");
+    `);
+    const sichtbar = abweichungen !== null && abweichungen.some((t) => /temperature/.test(t));
+    const draht = nachrichten.length > 0 && kopf["x-api-key"] === CLAUDE_SCHLUESSEL && typeof kopf["anthropic-version"] === "string"
+      && body.model === CLAUDE_MODELL && typeof body.max_tokens === "number" && verboten.length === 0;
+    record(CL2, ergebnis !== null && ergebnis.phase === "preview" && ergebnis.regex === "foo" && draht && sichtbar,
+      `Phase ${ergebnis?.phase ?? "keine Antwort"}, Regel „${ergebnis?.regex ?? "-"}“; Anfragen ${nachrichten.length}, x-api-key ${kopf["x-api-key"] === CLAUDE_SCHLUESSEL ? "ok" : "FALSCH"}, anthropic-version ${String(kopf["anthropic-version"])}, model ${String(body.model)}, max_tokens ${String(body.max_tokens)}, stream ${String(body.stream)}, verbotene Felder: ${verboten.length === 0 ? "keine" : verboten.join(",")}; Letzte Anfrage: ${abweichungen === null ? "kein Einstellungs-Tab" : sichtbar ? JSON.stringify(abweichungen.find((t) => /temperature/.test(t))) : `keine Abweichung zu temperature (${abweichungen.length} Zeile(n))`}`);
+
+    // CL3 — die API antwortet 529 overloaded_error: der Lauf endet im Fehlerzustand mit deren Meldung.
+    // Zwei gleiche Eintraege: ein Wiederholen des Clients (5xx) soll den Fehler nicht wegmachen; die Zahl der Anfragen steht im Detail.
+    const fehler529 = { status: 529, fehler: "Overloaded", fehlerTyp: "overloaded_error" };
+    stub.antworten([fehler529, fehler529]);
+    const anfragenVorCL3 = stub.anfragen().filter((a) => a.route === "messages").length;
+    // Die Sitzung steht nach CL2 noch in „preview“: ein Endzustand zaehlt erst, wenn er NACH diesem Anstoss entstanden ist
+    // (Fehler, oder eine Vorschau mit mehr Versionen als vorher).
+    const versionenVorher = await cdp.evaluate<number>(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      void p.sessionInstance.generate("Smoke-Test: ersetze foo noch einmal", "foo bar");
+      return p.sessionInstance.state.phase === "preview" ? p.sessionInstance.state.versions.length : 0;
+    `);
+    const ende = await pollUntil<{ phase: string; key: string; args: string }>(
+      cdp,
+      `const st = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].sessionInstance.state;
+       if (st.phase === "error") return { phase: st.phase, key: st.messageKey, args: (st.args ?? []).join(" | ") };
+       if (st.phase === "preview" && st.versions.length > ${versionenVorher}) return { phase: st.phase, key: "", args: "" };
+       return null;`,
+      30_000,
+      300,
+    );
+    record(CL3, ende !== null && ende.phase === "error" && /overload|529/i.test(`${ende.key} ${ende.args}`),
+      ende === null ? "Sitzung erreichte keinen Endzustand" : `Phase ${ende.phase}, Schluessel ${ende.key || "-"}, Meldung ${JSON.stringify(ende.args.slice(0, 100))}, Anfragen am Stub ${stub.anfragen().filter((a) => a.route === "messages").length - anfragenVorCL3}`);
+  } catch (e) {
+    for (const n of [CL1, CL2, CL3]) if (!bilanz.eintraege().some((x) => x.name === n)) unmeasured(n, `Messung abgebrochen: ${(e as Error).message}`);
+  } finally {
+    await schliesseEinstellungen(cdp).catch(() => undefined);
+    await fakeManagerAus(cdp).catch(() => undefined);
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = ${JSON.stringify(vor.endpoints)};
+      p.settings.choice = ${JSON.stringify(vor.choice)};
+      await p.saveSettings();
+      p.llm.invalidate();
+      return true;
+    `).catch(() => undefined);
+    await stub.stop().catch(() => undefined);
+  }
+}
+
 /** G1: Das globale Modell ist abgeloest (Welle 17). Ein Altwert in der data.json steht nach dem Laden in der
  *  Endpunkt-Zeile, der Altschluessel ist aus der Datei verschwunden, die Einstellungen kennen weder eine Zeile
  *  „Model“ noch die Zeilenoption „global model“. Gegenprobe: mit dem Build von vor Welle 17 schlaegt er fehl. */
@@ -1941,6 +2075,7 @@ async function main(): Promise<void> {
     await abschnitt("Gemma", () => abschnittGemma(cdp));
     await abschnitt("Manager", () => abschnittManager(cdp));
     await abschnitt("Apple Intelligence", () => abschnittApple(cdp));
+    await abschnitt("Claude", () => abschnittClaude(cdp));
     await abschnitt("Hilfe", () => abschnittHilfe(cdp));
     await abschnitt("Denken", () => abschnittDenken(cdp));
     await abschnitt("Globales Modell", () => abschnittGlobalesModell(cdp));
