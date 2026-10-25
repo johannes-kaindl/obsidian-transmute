@@ -8,7 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **Kit pin raised to obsidian-kit 0.70.0 and code-kit 0.37.5.** Nothing else of the kit's chat window changes is used here.
+- **Links in rendered model answers lose dangerous targets.** The panel renders answers through the kit's guard, which now also strips link targets: `javascript:`, `data:`, `vbscript:`, `file:` and `app:` always, and `obsidian://` links unless allowed (off by default). A link that is stripped keeps its look but has no target. Pictures were never affected here (model Markdown images are already turned into text before rendering). `http`, `https`, `mailto` and note links stay.
 - **For a model that cannot switch thinking off, the button reads "Thinking: lowest level"** instead of "Thinking: minimal", and its tooltip and screen-reader name give the reason ("Thinking can't be fully turned off here; the lowest available level is sent."). The text now comes from the shared kit, so it is the same in every plugin that has the button, in German as well ("Denken: niedrigste Stufe").
+
+### Fixed
+
+- **A secret restored into a JSON answer comes back unchanged.** A value that the redaction had hidden (a private key whose line breaks are written as `\n` in the source JSON) was escaped a second time when it was put back, so the key differed from the original. The kit now recognises an already escaped original and inserts it as it is.
 
 ## [0.15.0] — 2026-10-25
 

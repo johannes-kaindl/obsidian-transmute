@@ -1,4 +1,4 @@
-// vendored from code-kit@0.36.0, src/ts/pure/text-anchor.ts — do not hand-edit; re-vendor via tools/sync-kit.sh
+// vendored from code-kit@0.37.5, src/ts/pure/text-anchor.ts — do not hand-edit; re-vendor via tools/sync-kit.sh
 /** Find a quoted passage again in a text that has changed since it was quoted — by the words, not by the position.
  *
  *  Origin: obsidian-transmute `src/core/anchor.ts` `locateRegion` (49fd3cd, blob b6fde824): check the stored position, else take the one

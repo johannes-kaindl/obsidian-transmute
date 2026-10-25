@@ -1,4 +1,4 @@
-// vendored from code-kit@0.36.0, src/ts/pure/clip-context.ts — do not hand-edit; re-vendor via tools/sync-kit.sh
+// vendored from code-kit@0.37.5, src/ts/pure/clip-context.ts — do not hand-edit; re-vendor via tools/sync-kit.sh
 /** Clip the text around a hit to `radius` characters on each side, so a list of hits in one line shows only what differs.
  *
  *  Origin: obsidian-transmute `src/core/snippet.ts` `clipContext` (8626db9, blob 6e2f5bad), taken over unchanged — signature and
