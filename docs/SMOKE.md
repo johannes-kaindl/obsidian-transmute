@@ -78,6 +78,12 @@ die Timer-Kette des Fensters und meldet die Bedingungen im Ergebnis mit.
 
 ## Durchläufe
 
+### 2026-10-25 — Obsidian 1.14.5, Welle 27 (Pin obsidian-kit 0.70.0 / code-kit 0.37.5, Modellzeile des Kits) · **60 grün · 0 rot · 2 übersprungen · 0 nichts gemessen von 62**
+
+Vorher (Baseline, Pin 0.69.1/0.36.0, HEAD `62dfabf`): 56 grün · 0 rot · 1 übersprungen · 1 nichts gemessen von 58; die zwei Punkte „Renderer atmet“ und „Abbrechen“ sind im 400-Notizen-Vault nicht messbar und wechseln je Lauf zwischen „übersprungen“ und „nichts gemessen“. MZ1–MZ4 neu, G2 läuft über das Dropdown der Zeile.
+
+**Rot gesehen vor dem Bau**, an einer Kopie des Stands davor mit dem neuen Treiber: MZ1, MZ2, MZ3, MZ4 und G2 rot (die Zeile fehlt), 55 grün. **Mutationen, je rot:** Sperre entfernt → MZ3; Zeile in den gezeichneten Bereich gelegt → MZ1–MZ4 und G2 (D1 nichts gemessen); `update()` im Voll-Draw entfernt → MZ3; `destroy()` in `onClose` entfernt → der Unit-Test „onClose meldet die Zeile ab“ (am DOM des Treibers nicht zu sehen). `--klick-gegenprobe`: D1, D2 und alle klickabhängigen Punkte rot oder nichts gemessen; MZ1–MZ4 und G2 bleiben grün, weil sie das Dropdown über `change`-Ereignisse bedienen und nichts anklicken (ein Mausklick auf ein `<select>` wählt nichts). Sichtprüfung hell und dunkel, 520 und 280 px (bei 280 px steht der Denk-Knopf unter dem Dropdown: Verhalten des Kits).
+
 ### 2026-10-25 — Obsidian 1.14.5, Welle 26 (Pin obsidian-kit 0.69.1 / code-kit 0.36.0, Claude-Opt-in) · **56 grün · 0 rot · 2 übersprungen · 0 nichts gemessen von 58**
 
 Vorher (Baseline, Pin 0.61.0/0.34.0, Staging-Vault `obsidian-transmute` neu mit `lab:vault --notes 400` angelegt): 53 grün · 0 rot · 1 übersprungen · 1 nichts gemessen von 55. Die zwei Punkte „Renderer atmet“ und „Abbrechen“ sind im 400-Notizen-Vault nicht messbar (der Lauf ist nach 65 bis 92 ms durch, unter dem Freigabe-Takt von 250 ms) und kamen in den späteren Läufen als „übersprungen“, im ersten Baseline-Lauf als „nichts gemessen“; wie vor Welle 20 zwei Übersprungene, kein Befund am Plugin. Neu sind CL1–CL3 (Abschnitt `Claude`): der Fake-Manager mit `transport: "anthropic"` und der Anthropic-Modus des zentralen Stubs. CL2 liest „Letzte Anfrage“ aus `display()` des Einstellungs-Tabs (`.okit-request-deviation`): „Request values not sent, the model does not accept them: temperature.“ CL3 braucht zwei 529-Antworten, denn der Client wiederholt bei 5xx einmal; mit nur einer kam die Regel durch und der Punkt war rot (Treiberfehler, behoben).

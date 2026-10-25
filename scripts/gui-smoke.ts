@@ -1797,7 +1797,7 @@ async function denkenOhneAus(cdp: Cdp): Promise<void> {
     if (!aus.da) { unmeasured(NAME, "kein .okit-thinking-toggle im Panel gefunden"); return; }
     // Abnahme am Bild (nicht Teil der Bilanz): die Modellzeile mit dem ehrlichen Label, Ablage ueber $SHOT_DIR.
     if (process.env.SHOT_DIR) {
-      const box = await boxOf(cdp, ".transmute-model-row", 0);
+      const box = await boxOf(cdp, ".transmute-model-host", 0);
       mkdirSync(process.env.SHOT_DIR, { recursive: true });
       writeFileSync(join(process.env.SHOT_DIR, "thinking-gpt-oss.png"), await capture(cdp, box ?? undefined));
     }
@@ -2064,6 +2064,22 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
     if (!(await zeileOeffnen(cdp, "mz-b"))) {
       for (const n of [MZ2, MZ3]) record(n!, false, "Die Modellzeile mit den Modellen des Stubs kam in 10 s nicht ins Panel");
     } else {
+      // Sichtpruefung (Regel 12, nicht Teil der Bilanz): die Zeile hell und dunkel, in der breiten und der schmalen (280 px) Seitenleiste. Nur mit $SHOT_DIR.
+      if (process.env.SHOT_DIR) {
+        mkdirSync(process.env.SHOT_DIR, { recursive: true });
+        const war = await cdp.evaluate<boolean>(`return document.body.classList.contains("theme-dark");`);
+        for (const breite of [520, 280]) {
+          await cdp.evaluate(`const r = app.workspace.rightSplit; if (r && typeof r.setSize === "function") r.setSize(${breite}); return true;`);
+          await new Promise((r) => setTimeout(r, 500));
+          for (const dunkel of [false, true]) {
+            await cdp.evaluate(`document.body.classList.toggle("theme-dark", ${dunkel}); document.body.classList.toggle("theme-light", ${!dunkel}); return true;`);
+            await new Promise((r) => setTimeout(r, 300));
+            const box = await boxOf(cdp, `.workspace-leaf-content[data-type="${VIEW_TYPE}"]`, 8);
+            if (box) writeFileSync(join(process.env.SHOT_DIR, `mz-${dunkel ? "dunkel" : "hell"}-${breite}.png`), await capture(cdp, box, 2));
+          }
+        }
+        await cdp.evaluate(`document.body.classList.toggle("theme-dark", ${war}); document.body.classList.toggle("theme-light", ${!war}); return true;`);
+      }
       // MZ2 — ein Voll-Draw: Bereich wechseln. Die Zeile markieren und fokussieren; ein Feld im gezeichneten Bereich als Gegenprobe markieren.
       await zeileWaehlen(cdp, "mz-b");
       await pollUntil<boolean>(cdp, `return ${P}.llm.modelInUse() === "mz-b" ? true : null;`, 6_000, 200);
