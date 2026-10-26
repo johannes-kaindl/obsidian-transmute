@@ -238,7 +238,7 @@ change correctness — only response latency and, for some models, answer qualit
 
 Transmute can ask Apple's on-device model to write the pattern instead of a server. The request runs through an Apple Shortcut, so nothing leaves your device and no server has to run.
 
-1. Install the **LLM Endpoint Manager** plugin, version 0.4.0 or newer, and set up its endpoint **Apple Intelligence (on-device)**. The endpoint and the shortcut it calls are created there; the setup is described at <https://uplink.jkaindl.de/apple-shortcuts>.
+1. Install the **LLM Endpoint Manager** plugin, version 0.4.0 or newer, and set up its endpoint **Apple Intelligence (on-device)**. The endpoint and the shortcut it calls are created there; the setup is described at <https://jkaindl.de/uplink/apple-shortcuts/>.
 2. Open **Settings → Community plugins → Transmute**.
 3. In the **Endpoint** dropdown, pick **Apple Intelligence (on-device)**.
 4. Leave the row's model empty. The shortcut decides which model answers.
