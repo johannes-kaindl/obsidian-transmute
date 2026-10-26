@@ -882,3 +882,8 @@
 @media (prefers-reduced-motion: reduce) { .okit-model-bar-refresh.is-loading svg { animation: none; } .okit-model-bar-refresh.is-loading { opacity: 0.5; } }
 .okit-model-bar .okit-thinking-control { flex: 0 0 auto; }
 .okit-model-bar-status { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; white-space: nowrap; }
+
+/* Denktext des Modells: ein vom Wächter gekappter Link (ohne `href`) sieht aus wie Text. Die zwei Regeln von STREAM_AREA_CSS (obsidian-kit 0.72.0,
+   dort unter `.okit-stream-body`) mit eigenem Vorfahren; ein Link mit `href` bleibt unverändert. */
+.transmute-reasoning-body a:not([href]) { color: inherit; text-decoration: none; cursor: inherit; }
+.transmute-reasoning-body a.external-link:not([href]) { background-image: none; padding-right: 0; }
