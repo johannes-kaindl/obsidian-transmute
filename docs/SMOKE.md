@@ -79,6 +79,10 @@ die Timer-Kette des Fensters und meldet die Bedingungen im Ergebnis mit.
 
 ## Durchläufe
 
+### 2026-10-26 — Obsidian 1.14.5, Welle 28 (Pin obsidian-kit 0.72.0 / code-kit 0.38.0, LK1 neu) · **61 grün · 0 rot · 1 übersprungen · 1 nichts gemessen von 63**
+
+Baseline davor 60 grün · 0 rot · 1 übersprungen · 1 nichts gemessen von 62 (Pin 0.70.0). Die zwei Zeitpunkte-Punkte („Renderer atmet“ nicht gemessen: der Lauf kam in 2 s nicht an; „Abbrechen“ übersprungen: der Lauf war beim Klick fertig) sind in beiden Läufen gleich, unter Last. LK1 (Link-Wächter im Denktext) neu grün; Mutation (die zwei Regeln für `.transmute-reasoning-body` entfernt): LK1 rot (gekappter Link violett, unterstrichen, Zeiger, Icon, 13,5 px Abstand). Lauf mit `--exclusive all`.
+
 ### 2026-10-25 — Obsidian 1.14.5, Welle 27 (Pin obsidian-kit 0.70.0 / code-kit 0.37.5, Modellzeile des Kits) · **60 grün · 0 rot · 2 übersprungen · 0 nichts gemessen von 62**
 
 Vorher (Baseline, Pin 0.69.1/0.36.0, HEAD `62dfabf`): 56 grün · 0 rot · 1 übersprungen · 1 nichts gemessen von 58; die zwei Punkte „Renderer atmet“ und „Abbrechen“ sind im 400-Notizen-Vault nicht messbar und wechseln je Lauf zwischen „übersprungen“ und „nichts gemessen“. MZ1–MZ4 neu, G2 läuft über das Dropdown der Zeile.
