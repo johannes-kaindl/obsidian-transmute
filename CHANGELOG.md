@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.16.1] — 2026-10-26
+
 ### Fixed
 
 - **A link the guard cut in the model's thinking text now looks like text.** The guard removes the target of a dangerous link (`javascript:…`, an Obsidian link) but kept its class, so it stayed violet, underlined, with a pointer and an arrow icon and did nothing. In the "Reasoning" block it now has the colour of the text around it, no underline, no pointer and no icon; links with a target stay as they are.
