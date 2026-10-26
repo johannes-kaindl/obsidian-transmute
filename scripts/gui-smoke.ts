@@ -131,6 +131,7 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
     "V4 Schwaerzung mit PEM: das JSON bleibt gueltig, das mehrzeilige Original ist da",
   ],
   Gemma: ["K1 Gemma-Stub: Denken ohne Oeffner vor <channel|> im Antworttext, die Regel ist die Antwort, nicht ein Entwurf aus dem Denken"],
+  Linkschutz: ["LK1 Link-Waechter: ein gekappter Link im Denktext sieht aus wie Text (Farbe, Unterstrich, Zeiger, Icon), ein Link mit Ziel bleibt ein Link"],
   Manager: [
     "M1 Einstellungen zeigen den Manager statt der lokalen Liste",
     "M2 Lauf nutzt den Manager-Endpunkt und dessen Standardmodell",
@@ -1110,6 +1111,63 @@ async function abschnittGemma(cdp: Cdp): Promise<void> {
     );
     record(NAME, fertig !== null && fertig.phase === "preview" && fertig.regex === "foo",
       fertig === null ? "keine Antwort innerhalb 15s" : `Phase ${fertig.phase}, Regel „${fertig.regex ?? "(Fehler)"}“${fertig.fehler !== "" ? ` · ${fertig.fehler}` : ""}`);
+  } finally {
+    await stub.stop().catch(() => undefined);
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = ${JSON.stringify(vor)};
+      await p.saveSettings();
+      p.llm.invalidate();
+      return true;
+    `).catch(() => undefined);
+  }
+}
+
+// --- Abschnitt: Linkschutz (Welle 28) ---------------------------------------------
+
+/** Der Denktext des Modells geht durch `neutralizeModelMarkdown` und den DOM-Waechter (`renderMarkdownGuarded`, `.transmute-reasoning-body`). Der Waechter
+ *  nimmt einem gefaehrlichen Link das `href`, laesst aber Klasse und Pfeil stehen: ohne die zwei Regeln der Kopie von `STREAM_AREA_CSS` (Kit 0.72.0, hier mit
+ *  eigenem Vorfahren) sieht der Link weiter aus wie einer und tut nichts. Gemessen im echten Renderer am echten Weg (Gemma-Stub: Denktext vor `<channel|>`). */
+async function abschnittLinkschutz(cdp: Cdp): Promise<void> {
+  const NAME = ABSCHNITTE.Linkschutz![0]!;
+  const MODELL = "google/gemma-4-e4b";
+  const DENKEN = "Ich pruefe [gekappt](javascript:alert(1)) und [Ziel](https://example.org/x) und rechne dann.";
+  const draft = { regex: "foo", flags: "", replacement: "bar", explanation: "e" };
+  const stub = await startLlmStub({ models: [MODELL], antwort: () => ({ text: `${DENKEN}<channel|>${JSON.stringify(draft)}`, model: MODELL }) });
+  const vor = await cdp.evaluate<unknown>(`return app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.endpoints;`);
+  try {
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = [{ url: ${JSON.stringify(stub.url)}, model: ${JSON.stringify(MODELL)} }];
+      await p.saveSettings();
+      p.llm.invalidate();
+      await p.llm.resolve({ force: true });
+      void p.sessionInstance.generate("Smoke: ersetze foo", "foo bar");
+      return true;
+    `);
+    const roh = await pollUntil<string>(
+      cdp,
+      `
+        const st = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].sessionInstance.state;
+        if (st.phase === "error") return JSON.stringify({ fehler: String(st.error ?? st.message ?? "").slice(0, 120) });
+        if (st.phase !== "preview") return null;
+        const zone = document.querySelector(".transmute-reasoning-body");
+        if (!zone || zone.querySelectorAll("a").length < 2) return null;
+        const werte = (a) => { const c = getComputedStyle(a); return { href: a.getAttribute("href"), text: a.textContent, color: c.color, deko: c.textDecorationLine, zeiger: c.cursor, bild: c.backgroundImage, rechts: c.paddingRight }; };
+        return JSON.stringify({ eltern: getComputedStyle(zone).color, links: [...zone.querySelectorAll("a")].map(werte) });
+      `,
+      15_000,
+    );
+    if (roh === null) { unmeasured(NAME, "der Denktext mit zwei Links kam nicht in `.transmute-reasoning-body` an (Vorschau nie erreicht oder Denktext leer)"); return; }
+    const d = JSON.parse(roh) as { fehler?: string; eltern?: string; links?: { href: string | null; text: string; color: string; deko: string; zeiger: string; bild: string; rechts: string }[] };
+    if (d.fehler !== undefined || d.eltern === undefined || d.links === undefined) { unmeasured(NAME, `Lauf endete im Fehler: ${d.fehler ?? "?"}`); return; }
+    const gekappt = d.links.find((l) => l.text === "gekappt");
+    const ziel = d.links.find((l) => l.text === "Ziel");
+    if (!gekappt || !ziel) { unmeasured(NAME, `Links im Denktext: ${JSON.stringify(d.links.map((l) => l.text))}`); return; }
+    const wieText = gekappt.href === null && gekappt.color === d.eltern && gekappt.deko === "none" && gekappt.zeiger !== "pointer" && gekappt.bild === "none" && gekappt.rechts === "0px";
+    const bleibtLink = ziel.href !== null && (ziel.deko !== "none" || ziel.color !== d.eltern || ziel.zeiger === "pointer");
+    record(NAME, wieText && bleibtLink,
+      `gekappt (href ${gekappt.href}): Farbe ${gekappt.color} (Text ${d.eltern}), Linie ${gekappt.deko}, Zeiger ${gekappt.zeiger}, Icon ${gekappt.bild === "none" ? "keins" : "DA"}, Abstand ${gekappt.rechts} · mit Ziel (Gegenprobe): Farbe ${ziel.color}, Linie ${ziel.deko}, Zeiger ${ziel.zeiger}`);
   } finally {
     await stub.stop().catch(() => undefined);
     await cdp.evaluate(`
@@ -2326,6 +2384,7 @@ async function main(): Promise<void> {
     await abschnitt("llm-lab", () => abschnittLlmLab(cdp));
     await abschnitt("Verbindung", () => abschnittVerbindung(cdp));
     await abschnitt("Gemma", () => abschnittGemma(cdp));
+    await abschnitt("Linkschutz", () => abschnittLinkschutz(cdp));
     await abschnitt("Manager", () => abschnittManager(cdp));
     await abschnitt("Apple Intelligence", () => abschnittApple(cdp));
     await abschnitt("Claude", () => abschnittClaude(cdp));
