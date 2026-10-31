@@ -1,31 +1,151 @@
 {
   "sources": {
-    "obsidian-kit": { "ref": "0.72.0" },
-    "code-kit": { "ref": "0.38.0" }
+    "obsidian-kit": {
+      "ref": "0.72.0"
+    },
+    "code-kit": {
+      "ref": "0.38.0"
+    }
   },
   "targets": [
     {
-      "dir": "src/vendor/kit", "source": "code-kit", "from": "src/ts/pure",
-      "modules": ["backend-probe", "capabilities", "cooperative-yield", "endpoint", "endpoint_config", "endpoint_diagnostics", "error_body", "i18n", "model-choice", "model-list-cache", "reasoning", "redact", "rounds", "run-state", "model-context", "embeddings-client", "llm-json", "sampling-profiles", "rotation", "safe-markdown", "secrets", "settings", "sse", "think-splitter", "timeout", "rel-path", "folder-scope", "text-anchor", "clip-context"]
+      "dir": "src/vendor/kit",
+      "source": "code-kit",
+      "from": "src/ts/pure",
+      "modules": [
+        "backend-probe",
+        "capabilities",
+        "cooperative-yield",
+        "endpoint",
+        "endpoint_config",
+        "endpoint_diagnostics",
+        "error_body",
+        "i18n",
+        "model-choice",
+        "model-list-cache",
+        "reasoning",
+        "redact",
+        "rounds",
+        "run-state",
+        "model-context",
+        "embeddings-client",
+        "llm-json",
+        "sampling-profiles",
+        "rotation",
+        "safe-markdown",
+        "secrets",
+        "settings",
+        "sse",
+        "think-splitter",
+        "timeout",
+        "rel-path",
+        {
+          "name": "folder-scope",
+          "ref": "0.44.0"
+        },
+        {
+          "name": "fold-case",
+          "ref": "0.44.0"
+        },
+        "text-anchor",
+        "clip-context"
+      ]
     },
     {
-      "dir": "src/vendor/kit", "source": "code-kit", "from": "src/ts/web",
-      "modules": ["clipboard", "remote-resources", "link-guard"],
-      "rewrite": [["../pure/", "./"]]
+      "dir": "src/vendor/kit",
+      "source": "code-kit",
+      "from": "src/ts/web",
+      "modules": [
+        "clipboard",
+        "remote-resources",
+        "link-guard"
+      ],
+      "rewrite": [
+        [
+          "../pure/",
+          "./"
+        ]
+      ]
     },
     {
-      "dir": "src/vendor/kit", "source": "obsidian-kit", "from": "src/pure",
-      "modules": ["anthropic-wire", "endpoint-secret-hook", "endpoint-source", "override-guard", "shortcut-failure"],
-      "rewrite": [["../vendor/code-kit/pure/", "./"]]
+      "dir": "src/vendor/kit",
+      "source": "obsidian-kit",
+      "from": "src/pure",
+      "modules": [
+        "anthropic-wire",
+        "endpoint-secret-hook",
+        "endpoint-source",
+        "override-guard",
+        "shortcut-failure"
+      ],
+      "rewrite": [
+        [
+          "../vendor/code-kit/pure/",
+          "./"
+        ]
+      ]
     },
     {
-      "dir": "src/vendor/kit-obsidian", "source": "obsidian-kit", "from": "src/obsidian",
-      "modules": ["anthropic-transport", "backend-probe", "chat-client", "chat-transport", "clipboard", "clock", "collapsible", "endpoint-list", "endpoint-secrets", "endpoint-source", "folder-suggest", "help-setting", "hub", "lab-client", "llm-connection", "llm-connection-strings", "endpoint-status-text", "endpoint-plumbing", "embedding-connection", "confirm", "dom-guard", "thinking-control", "model-bar", "model-bar-strings", "model-picker", "plugin-api", "request-section", "request-session", "secrets", "settings_walker", "shortcuts-bridge"],
-      "rewrite": [["../pure/", "../kit/"], ["../vendor/code-kit/pure/", "../kit/"], ["../vendor/code-kit/web/", "../kit/"]]
+      "dir": "src/vendor/kit-obsidian",
+      "source": "obsidian-kit",
+      "from": "src/obsidian",
+      "modules": [
+        "anthropic-transport",
+        "backend-probe",
+        "chat-client",
+        "chat-transport",
+        "clipboard",
+        "clock",
+        "collapsible",
+        "endpoint-list",
+        "endpoint-secrets",
+        "endpoint-source",
+        "folder-suggest",
+        "help-setting",
+        "hub",
+        "lab-client",
+        "llm-connection",
+        "llm-connection-strings",
+        "endpoint-status-text",
+        "endpoint-plumbing",
+        "embedding-connection",
+        "confirm",
+        "dom-guard",
+        "thinking-control",
+        "model-bar",
+        "model-bar-strings",
+        "model-picker",
+        "plugin-api",
+        "request-section",
+        "request-session",
+        "secrets",
+        "settings_walker",
+        "shortcuts-bridge"
+      ],
+      "rewrite": [
+        [
+          "../pure/",
+          "../kit/"
+        ],
+        [
+          "../vendor/code-kit/pure/",
+          "../kit/"
+        ],
+        [
+          "../vendor/code-kit/web/",
+          "../kit/"
+        ]
+      ]
     },
     {
-      "dir": "tests/vendor/kit", "source": "obsidian-kit", "from": "src/testing",
-      "modules": ["kit-css", "obsidian-mock", "linear-probe"]
+      "dir": "tests/vendor/kit",
+      "source": "obsidian-kit",
+      "from": "src/testing",
+      "modules": [
+        "kit-css",
+        "obsidian-mock",
+        "linear-probe"
+      ]
     }
   ]
 }
