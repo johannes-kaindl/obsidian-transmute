@@ -47,6 +47,7 @@ import { attachTo, beimAbbruch, bereiteInstanzVor, Cdp, entferneFakeManager, ins
 import { boxOf, capture } from "../../tools/obsidian-cdp/shot.js";
 import { startLlmStub } from "../../tools/obsidian-cdp/llm-stub.js";
 import { createBilanz, parseArgs, runDriver, Vorbedingung } from "../../tools/obsidian-cdp/bilanz.js";
+import { gegenprobeErreichbarkeit, gegenprobeFokus, messeErreichbarkeit, messeFokusErhalt, mitHoehe, zeichnePflicht } from "../../tools/obsidian-cdp/pflichtpunkte.js";
 import { requireEigenerBuild } from "../../tools/obsidian-cdp/vault.js";
 import { LAB_API_VERSION } from "../src/vendor/kit-obsidian/lab-client";
 
@@ -132,6 +133,13 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
   ],
   Gemma: ["K1 Gemma-Stub: Denken ohne Oeffner vor <channel|> im Antworttext, die Regel ist die Antwort, nicht ein Entwurf aus dem Denken"],
   Linkschutz: ["LK1 Link-Waechter: ein gekappter Link im Denktext sieht aus wie Text (Farbe, Unterstrich, Zeiger, Icon), ein Link mit Ziel bleibt ein Link"],
+  Pflicht: [
+    "P1 Tippen ins Regex-Feld behaelt den Fokus (das Panel zeichnet bei jedem Tastendruck neu)",
+    "P1b Gegenprobe: ein Neuzeichnen mit Fokusverlust macht P1 rot",
+    "P2 Jedes Bedienelement ist erreichbar, auch wenn der Denktext lang wird",
+    "P2b ... im kurzen Panel (420 px)",
+    "P2c Gegenprobe: ohne Rollbalken wird ein Bedienelement unerreichbar",
+  ],
   Manager: [
     "M1 Einstellungen zeigen den Manager statt der lokalen Liste",
     "M2 Lauf nutzt den Manager-Endpunkt und dessen Standardmodell",
@@ -1168,6 +1176,71 @@ async function abschnittLinkschutz(cdp: Cdp): Promise<void> {
     const bleibtLink = ziel.href !== null && (ziel.deko !== "none" || ziel.color !== d.eltern || ziel.zeiger === "pointer");
     record(NAME, wieText && bleibtLink,
       `gekappt (href ${gekappt.href}): Farbe ${gekappt.color} (Text ${d.eltern}), Linie ${gekappt.deko}, Zeiger ${gekappt.zeiger}, Icon ${gekappt.bild === "none" ? "keins" : "DA"}, Abstand ${gekappt.rechts} · mit Ziel (Gegenprobe): Farbe ${ziel.color}, Linie ${ziel.deko}, Zeiger ${ziel.zeiger}`);
+  } finally {
+    await stub.stop().catch(() => undefined);
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = ${JSON.stringify(vor)};
+      await p.saveSettings();
+      p.llm.invalidate();
+      return true;
+    `).catch(() => undefined);
+  }
+}
+
+// --- Abschnitt: Pflichtpunkte (Welle 30) --------------------------------------------
+
+/** Die zwei Pflichtpunkte fuer eine View mit wachsendem Ausgabebereich (Skill `gui-smoke-setup` § 3a, Bausteine `pflichtpunkte.ts`). Der Bereich, in den Text
+ *  hineinwaechst, ist der Denktext des Modells (`.transmute-reasoning-body`, in einem aufgeklappten `<details>`); er liegt im Rollbereich des Hub-Panels
+ *  (`.okit-hub-panel`, `overflow: auto`), die Bedienelemente (Regelfelder, Aktionsknoepfe) liegen im selben Rollbereich. Der Zustand entsteht wie in LK1 ueber den
+ *  Gemma-Stub (Denktext vor `<channel|>`), danach wird der Denktext aufgeklappt. Fokus-Erhalt: das Panel zeichnet bei jedem Tastendruck in der Regel neu
+ *  (`onEditRule`), das Eingabefeld selbst nur beim Voll-Draw. */
+async function abschnittPflicht(cdp: Cdp): Promise<void> {
+  const [P1, P1B, P2, P2B, P2C] = ABSCHNITTE.Pflicht! as readonly [string, string, string, string, string];
+  const MODELL = "google/gemma-4-e4b";
+  const draft = { regex: "foo", flags: "", replacement: "bar", explanation: "e" };
+  const stub = await startLlmStub({ models: [MODELL], antwort: () => ({ text: `Ich denke kurz nach.<channel|>${JSON.stringify(draft)}`, model: MODELL }) });
+  const vor = await cdp.evaluate<unknown>(`return app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.endpoints;`);
+  try {
+    await cdp.evaluate(`
+      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+      p.settings.endpoints = [{ url: ${JSON.stringify(stub.url)}, model: ${JSON.stringify(MODELL)} }];
+      await p.saveSettings();
+      p.llm.invalidate();
+      await p.llm.resolve({ force: true });
+      void p.sessionInstance.generate("Smoke: ersetze foo", "foo bar");
+      return true;
+    `);
+    const da = await pollUntil<boolean>(
+      cdp,
+      `
+        const st = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].sessionInstance.state;
+        if (st.phase === "error") return true;
+        return st.phase === "preview" && !!document.querySelector(".transmute-reasoning-body") && !!document.querySelector(".transmute-actions button") ? true : null;
+      `,
+      15_000,
+    );
+    const phase = await cdp.evaluate<string>(`return app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].sessionInstance.state.phase;`);
+    if (da === null || phase !== "preview") {
+      throw new Vorbedingung(`die Vorschau mit Denktext und Aktionsknoepfen kam nicht zustande (Phase ${phase})`);
+    }
+    // Den Denktext aufklappen: in einem zugeklappten <details> hat der Bereich keine Hoehe und nichts, das ueberlaufen koennte.
+    const offen = await prop<boolean>(cdp, ".transmute-reasoning", "open");
+    if (offen !== true) await click(cdp, ".transmute-reasoning summary");
+    if ((await prop<boolean>(cdp, ".transmute-reasoning", "open")) !== true) throw new Vorbedingung("der Denktext laesst sich nicht aufklappen");
+
+    const ROLL = ".okit-hub-panel:has(.transmute-reasoning-body)";
+    const erreichbar = {
+      selektoren: [".transmute-regex", ".transmute-replacement-input", ".transmute-actions button"],
+      erforderlich: [".transmute-regex", ".transmute-actions button"],
+      fuelle: { in: ".transmute-reasoning-body", zeilen: 120 },
+      ueberlauf: ROLL,
+    };
+    zeichnePflicht(bilanz, P1, await messeFokusErhalt(cdp, { selector: ".transmute-regex" }));
+    zeichnePflicht(bilanz, P1B, await gegenprobeFokus(cdp, { selector: ".transmute-regex" }));
+    zeichnePflicht(bilanz, P2, await messeErreichbarkeit(cdp, erreichbar));
+    zeichnePflicht(bilanz, P2B, await mitHoehe(cdp, { element: ".workspace-leaf", enthaelt: ".transmute-reasoning-body", hoehe: 420 }, () => messeErreichbarkeit(cdp, erreichbar)));
+    zeichnePflicht(bilanz, P2C, await gegenprobeErreichbarkeit(cdp, erreichbar));
   } finally {
     await stub.stop().catch(() => undefined);
     await cdp.evaluate(`
@@ -2385,6 +2458,7 @@ async function main(): Promise<void> {
     await abschnitt("Verbindung", () => abschnittVerbindung(cdp));
     await abschnitt("Gemma", () => abschnittGemma(cdp));
     await abschnitt("Linkschutz", () => abschnittLinkschutz(cdp));
+    await abschnitt("Pflicht", () => abschnittPflicht(cdp));
     await abschnitt("Manager", () => abschnittManager(cdp));
     await abschnitt("Apple Intelligence", () => abschnittApple(cdp));
     await abschnitt("Claude", () => abschnittClaude(cdp));
