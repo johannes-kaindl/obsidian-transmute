@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Das Preset „Zeilenumbrüche in Absätzen entfernen“ lädt auch auf iOS vor 16.4**: das Muster kommt ohne Rückwärtsprüfung aus (`(?<…)` kompiliert dort nicht; Store-Lint 0.5.0 `regex-lookbehind`). Das Ergebnis ist auf einem Korpus aus rund 4000 Zufallstexten und handgeschriebenen Randfällen gleich dem alten; zwei Randfälle weichen bewusst ab (ein nackter Marker direkt vor dem Umbruch, ein `\r` oder U+2028 mitten in der Zeile), die Vorschau markiert jetzt die ganze Zeile statt nur den Umbruch.
+- **Ein gespeichertes Preset mit dem alten Standardmuster wird beim Laden auf das neue gezogen** (nur bei genau gleichem Muster, Flags und Ersetzung; Name und Id bleiben, abgewandelte Presets bleiben unberührt). Wer es beim ersten Start gespeichert hatte, trug das alte Muster weiter.
+
 ## [0.16.1] — 2026-10-26
 
 ### Fixed

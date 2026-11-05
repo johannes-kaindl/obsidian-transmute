@@ -55,3 +55,26 @@ export function removeNewlinesPreset(): PresetDef {
     replacement: "$1 ",
   };
 }
+
+/**
+ * Das Muster bis 0.x: mit Rückwärtsprüfung. Es steht hier NUR, um ein in der `data.json` gespeichertes Preset
+ * wiederzuerkennen (Zeichenvergleich, es wird nie kompiliert). Auf iOS-Safari vor 16.4 wirft schon das
+ * Kompilieren dieser Zeichenkette; wer das Preset beim ersten Start gespeichert hat, trägt sie weiter.
+ * (Eine Suche nach der Rückwärtsprüfung im Quelltext trifft deshalb diese Zeile: sie ist Vergleichsdaten, kein Regex-Literal.)
+ */
+const LEGACY_REMOVE_NEWLINES_REGEX = `(?<=\\S)(?<!^${BLOCK_START}[^\\n]*)\\n(?!\\n)(?!${BLOCK_START})(?=\\S)`;
+
+/**
+ * Zieht ein gespeichertes eingebautes Preset auf das Muster ohne Rückwärtsprüfung, aber NUR, wenn Muster, Flags und
+ * Ersetzung genau dem alten Standard entsprechen (der Nutzer hat nichts angepasst). Name und Id bleiben, ein
+ * abgewandeltes Preset bleibt unberührt. Der Vergleich nimmt keine Id und keinen Namen: ein duplizierter Eintrag mit
+ * dem alten Standardtext bricht auf iOS vor 16.4 genauso. Gibt dieselbe Liste zurück, wenn nichts zu tun ist.
+ */
+export function migrateLegacyRemoveNewlines(presets: PresetDef[]): PresetDef[] {
+  if (!presets.some(isLegacyRemoveNewlines)) return presets;
+  return presets.map((p) => (isLegacyRemoveNewlines(p) ? { ...p, regex: REMOVE_NEWLINES_REGEX, replacement: "$1 " } : p));
+}
+
+function isLegacyRemoveNewlines(p: PresetDef): boolean {
+  return p.regex === LEGACY_REMOVE_NEWLINES_REGEX && p.flags === "m" && p.replacement === " ";
+}

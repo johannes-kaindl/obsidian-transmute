@@ -2,7 +2,7 @@ import { mergeSettings } from "../vendor/kit/settings";
 import { fillMissingRowModels, migrateEndpointList, type EndpointConfig } from "../vendor/kit/endpoint_config";
 import type { EndpointChoice } from "../vendor/kit/endpoint-source";
 import { onLevelFor, sanitizeRequestSettings, type RequestSettings } from "../vendor/kit/sampling-profiles";
-import { removeNewlinesPreset } from "./presets/remove-newlines";
+import { migrateLegacyRemoveNewlines, removeNewlinesPreset } from "./presets/remove-newlines";
 
 export type ScopeKind = "file" | "selection" | "vault";
 
@@ -75,7 +75,8 @@ export function loadSettings(raw: unknown): TransmuteSettings {
   // (alle Presets geloescht) und wird nicht resurrektiert. Ein Wertevergleich koennte beide
   // Faelle nicht unterscheiden, der Schluessel-Check kann es.
   const hadPresetsKey = typeof raw === "object" && raw !== null && "presets" in raw;
-  const presets = hadPresetsKey ? merged.presets : [removeNewlinesPreset()];
+  // Ein gespeichertes Preset mit dem alten Standardmuster (Rückwärtsprüfung, iOS vor 16.4 kompiliert es nicht) wird auf das neue gezogen; abgewandelte bleiben.
+  const presets = hadPresetsKey ? migrateLegacyRemoveNewlines(merged.presets) : [removeNewlinesPreset()];
   const rawChoice = (merged as { choice?: unknown }).choice as EndpointChoice | null | undefined;
   const choice: EndpointChoice = rawChoice && typeof rawChoice === "object"
     ? {

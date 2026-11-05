@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, loadSettings } from "../src/core/settings";
 import { STRINGS } from "../src/core/i18n/strings";
+import { removeNewlinesPreset } from "../src/core/presets/remove-newlines";
 
 describe("loadSettings", () => {
   it("fuellt fehlende Felder aus den Defaults", () => {
@@ -49,5 +50,47 @@ describe("loadSettings", () => {
 describe("i18n", () => {
   it("hat fuer jeden EN-Key einen DE-Key", () => {
     expect(Object.keys(STRINGS.de).sort()).toEqual(Object.keys(STRINGS.en).sort());
+  });
+});
+
+describe("loadSettings — gespeichertes Zeilenumbruch-Preset mit dem alten Muster", () => {
+  // Das Muster bis zur Umstellung auf ein Muster ohne Rückwärtsprüfung, wörtlich aus der alten data.json (Commit 4eac874^).
+  const BLOCK = "(?:#{1,6}\\s|>|[-*+]\\s|\\d+\\.\\s|```|~~~|\\|)";
+  const ALT = `(?<=\\S)(?<!^${BLOCK}[^\\n]*)\\n(?!\\n)(?!${BLOCK})(?=\\S)`;
+  const gespeichert = { id: "builtin-remove-newlines", name: "Zeilenumbrüche in Absätzen entfernen", regex: ALT, flags: "m", replacement: " " };
+  const neu = removeNewlinesPreset();
+
+  it("zieht das unveränderte alte Standardpreset auf das neue Muster, Id und Name bleiben", () => {
+    const [p] = loadSettings({ presets: [gespeichert] }).presets;
+    expect(p.regex).toBe(neu.regex);
+    expect(p.replacement).toBe(neu.replacement);
+    expect(p.flags).toBe("m");
+    expect([p.id, p.name]).toEqual([gespeichert.id, gespeichert.name]);
+    expect(p.regex).not.toContain("(?<");
+  });
+
+  it("lässt ein abgewandeltes Muster unberührt (anderes Muster, andere Flags, andere Ersetzung)", () => {
+    for (const abw of [
+      { ...gespeichert, regex: ALT + "x" },
+      { ...gespeichert, flags: "gm" },
+      { ...gespeichert, replacement: "  " },
+    ]) {
+      expect(loadSettings({ presets: [abw] }).presets).toEqual([abw]);
+    }
+  });
+
+  it("zieht auch einen duplizierten Eintrag mit dem alten Standardtext (andere Id, anderer Name)", () => {
+    const [p] = loadSettings({ presets: [{ ...gespeichert, id: "p-kopie", name: "Meine Kopie" }] }).presets;
+    expect([p.id, p.name, p.regex]).toEqual(["p-kopie", "Meine Kopie", neu.regex]);
+  });
+
+  it("fasst fremde Presets in derselben Liste nicht an", () => {
+    const trim = { id: "p1", name: "Trim", regex: " +$", flags: "gm", replacement: "" };
+    expect(loadSettings({ presets: [trim, gespeichert] }).presets).toEqual([trim, { ...gespeichert, regex: neu.regex, replacement: neu.replacement }]);
+  });
+
+  it("Gegenprobe: die Test-Konstante ist wirklich das alte Muster (kompiliert in dieser Umgebung und entfernt weiche Umbrüche)", () => {
+    const text = "Satz eins\nSatz zwei\n\n- Punkt\nweiter";
+    expect(text.replace(new RegExp(ALT, "m"), " ")).toBe("Satz eins Satz zwei\n\n- Punkt\nweiter");
   });
 });
