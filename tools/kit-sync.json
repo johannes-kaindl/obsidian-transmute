@@ -24,14 +24,20 @@
         "model-choice",
         "model-list-cache",
         "reasoning",
-        "redact",
+        {
+          "name": "redact",
+          "ref": "0.60.0"
+        },
         "rounds",
         "run-state",
         "model-context",
         "embeddings-client",
         "llm-json",
         "sampling-profiles",
-        "rotation",
+        {
+          "name": "rotation",
+          "ref": "0.60.0"
+        },
         "safe-markdown",
         "secrets",
         "settings",

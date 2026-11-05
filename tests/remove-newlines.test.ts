@@ -69,4 +69,48 @@ describe("removeNewlinesPreset", () => {
     const compiled = compileRule({ regex: preset.regex, flags: preset.flags, replacement: "", explanation: "" }, { allowRisky: false });
     expect(compiled.ok).toBe(true);
   });
+
+  it("Differentialtest: byte-gleich zum alten Lookbehind-Muster auf einem Randfall-Korpus", () => {
+    const preset = removeNewlinesPreset();
+    // Das alte Muster (Stand 0.16.1), nur hier als Referenz; Node kennt Lookbehind.
+    const blockStart = "(?:#{1,6}\\s|>|[-*+]\\s|\\d+\\.\\s|```|~~~|\\|)";
+    const oldRe = new RegExp(`(?<=\\S)(?<!^${blockStart}[^\\n]*)\\n(?!\\n)(?!${blockStart})(?=\\S)`, "gm");
+    const newRe = new RegExp(preset.regex, "gm");
+    const corpus = [
+      "", "\n", "a", "a\n", "\na", "a\nb", "a\nb\nc", "a\nb\nc\nd", "a\n\nb", "a\n\n\nb", "a \nb", "a\n b", " a\nb",
+      "a\r\nb", "a\nb\r\nc", "# h\na\nb", "a\n# h\nb", "- x\ny", "x\n- y", "- x\n- y\nz", "-x\ny", "x\n-y", "- \nx",
+      "1. a\nb\nc", "a\nb\n2. c", "10. a\nb", "1.a\nb", "> q\nr\ns", "a\n> q", "| a |\nb", "a\n| b |", "```\nx\ny\n```\nz",
+      "a\n```\nb", "~~~\na\nb", "a\nb\n\n- l\nm\nn\n\nlast", "end\n", "a\nb\n", "a\n\n", "x\ty\nz", "\ta\nb", "a\t\nb", "-\na", "-\na\n", "#\nb", "1.\nb",
+    ];
+    // Zufalls-Korpus aus Bausteinen (fester Startwert, reproduzierbar): Anfang, nach Blockzeichen, Folgen, Ende.
+    // Ohne nackte Marker ("-", "#" direkt vor dem Umbruch) und ohne \r / U+2028 mitten in der Zeile: dort wich das alte Muster
+    // wegen \s = Umbruch bzw. ^ nach \r vom erkennbaren Zweck ab (siehe die beiden Tests darunter).
+    const parts = ["a", "bb", " ", "\n", "\n", "\n\n", "# ", "- ", "* ", "+ ", "1. ", "12. ", "> ", "|", "```", "~~~", "\r\n", "\t", "x y"];
+    let seed = 20260905;
+    const next = (): number => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    for (let i = 0; i < 4000; i++) {
+      let text = "";
+      const n = 1 + Math.floor(next() * 14);
+      for (let j = 0; j < n; j++) text += parts[Math.floor(next() * parts.length)];
+      corpus.push(text);
+    }
+    for (const text of corpus) {
+      expect(text.replace(newRe, "$1 "), JSON.stringify(text)).toBe(text.replace(oldRe, " "));
+      // und ueber den Produktionspfad (compile → runRule → Treffer einsetzen)
+      expect(apply(text), JSON.stringify(text)).toBe(text.replace(oldRe, " "));
+    }
+  });
+
+  it("Differentialtest sieht einen Fehler: ein Muster ohne Zeilenanfang-Pruefung weicht ab", () => {
+    const blockStart = "(?:#{1,6}\\s|>|[-*+]\\s|\\d+\\.\\s|```|~~~|\\|)";
+    const oldRe = new RegExp(`(?<=\\S)(?<!^${blockStart}[^\\n]*)\\n(?!\\n)(?!${blockStart})(?=\\S)`, "gm");
+    const wrong = new RegExp(`^([^\\n]*\\S)\\n(?!\\n)(?!${blockStart})(?=\\S)`, "gm");
+    const text = "- Punkt\nFortsetzung";
+    expect(text.replace(wrong, "$1 ")).not.toBe(text.replace(oldRe, " "));
+  });
+
+  it("bekannte Abweichung: ein nackter Marker vor dem Umbruch sperrt die uebernaechste Zeile nicht mehr", () => {
+    // Altes Muster: \s im Marker frass den Umbruch, "-\na" galt als Listenzeile und sperrte "b".
+    expect(apply("-\na\nb")).toBe("- a b");
+  });
 });
