@@ -126,7 +126,11 @@
         "request-session",
         "secrets",
         "settings_walker",
-        "shortcuts-bridge"
+        "shortcuts-bridge",
+        {
+          "name": "redline",
+          "ref": "0.80.4"
+        }
       ],
       "rewrite": [
         [

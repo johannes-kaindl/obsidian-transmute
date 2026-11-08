@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Die Trefferliste zeigt Treffer und Ersetzung als Redline**: getroffener Text durchgestrichen, Ersetzung unterstrichen, nur als Textfarbe ohne Hintergrundfläche (Kit-Baustein `renderRedline`, obsidian-kit 0.80.4). Vorher setzte das Plugin keine Schriftfarbe und der Text war auf hellem Grund schlecht lesbar. Kontrast gemessen in Standardtheme, Field Report und Kuro, hell und dunkel: mindestens 5,1 zu 1.
+
 ### Fixed
 
 - **Das Preset „Zeilenumbrüche in Absätzen entfernen“ lädt auch auf iOS vor 16.4**: das Muster kommt ohne Rückwärtsprüfung aus (`(?<…)` kompiliert dort nicht; Store-Lint 0.5.0 `regex-lookbehind`). Das Ergebnis ist auf einem Korpus aus rund 4000 Zufallstexten und handgeschriebenen Randfällen gleich dem alten; zwei Randfälle weichen bewusst ab (ein nackter Marker direkt vor dem Umbruch, ein `\r` oder U+2028 mitten in der Zeile), die Vorschau markiert jetzt die ganze Zeile statt nur den Umbruch.

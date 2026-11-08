@@ -6,6 +6,7 @@ import { CHEATSHEET } from "../core/cheatsheet";
 import { clipContext } from "../vendor/kit/clip-context";
 import type { Hit, RuleDraft, RuleProblem, Version } from "../core/types";
 import { t } from "../vendor/kit/i18n";
+import { renderRedline } from "../vendor/kit-obsidian/redline";
 import type { VaultFilter } from "../core/vault/scope";
 import {
   renderScopeBlock, renderVaultBody,
@@ -100,15 +101,19 @@ function hitLine(parent: El, hit: Hit): void {
   // je Treffer zweimal komplett da — das liest sich wie ein doppelter Treffer.
   const { lead, lag } = clipContext(hit.before, localStart, localEnd);
 
-  const before = parent.createDiv({ cls: "transmute-before" });
-  before.createSpan({ text: lead });
-  before.createSpan({ text: hit.matched, cls: "transmute-mark transmute-mark-old" });
-  before.createSpan({ text: lag });
-
-  const after = parent.createDiv({ cls: "transmute-after" });
-  after.createSpan({ text: lead });
-  after.createSpan({ text: hit.replacement, cls: "transmute-mark transmute-mark-new" });
-  after.createSpan({ text: lag });
+  // Trefferzeile ueber die Kit-Redline: alt durchgestrichen, neu unterstrichen, die Farbe ist nur ein
+  // Textton ohne Hintergrundflaeche (Kit `renderRedline`), der Text kann auf keinem Theme-Grund unlesbar werden.
+  const labels = { del: t("view.hit.matched"), ins: t("view.hit.replacement") };
+  renderRedline(parent, [
+    { kind: "same", text: lead },
+    { kind: "del", text: hit.matched },
+    { kind: "same", text: lag },
+  ], { cls: "transmute-before", labels });
+  renderRedline(parent, [
+    { kind: "same", text: lead },
+    { kind: "ins", text: hit.replacement },
+    { kind: "same", text: lag },
+  ], { cls: "transmute-after", labels });
 }
 
 /**

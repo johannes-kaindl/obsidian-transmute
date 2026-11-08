@@ -158,22 +158,41 @@
   color: var(--text-muted);
 }
 
-.transmute-mark {
-  border-radius: var(--radius-s);
-  padding: 0 2px;
+/* Kit-Redline (obsidian-kit src/obsidian/redline.ts, REDLINE_CSS): Treffer und Ersetzung als Textton plus Form, ohne Hintergrundflaeche. */
+.okit-redline {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: var(--line-height-normal);
 }
 
-/* Getroffener Text und Ersetzung: unterschiedlicher Hintergrund UND unterschiedliche
-   Schriftauszeichnung — Farbe allein traegt die Unterscheidung nicht (WCAG 1.4.1). */
-.transmute-mark-old {
-  background-color: var(--background-modifier-error);
+.okit-redline-del {
   text-decoration: line-through;
+  color: var(--color-orange);
 }
 
-.transmute-mark-new {
-  background-color: var(--background-modifier-success);
-  font-weight: var(--font-semibold);
+.okit-redline-ins {
+  text-decoration: underline;
+  color: var(--color-blue);
 }
+
+/* Kontrast 4,5 zu 1: die rohen Akzentfarben der Themes unterschreiten ihn (Orange hell, Blau dunkel, beide in Kuro hell); gegen den Text gemischt halten sie ihn in Standard, Field Report und Kuro. */
+.theme-light .okit-redline-del { color: color-mix(in srgb, var(--color-orange) 60%, var(--text-normal)); }
+.theme-light .okit-redline-ins { color: color-mix(in srgb, var(--color-blue) 60%, var(--text-normal)); }
+.theme-dark .okit-redline-del { color: color-mix(in srgb, var(--color-orange) 80%, var(--text-normal)); }
+.theme-dark .okit-redline-ins { color: color-mix(in srgb, var(--color-blue) 80%, var(--text-normal)); }
+
+.okit-redline-del[data-author="0"],
+.okit-redline-ins[data-author="0"] { color: var(--color-blue); }
+.okit-redline-del[data-author="1"],
+.okit-redline-ins[data-author="1"] { color: var(--color-orange); }
+.okit-redline-del[data-author="2"],
+.okit-redline-ins[data-author="2"] { color: var(--color-purple); }
+.okit-redline-del[data-author="3"],
+.okit-redline-ins[data-author="3"] { color: var(--color-cyan); }
+.okit-redline-del[data-author="4"],
+.okit-redline-ins[data-author="4"] { color: var(--color-yellow); }
+.okit-redline-del[data-author="5"],
+.okit-redline-ins[data-author="5"] { color: var(--color-pink); }
 
 .transmute-actions {
   display: flex;
