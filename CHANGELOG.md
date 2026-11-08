@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-11-08
+
 ### Changed
 
 - **Die Trefferliste zeigt Treffer und Ersetzung als Redline**: getroffener Text durchgestrichen, Ersetzung unterstrichen, nur als Textfarbe ohne Hintergrundfläche (Kit-Baustein `renderRedline`, obsidian-kit 0.80.4). Vorher setzte das Plugin keine Schriftfarbe und der Text war auf hellem Grund schlecht lesbar. Kontrast gemessen in Standardtheme, Field Report und Kuro, hell und dunkel: mindestens 5,1 zu 1.
