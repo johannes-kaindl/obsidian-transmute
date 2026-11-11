@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-11-11
+
 ### Changed
 
 - **When the model's answer is not a usable rule, the follow-up question is now worded by the shared kit** (code-kit `answer-retry`): "Your previous answer was not valid: …" followed by "Answer again with a single valid JSON object and nothing else." (before: "That did not work: …"). The plugin still asks again once per round, and the bad answer goes back with the reason as before.
