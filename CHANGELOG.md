@@ -10,12 +10,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
-- **Die Trefferliste zeigt Treffer und Ersetzung als Redline**: getroffener Text durchgestrichen, Ersetzung unterstrichen, nur als Textfarbe ohne Hintergrundfläche (Kit-Baustein `renderRedline`, obsidian-kit 0.80.4). Vorher setzte das Plugin keine Schriftfarbe und der Text war auf hellem Grund schlecht lesbar. Kontrast gemessen in Standardtheme, Field Report und Kuro, hell und dunkel: mindestens 5,1 zu 1.
+- **The hit list shows matches and replacements as a redline**: matched text is struck through, the replacement is underlined, both only as a text colour without a background fill (the kit's `renderRedline`, obsidian-kit 0.80.4). Before, the plugin set no text colour and the text was hard to read on a light background. Contrast measured in the default theme, Field Report and Kuro, light and dark: at least 5.1 to 1.
 
 ### Fixed
 
-- **Das Preset „Zeilenumbrüche in Absätzen entfernen“ lädt auch auf iOS vor 16.4**: das Muster kommt ohne Rückwärtsprüfung aus (`(?<…)` kompiliert dort nicht; Store-Lint 0.5.0 `regex-lookbehind`). Das Ergebnis ist auf einem Korpus aus rund 4000 Zufallstexten und handgeschriebenen Randfällen gleich dem alten; zwei Randfälle weichen bewusst ab (ein nackter Marker direkt vor dem Umbruch, ein `\r` oder U+2028 mitten in der Zeile), die Vorschau markiert jetzt die ganze Zeile statt nur den Umbruch.
-- **Ein gespeichertes Preset mit dem alten Standardmuster wird beim Laden auf das neue gezogen** (nur bei genau gleichem Muster, Flags und Ersetzung; Name und Id bleiben, abgewandelte Presets bleiben unberührt). Wer es beim ersten Start gespeichert hatte, trug das alte Muster weiter.
+- **The preset "Remove line breaks within paragraphs" now loads on iOS before 16.4**: the pattern needs no lookbehind (`(?<…)` does not compile there; store lint 0.5.0 `regex-lookbehind`). On a corpus of about 4000 random texts and hand-written edge cases the result equals the old one; two edge cases differ on purpose (a bare marker directly before the line break, a `\r` or U+2028 in the middle of a line), and the preview now marks the whole line instead of only the line break.
+- **A saved preset that still carries the old default pattern is moved to the new one when it loads** (only when pattern, flags and replacement are exactly the same; name and id stay, modified presets are left alone). Whoever had saved it on first start kept carrying the old pattern.
 
 ## [0.16.1] — 2026-10-26
 
