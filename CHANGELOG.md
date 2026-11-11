@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **When the model's answer is not a usable rule, the follow-up question is now worded by the shared kit** (code-kit `answer-retry`): "Your previous answer was not valid: …" followed by "Answer again with a single valid JSON object and nothing else." (before: "That did not work: …"). The plugin still asks again once per round, and the bad answer goes back with the reason as before.
+- **A failing endpoint is no longer asked a second time.** Before, a connection error, a Shortcuts error or an answer cut off at the token limit with no usable text started a second call that met the same state; now the error appears at once with the same message as before. Only an invalid answer (no JSON, wrong shape, unsafe pattern, bad flags, pattern that does not compile) is retried.
+
 ## [0.17.0] — 2026-11-08
 
 ### Changed

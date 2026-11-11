@@ -123,13 +123,8 @@ export function buildRefinePrompt(
   return messages;
 }
 
-export function buildRetryPrompt(previous: ChatMessage[], badAnswer: string, problem: string): ChatMessage[] {
-  return [
-    ...previous,
-    { role: "assistant", content: badAnswer },
-    { role: "user", content: `That did not work: ${problem}. Answer again with a single valid JSON object and nothing else.` },
-  ];
-}
+/** Der Schluss der Rueckfrage bei ungueltiger Antwort; Anfang, Problem und die kaputte Antwort baut `buildRetryMessages` des Kits. */
+export const RETRY_INSTRUCTION = "Answer again with a single valid JSON object and nothing else.";
 
 /**
  * Die gemessenen Befunde in Saetze, die das Modell lesen kann.

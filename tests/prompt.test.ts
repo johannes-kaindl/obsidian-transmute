@@ -3,7 +3,6 @@ import {
   buildDiagnosePrompt,
   buildInitialPrompt,
   buildRefinePrompt,
-  buildRetryPrompt,
   languageName,
   sampleForPrompt,
   sampleHits,
@@ -63,16 +62,6 @@ describe("buildRefinePrompt", () => {
     expect(joined).toContain("erste Anweisung");
     expect(joined).toContain("aber nicht in Codebloecken");
     expect(joined).toContain("vorher");
-  });
-});
-
-describe("buildRetryPrompt", () => {
-  it("haengt die kaputte Antwort und das Problem an", () => {
-    const msgs = buildRetryPrompt([{ role: "user", content: "u" }], "kaputt", "kein JSON");
-    expect(msgs.at(-1)?.role).toBe("user");
-    expect(msgs.at(-1)?.content).toContain("kein JSON");
-    expect(msgs.at(-2)?.role).toBe("assistant");
-    expect(msgs.at(-2)?.content).toBe("kaputt");
   });
 });
 

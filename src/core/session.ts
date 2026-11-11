@@ -1,10 +1,11 @@
 import { sameMatches } from "./anchor";
+import { askUntilValid } from "../vendor/kit/answer-retry";
 import { EMPTY_ROUNDS, activeRound, pushRound, refineBase, selectRound, type Rounds } from "../vendor/kit/rounds";
 import {
   buildDiagnosePrompt,
   buildInitialPrompt,
   buildRefinePrompt,
-  buildRetryPrompt,
+  RETRY_INSTRUCTION,
   sampleForPrompt,
 } from "./llm/prompt";
 import { parseDiagnoseResponse, parseRuleResponse } from "./llm/response";
@@ -77,7 +78,12 @@ export type SessionOptions = { sampleChars: number; budgetMs: number; maxHits: n
 
 type Attempt =
   | { ok: true; draft: RuleDraft; reasoning: string | null; truncated: boolean }
-  | { ok: false; messageKey: string; args: string[]; raw: string | null; problem: string };
+  /** `retry`: ob die Rueckfrage an das Modell Sinn hat. Eine ungueltige Antwort ja; ein Endpunktfehler, eine leere
+   *  abgeschnittene Antwort oder ein Kurzbefehl-Fehler nein — ein zweiter Aufruf aendert Serverzustand und Grenze nicht. */
+  | { ok: false; messageKey: string; args: string[]; raw: string | null; problem: string; retry: boolean };
+
+/** Wird aus `ask` geworfen, wenn die Rueckfrage nichts bringt; `askUntilValid` wiederholt nur ungueltige Antworten. */
+class NotRetried extends Error {}
 
 /**
  * Zustandsmaschine des Nachschaerf-Workflows. Bewusst obsidian-frei: der riskanteste Teil
@@ -328,11 +334,7 @@ export class TransmuteSession {
     // Eine turnId fuer beide Versuche dieser Runde: der Retry ist dieselbe Nutzer-Handlung,
     // kein eigener Turn.
     const turnId = this.deps.newTurnId();
-    let attempt = await this.ask(messages, turnId);
-    if (!attempt.ok) {
-      const retry = buildRetryPrompt(messages, attempt.raw ?? "", attempt.problem);
-      attempt = await this.ask(retry, turnId);
-    }
+    const attempt = await this.askWithRetry(messages, turnId);
     if (!attempt.ok) {
       this.set({ phase: "error", messageKey: attempt.messageKey, args: attempt.args, raw: attempt.raw });
       return;
@@ -370,22 +372,48 @@ export class TransmuteSession {
     this.set({ phase: "preview", versions: next.rounds, active: next.active }, reason);
   }
 
+  /** Ein Aufruf, bei ungueltiger Antwort eine Rueckfrage mit Grund (Kit `askUntilValid`, ein Retry-Budget je Runde). Das Ergebnis ist der
+   *  letzte `Attempt`: gueltig, oder der Fehler mit Meldungsschluessel und Rohantwort fuer die Anzeige. */
+  private async askWithRetry(messages: ChatMessage[], turnId: string): Promise<Attempt> {
+    const seen: { last: Attempt | null } = { last: null };
+    try {
+      await askUntilValid<Attempt>(
+        async (turns) => {
+          const attempt = await this.ask(turns, turnId);
+          seen.last = attempt;
+          if (!attempt.ok && !attempt.retry) throw new NotRetried();
+          return { content: attempt.ok ? "" : (attempt.raw ?? "") };
+        },
+        () => {
+          const attempt = seen.last;
+          if (attempt === null) throw new Error("validate before ask");
+          return attempt.ok ? { ok: true, value: attempt } : { ok: false, problem: attempt.problem };
+        },
+        { messages, instruction: RETRY_INSTRUCTION, maxRetries: 1 },
+      );
+    } catch (error) {
+      if (!(error instanceof NotRetried)) throw error;
+    }
+    if (seen.last === null) throw new Error("ask did not run");
+    return seen.last;
+  }
+
   private async ask(messages: ChatMessage[], turnId: string): Promise<Attempt> {
     const res = await this.deps.complete(messages, "rule:apply", turnId);
     if (!res.ok) {
       if (res.truncatedEmpty === true) {
-        return { ok: false, messageKey: "error.truncatedEmpty", args: [], raw: null, problem: "truncated, no usable text" };
+        return { ok: false, messageKey: "error.truncatedEmpty", args: [], raw: null, problem: "truncated, no usable text", retry: false };
       }
       if (res.shortcutReason !== undefined) {
-        return { ok: false, messageKey: `error.shortcut.${res.shortcutReason}`, args: [res.error], raw: null, problem: res.error };
+        return { ok: false, messageKey: `error.shortcut.${res.shortcutReason}`, args: [res.error], raw: null, problem: res.error, retry: false };
       }
-      return { ok: false, messageKey: "error.endpoint", args: [res.error], raw: null, problem: res.error };
+      return { ok: false, messageKey: "error.endpoint", args: [res.error], raw: null, problem: res.error, retry: false };
     }
 
     const parsed = parseRuleResponse(res.content);
     if (!parsed.ok) {
       const key = parsed.reason === "no-json" ? "error.noJson" : "error.badSchema";
-      return { ok: false, messageKey: key, args: [], raw: res.content, problem: parsed.detail };
+      return { ok: false, messageKey: key, args: [], raw: res.content, problem: parsed.detail, retry: true };
     }
 
     const compiled = compileRule(parsed.draft);
@@ -397,6 +425,7 @@ export class TransmuteSession {
           args: [],
           raw: res.content,
           problem: `the pattern is unsafe (${compiled.rule})`,
+          retry: true,
         };
       }
       if (compiled.kind === "flags") {
@@ -406,6 +435,7 @@ export class TransmuteSession {
           args: [compiled.message],
           raw: res.content,
           problem: `unknown flag ${compiled.message}`,
+          retry: true,
         };
       }
       return {
@@ -414,6 +444,7 @@ export class TransmuteSession {
         args: [compiled.message],
         raw: res.content,
         problem: compiled.message,
+        retry: true,
       };
     }
 

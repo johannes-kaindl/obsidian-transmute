@@ -42,6 +42,47 @@ describe("TransmuteSession", () => {
     }
   });
 
+  it("die Rueckfrage nennt das Problem und nimmt die kaputte Antwort mit (Wortlaut des Kits)", async () => {
+    const complete = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, reasoning: null, content: "nope" })
+      .mockResolvedValueOnce({ ok: true, reasoning: null, content: answer("foo") });
+    const session = new TransmuteSession({ complete, now: () => 0, newTurnId: () => "t" }, options);
+    await session.generate("x", "foo");
+    const second = complete.mock.calls[1][0] as { role: string; content: string }[];
+    expect(second.at(-2)).toEqual({ role: "assistant", content: "nope" });
+    expect(second.at(-1)?.role).toBe("user");
+    expect(second.at(-1)?.content).toMatch(/^Your previous answer was not valid: .+\n\nAnswer again with a single valid JSON object and nothing else\.$/s);
+  });
+
+  it("wiederholt einen Endpunktfehler nicht: ein zweiter Aufruf aendert den Serverzustand nicht", async () => {
+    const complete = vi.fn().mockResolvedValue({ ok: false, error: "ECONNREFUSED" });
+    const session = new TransmuteSession({ complete, now: () => 0, newTurnId: () => "t" }, options);
+    await session.generate("x", "foo");
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(session.state.phase).toBe("error");
+    if (session.state.phase === "error") {
+      expect(session.state.messageKey).toBe("error.endpoint");
+      expect(session.state.args[0]).toBe("ECONNREFUSED");
+    }
+  });
+
+  it("wiederholt eine leer abgeschnittene Antwort nicht: dieselbe Grenze trifft den zweiten Aufruf wieder", async () => {
+    const complete = vi.fn().mockResolvedValue({ ok: false, error: "length", truncatedEmpty: true });
+    const session = new TransmuteSession({ complete, now: () => 0, newTurnId: () => "t" }, options);
+    await session.generate("x", "foo");
+    expect(complete).toHaveBeenCalledTimes(1);
+    if (session.state.phase === "error") expect(session.state.messageKey).toBe("error.truncatedEmpty");
+  });
+
+  it("wiederholt einen Kurzbefehl-Fehler nicht und behaelt den Schluessel", async () => {
+    const complete = vi.fn().mockResolvedValue({ ok: false, error: "busy", shortcutReason: "busy" });
+    const session = new TransmuteSession({ complete, now: () => 0, newTurnId: () => "t" }, options);
+    await session.generate("x", "foo");
+    expect(complete).toHaveBeenCalledTimes(1);
+    if (session.state.phase === "error") expect(session.state.messageKey).toBe("error.shortcut.busy");
+  });
+
   it("gibt ein riskantes Muster mit Begruendung zurueck ans Modell", async () => {
     const complete = vi
       .fn()

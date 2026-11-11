@@ -54,7 +54,11 @@
           "ref": "0.44.0"
         },
         "text-anchor",
-        "clip-context"
+        "clip-context",
+        {
+          "name": "answer-retry",
+          "ref": "0.63.0"
+        }
       ]
     },
     {
