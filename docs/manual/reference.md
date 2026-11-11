@@ -114,7 +114,10 @@ tracked so a `}` inside a quoted string does not end the object early). If parsi
 schema validation fails, **one retry** is sent: the previous messages, the bad answer,
 and the concrete problem, asking the model to answer again with valid JSON. A second
 failure surfaces one of the [error messages](#error-messages) below instead of retrying
-further — small local models can loop indefinitely on a bad prompt otherwise.
+further — small local models can loop indefinitely on a bad prompt otherwise. Only an
+invalid answer is asked again: an endpoint error, a Shortcuts error or an answer cut off at
+the token limit with no usable text is shown at once, because a second call would meet the
+same state.
 
 Allowed flags are `g`, `i`, `m`, `s`, `u`, `y`, `d`, `v`; any other flag character is
 rejected with the "unknown flag" error before the pattern is even compiled.

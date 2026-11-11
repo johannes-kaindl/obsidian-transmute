@@ -29,3 +29,9 @@ Kein Modell wird für dieses Plugin nachgeladen, kein Modellname wird hartkodier
 ## Ein Lint-Kern statt zweier Spiegel
 
 Ein separates `lint:portal` gibt es seit 2026-08-13 nicht mehr: der template-verwaltete `eslint.config.mjs`-Kern **ist** der Store-Scanner-Spiegel, lokale Abweichungen stehen sichtbar in `eslint.overrides.mjs`. Ein zweiter, handgepflegter Spiegel war genau die Drift-Quelle, die er abfangen sollte.
+
+## Rückfrage bei ungültiger Antwort: Kit-Baustein, kein Retry bei Endpunktfehlern (Welle 32, 2026-11-11)
+
+- **Die Rückfrage kommt aus code-kit `answer-retry`** (Einzelpin 0.63.0, `askUntilValid` mit `maxRetries: 1`), nicht aus einer eigenen Schleife: dieselbe Schleife stand dreimal (transmute, slide-deck, vault-crews), Owner-Task im code-kit-Cockpit. Der Wortlaut „Your previous answer was not valid: …“ folgt dem Kit; der Schluss „Answer again with a single valid JSON object and nothing else.“ ist `RETRY_INSTRUCTION` in `src/core/llm/prompt.ts`.
+- **Ein Endpunktfehler, ein Kurzbefehl-Fehler und eine leer abgeschnittene Antwort werden nicht wiederholt.** Vorher lief jeder Fehlschlag von `ask` in die Rückfrage; das Kit wiederholt nur ungültige Antworten, weil ein zweiter Aufruf Serverzustand und Token-Grenze nicht ändert. Gemessen am Smoke-Punkt CL3 (529 des Anthropic-Stubs): zwei Anfragen am Stub vorher, eine nachher. `Attempt` trägt dafür `retry`; die Anzeige behält Meldungsschlüssel und Rohantwort.
+- **Warum nicht auf Endpunktfehler wiederholen, falls ein kurzer Aussetzer gemeint war:** das wäre Sache des Transports (Backoff), nicht der Antwortprüfung, und würde beim Opt-in Claude (`529`) Last erzeugen.
