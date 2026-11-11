@@ -294,33 +294,41 @@ async function langeNotizenGekannt(cdp: Cdp): Promise<number> {
   );
 }
 
-/** Legt `LANG_NOTIZEN` Notizen auf der Platte an und wartet, bis Obsidian alle kennt. Liefert die Gesamtzahl der Notizen im Vault
- *  danach, oder die Zahl der Notizen, die Obsidian nach der Frist kannte (dann „nichts gemessen“ mit dieser Zahl, nie geraten). */
+/** Legt `LANG_NOTIZEN` Notizen ueber die Vault-API an (der Vault kennt sie sofort; Notizen, die nur auf der Platte stehen, erreichten
+ *  Obsidian unter Last erst nach Minuten: 4695 von 6000 nach 60 s, Welle 32) und liefert die Gesamtzahl der Notizen im Vault danach,
+ *  oder die Zahl der Notizen, die der Vault danach kennt („nichts gemessen“ mit dieser Zahl, nie geraten). */
 async function langerLaufAufbauen(cdp: Cdp): Promise<{ gesamt: number } | { gesehen: number }> {
   if (langDirAbs === null) return { gesehen: -1 };
   langerLaufWeg();
-  mkdirSync(langDirAbs, { recursive: true });
-  for (let i = 0; i < LANG_NOTIZEN; i++) {
-    writeFileSync(
-      join(langDirAbs, `lang-${i}.md`),
-      `---\nstatus: aktiv\n---\n\n# Lange Notiz ${i}\n\nHier steht die ${ALT}, und zwar mehrfach: ${ALT}.\nEine zweite Zeile mit etwas Fliesstext, damit das Muster trifft.\n`,
-      "utf8",
-    );
-  }
   const t0 = Date.now();
-  const da = await pollUntil<boolean>(
-    cdp,
-    `return app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(${JSON.stringify(`${LANG_DIR}/`)})).length >= ${LANG_NOTIZEN} ? true : null;`,
-    60_000,
-    500,
-  );
-  console.log(`Langer Lauf: ${LANG_NOTIZEN} Notizen angelegt, Obsidian kannte sie ${da === true ? `nach ${Date.now() - t0} ms` : "nach 60 s noch nicht alle"}`);
-  if (da !== true) return { gesehen: await langeNotizenGekannt(cdp) };
+  await cdp.evaluate(`
+    if (!app.vault.getAbstractFileByPath(${JSON.stringify(LANG_DIR)})) await app.vault.createFolder(${JSON.stringify(LANG_DIR)});
+    return true;
+  `);
+  const BLOCK = 500;
+  for (let von = 0; von < LANG_NOTIZEN; von += BLOCK) {
+    await cdp.evaluate(`
+      const jobs = [];
+      for (let i = ${von}; i < Math.min(${von + BLOCK}, ${LANG_NOTIZEN}); i++) {
+        const body = "---\\nstatus: aktiv\\n---\\n\\n# Lange Notiz " + i + "\\n\\nHier steht die ${ALT}, und zwar mehrfach: ${ALT}.\\nEine zweite Zeile mit etwas Fliesstext, damit das Muster trifft.\\n";
+        jobs.push(app.vault.create(${JSON.stringify(`${LANG_DIR}/lang-`)} + i + ".md", body));
+      }
+      await Promise.all(jobs);
+      return true;
+    `);
+  }
+  const gesehen = await langeNotizenGekannt(cdp);
+  console.log(`Langer Lauf: ${gesehen} von ${LANG_NOTIZEN} Notizen in ${Date.now() - t0} ms angelegt`);
+  if (gesehen < LANG_NOTIZEN) return { gesehen };
   return { gesamt: await cdp.evaluate<number>(`return app.vault.getMarkdownFiles().length;`) };
 }
 
-/** Nimmt den langen Lauf wieder weg und wartet, bis Obsidian ihn vergessen hat — die folgenden Abschnitte laufen im kleinen Vault. */
+/** Nimmt den langen Lauf wieder weg und wartet, bis der Vault ihn vergessen hat — die folgenden Abschnitte laufen im kleinen Vault. */
 async function langerLaufAbbauen(cdp: Cdp): Promise<void> {
+  await cdp.evaluate(`
+    if (await app.vault.adapter.exists(${JSON.stringify(LANG_DIR)})) await app.vault.adapter.rmdir(${JSON.stringify(LANG_DIR)}, true);
+    return true;
+  `).catch(() => undefined);
   langerLaufWeg();
   await pollUntil<boolean>(
     cdp,
