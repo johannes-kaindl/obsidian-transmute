@@ -17,8 +17,7 @@ UD=/tmp/obs-test-obsidian-transmute; mkdir -p "$UD"
 lsof -nP -iTCP:<port> -sTCP:LISTEN; pgrep -f "user-data-dir=$UD"      # beides leer
 cp ~/Library/Application\ Support/obsidian/obsidian-<version>.asar "$UD"/
 # $UD/obsidian.json: {"vaults":{"nt":{"path":"<Vault>","ts":<ms>,"open":true}},"language":"en"}
-# <Vault> = $STAGING_VAULTS_DIR/obsidian-transmute (Default-Name des Treibers) oder ein Wegwerf-Vault:
-npm run lab:vault -- --out ./test-vault --notes 12000   # nur beim ersten Mal
+# <Vault> = $STAGING_VAULTS_DIR/obsidian-transmute (Default-Name des Treibers) oder ein Wegwerf-Vault (npm run lab:vault -- --out ./test-vault --notes 400)
 OBSIDIAN_PLUGIN_DIR="<Vault>/.obsidian/plugins/transmute" npm run deploy
 python3 ~/.claude/hooks/obsidian-cdp-lock.py acquire --label obsidian-transmute --intent "GUI-Smoke" --exclusive focus --port <port> --ttl 300
 /Applications/Obsidian.app/Contents/MacOS/Obsidian --user-data-dir="$UD" --remote-debugging-port=<port> &
@@ -35,9 +34,7 @@ falsche nach vorn, und Chromium drosselt Timer in `hidden` Seiten auf 1 Hz — j
 Zeitmessung wird dann Unsinn. Der Treiber prüft das und bricht mit klarer Meldung ab,
 statt still falsch zu messen.
 
-Der Wegwerf-Vault ist git-ignoriert und jederzeit neu erzeugbar. **12.000 Notizen sind
-kein Übermut:** darunter ist der vault-weite Lauf schneller als der 250-ms-Freigabe-Takt,
-und der wichtigste Prüfpunkt (unten) hat dann nichts zu messen.
+**Den langen Lauf erzeugt der Treiber selbst.** Der Abschnitt „Abbruch“ legt `LANG_NOTIZEN` (6000) Notizen im Ordner `_transmute-smoke-lang` des Vaults an (direkt auf der Platte), wartet, bis Obsidian alle kennt, misst „Renderer atmet“ und „Abbrechen“ und nimmt den Ordner danach wieder weg; ein Rest eines abgebrochenen Laufs wird beim Start entfernt. Grund (Baseline Welle 32, Obsidian 1.15.1): im 411-Notizen-Staging-Vault ist der Lauf mit `[a-z]` vor der ersten 10-ms-Abfrage durch, die beiden Punkte standen seit Wochen auf „übersprungen“ und „nichts gemessen“. Kommen die Notizen innerhalb von 60 s nicht an, sind beide Punkte „nichts gemessen“ mit der Zahl der gesehenen Notizen im Grund, nie „übersprungen“. Der Staging-Vault selbst bleibt klein; ein 12.000-Notizen-Vault (`npm run lab:vault -- --out ./test-vault --notes 12000`) ist nicht mehr nötig, taugt aber weiter für Handproben.
 
 **Der Deploy-Schritt ist nicht optional, und der Treiber verlässt sich nicht darauf.** Vor
 dem ersten Prüfpunkt vergleicht er die `main.js` im Vault per sha1 mit der frisch gebauten
@@ -92,7 +89,7 @@ Vorher (Baseline, Pin 0.69.1/0.36.0, HEAD `62dfabf`): 56 grün · 0 rot · 1 üb
 
 ### 2026-10-25 — Obsidian 1.14.5, Welle 26 (Pin obsidian-kit 0.69.1 / code-kit 0.36.0, Claude-Opt-in) · **56 grün · 0 rot · 2 übersprungen · 0 nichts gemessen von 58**
 
-Vorher (Baseline, Pin 0.61.0/0.34.0, Staging-Vault `obsidian-transmute` neu mit `lab:vault --notes 400` angelegt): 53 grün · 0 rot · 1 übersprungen · 1 nichts gemessen von 55. Die zwei Punkte „Renderer atmet“ und „Abbrechen“ sind im 400-Notizen-Vault nicht messbar (der Lauf ist nach 65 bis 92 ms durch, unter dem Freigabe-Takt von 250 ms) und kamen in den späteren Läufen als „übersprungen“, im ersten Baseline-Lauf als „nichts gemessen“; wie vor Welle 20 zwei Übersprungene, kein Befund am Plugin. Neu sind CL1–CL3 (Abschnitt `Claude`): der Fake-Manager mit `transport: "anthropic"` und der Anthropic-Modus des zentralen Stubs. CL2 liest „Letzte Anfrage“ aus `display()` des Einstellungs-Tabs (`.okit-request-deviation`): „Request values not sent, the model does not accept them: temperature.“ CL3 braucht zwei 529-Antworten, denn der Client wiederholt bei 5xx einmal; mit nur einer kam die Regel durch und der Punkt war rot (Treiberfehler, behoben).
+Vorher (Baseline, Pin 0.61.0/0.34.0, Staging-Vault `obsidian-transmute` neu mit `lab:vault --notes 400` angelegt): 53 grün · 0 rot · 1 übersprungen · 1 nichts gemessen von 55. Die zwei Punkte „Renderer atmet“ und „Abbrechen“ sind im 400-Notizen-Vault nicht messbar (der Lauf ist nach 65 bis 92 ms durch, unter dem Freigabe-Takt von 250 ms) und kamen in den späteren Läufen als „übersprungen“, im ersten Baseline-Lauf als „nichts gemessen“; wie vor Welle 20 zwei Übersprungene, kein Befund am Plugin. Neu sind CL1–CL3 (Abschnitt `Claude`): der Fake-Manager mit `transport: "anthropic"` und der Anthropic-Modus des zentralen Stubs. CL2 liest „Letzte Anfrage“ aus `display()` des Einstellungs-Tabs (`.okit-request-deviation`): „Request values not sent, the model does not accept them: temperature.“ CL3 stellt zwei 529-Antworten bereit: damals wiederholte die Sitzung einen Endpunktfehler einmal, mit nur einer Antwort kam die Regel durch und der Punkt war rot (Treiberfehler, behoben). Seit `answer-retry` (Welle 32) fragt die Sitzung bei einem Endpunktfehler nicht mehr nach: CL3 sieht eine Anfrage am Stub (vorher zwei).
 
 Gegenprobe, jeder Punkt einzeln rot gemacht: (A) falscher Schlüssel im Fake-Manager → CL2 und CL3 rot (`invalid x-api-key`); (B) keine 529-Antwort → CL3 rot, CL1/CL2 grün; (C) `anthropic: true` aus dem Build entfernt, gebaut und deployt, frischer Prozess → CL1, CL2, CL3 rot (Backend `unknown`, 0 Anfragen am Stub, CL3 meldet „has no usable endpoint“). Danach Build und Treiber wie vorher.
 

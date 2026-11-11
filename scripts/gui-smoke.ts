@@ -39,7 +39,7 @@
  * Exit 0 gruen/uebersprungen, 1 bei Rot oder „nichts gemessen", 2 bei Abbruch.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { attachTo, beimAbbruch, bereiteInstanzVor, Cdp, entferneFakeManager, installFakeManager, closeExtraLeaves, istAbgebrochen, klicke, notices, pollUntil, releaseAlwaysOnTop, requireVisible, schliesseEinstellungen, setPluginSetting }
@@ -65,6 +65,11 @@ const NEU = "neue Schreibweise";
 /** Ab so vielen Kandidaten ist der Abbruch-Pruefpunkt ueberhaupt messbar. Darunter ist
  *  der Lauf durch, bevor der Klick ankommt — dann wird uebersprungen statt geraten. */
 const ABORT_MIN_KANDIDATEN = 100;
+/** Der lange Lauf fuer „Renderer atmet“ und „Abbrechen“: der Treiber erzeugt ihn selbst, statt auf einen grossen Vault zu hoffen.
+ *  Gemessen 2026-11-11 (Baseline w32): 411 Notizen sind mit `[a-z]` in unter 10 ms durch, der Lauf ist vor der ersten Abfrage vorbei
+ *  („nichts gemessen“ und „uebersprungen“ im Staging-Vault). Der Ordner liegt nur waehrend des Abschnitts im Vault. */
+const LANG_DIR = "_transmute-smoke-lang";
+const LANG_NOTIZEN = 6000;
 const STUB_CLOSE_FRIST_MS = 5_000;
 
 const args = parseArgs(process.argv.slice(2));
@@ -271,6 +276,59 @@ async function clickByText(cdp: Cdp, root: string, label: string): Promise<boole
     .find((b) => b.textContent.trim() === ${JSON.stringify(label)})`);
 }
 
+
+// --- Der lange Lauf ----------------------------------------------------------
+
+/** Absoluter Pfad des langen-Lauf-Ordners im Vault der laufenden Instanz; `null`, solange er nicht bestimmt ist. */
+let langDirAbs: string | null = null;
+
+/** Raeumt den Ordner des langen Laufs weg (von der Platte, ohne Papierkorb) — auch den Rest eines abgebrochenen Laufs. */
+function langerLaufWeg(): void {
+  if (langDirAbs !== null) rmSync(langDirAbs, { recursive: true, force: true });
+}
+
+/** Zaehlt die Notizen des langen Laufs, die Obsidian kennt. */
+async function langeNotizenGekannt(cdp: Cdp): Promise<number> {
+  return cdp.evaluate<number>(
+    `return app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(${JSON.stringify(`${LANG_DIR}/`)})).length;`,
+  );
+}
+
+/** Legt `LANG_NOTIZEN` Notizen auf der Platte an und wartet, bis Obsidian alle kennt. Liefert die Gesamtzahl der Notizen im Vault
+ *  danach, oder die Zahl der Notizen, die Obsidian nach der Frist kannte (dann „nichts gemessen“ mit dieser Zahl, nie geraten). */
+async function langerLaufAufbauen(cdp: Cdp): Promise<{ gesamt: number } | { gesehen: number }> {
+  if (langDirAbs === null) return { gesehen: -1 };
+  langerLaufWeg();
+  mkdirSync(langDirAbs, { recursive: true });
+  for (let i = 0; i < LANG_NOTIZEN; i++) {
+    writeFileSync(
+      join(langDirAbs, `lang-${i}.md`),
+      `---\nstatus: aktiv\n---\n\n# Lange Notiz ${i}\n\nHier steht die ${ALT}, und zwar mehrfach: ${ALT}.\nEine zweite Zeile mit etwas Fliesstext, damit das Muster trifft.\n`,
+      "utf8",
+    );
+  }
+  const t0 = Date.now();
+  const da = await pollUntil<boolean>(
+    cdp,
+    `return app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(${JSON.stringify(`${LANG_DIR}/`)})).length >= ${LANG_NOTIZEN} ? true : null;`,
+    60_000,
+    500,
+  );
+  console.log(`Langer Lauf: ${LANG_NOTIZEN} Notizen angelegt, Obsidian kannte sie ${da === true ? `nach ${Date.now() - t0} ms` : "nach 60 s noch nicht alle"}`);
+  if (da !== true) return { gesehen: await langeNotizenGekannt(cdp) };
+  return { gesamt: await cdp.evaluate<number>(`return app.vault.getMarkdownFiles().length;`) };
+}
+
+/** Nimmt den langen Lauf wieder weg und wartet, bis Obsidian ihn vergessen hat — die folgenden Abschnitte laufen im kleinen Vault. */
+async function langerLaufAbbauen(cdp: Cdp): Promise<void> {
+  langerLaufWeg();
+  await pollUntil<boolean>(
+    cdp,
+    `return app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(${JSON.stringify(`${LANG_DIR}/`)})).length === 0 ? true : null;`,
+    60_000,
+    500,
+  );
+}
 
 // --- Szene -------------------------------------------------------------------
 
@@ -688,7 +746,24 @@ async function abschnittUnvollstaendig(cdp: Cdp): Promise<void> {
  *  Runden > 0 waehrend des Laufs heisst also: es gibt echte Makrotask-Pausen, der Klick
  *  auf „Abbrechen" kann zugestellt werden. Runden = 0 heisst: der Knopf ist Dekoration.
  */
-async function abschnittAbbruch(cdp: Cdp, kandidaten: number): Promise<void> {
+async function abschnittAbbruch(cdp: Cdp): Promise<void> {
+  const aufbau = await langerLaufAufbauen(cdp);
+  if ("gesehen" in aufbau) {
+    // Der Aufbau ist gescheitert: der Gegenstand wurde nicht erreicht, das ist „nichts gemessen“ und nicht „in dieser Lage nicht anwendbar“.
+    const grund = `der lange Lauf (${LANG_NOTIZEN} Notizen in ${LANG_DIR}) ist in Obsidian nicht angekommen: ${aufbau.gesehen} von ${LANG_NOTIZEN} nach der Frist`;
+    unmeasured("Renderer atmet waehrend des Laufs", grund);
+    unmeasured("Abbrechen beendet den Lauf", grund);
+    await langerLaufAbbauen(cdp);
+    return;
+  }
+  try {
+    await abschnittAbbruchMessen(cdp, aufbau.gesamt);
+  } finally {
+    await langerLaufAbbauen(cdp);
+  }
+}
+
+async function abschnittAbbruchMessen(cdp: Cdp, kandidaten: number): Promise<void> {
   if (kandidaten < ABORT_MIN_KANDIDATEN) {
     skipped(
       "Renderer atmet waehrend des Laufs",
@@ -1752,7 +1827,8 @@ async function abschnittClaude(cdp: Cdp): Promise<void> {
       `Phase ${ergebnis?.phase ?? "keine Antwort"}, Regel „${ergebnis?.regex ?? "-"}“; Anfragen ${nachrichten.length}, x-api-key ${kopf["x-api-key"] === CLAUDE_SCHLUESSEL ? "ok" : "FALSCH"}, anthropic-version ${String(kopf["anthropic-version"])}, model ${String(body.model)}, max_tokens ${String(body.max_tokens)}, stream ${String(body.stream)}, verbotene Felder: ${verboten.length === 0 ? "keine" : verboten.join(",")}; Letzte Anfrage: ${abweichungen === null ? "kein Einstellungs-Tab" : sichtbar ? JSON.stringify(abweichungen.find((t) => /temperature/.test(t))) : `keine Abweichung zu temperature (${abweichungen.length} Zeile(n))`}`);
 
     // CL3 — die API antwortet 529 overloaded_error: der Lauf endet im Fehlerzustand mit deren Meldung.
-    // Zwei gleiche Eintraege: ein Wiederholen des Clients (5xx) soll den Fehler nicht wegmachen; die Zahl der Anfragen steht im Detail.
+    // Zwei gleiche Eintraege: ein Wiederholen (Client oder Sitzung) soll den Fehler nicht wegmachen; die Zahl der Anfragen steht im Detail.
+    // Gemessen 2026-11-11: bis 0.17.0 wiederholte die Sitzung einen Endpunktfehler einmal (2 Anfragen), seit answer-retry fragt sie nicht mehr nach (1).
     const fehler529 = { status: 529, fehler: "Overloaded", fehlerTyp: "overloaded_error" };
     stub.antworten([fehler529, fehler529]);
     const anfragenVorCL3 = stub.anfragen().filter((a) => a.route === "messages").length;
@@ -2356,6 +2432,7 @@ async function main(): Promise<void> {
         return true;
       `).catch(() => undefined);
     }
+    langerLaufWeg();
     if (!KEEP && vorwerte !== null) {
       await buehneAbbauen(cdp).catch(() => undefined);
       // Die Snapshots dieses Laufs gehoeren nicht in den Vault des Nutzers.
@@ -2406,6 +2483,8 @@ async function main(): Promise<void> {
     const ort = await cdp.evaluate<{ basePath: string; configDir: string }>(`
       return { basePath: app.vault.adapter.basePath, configDir: app.vault.configDir };
     `);
+    langDirAbs = join(ort.basePath, LANG_DIR);
+    langerLaufWeg(); // Rest eines abgebrochenen Laufs: ein `finally` erreicht einen Abbruch nicht (.claude/rules/staging-vaults.md)
     const herkunft = requireEigenerBuild(
       join(ort.basePath, ort.configDir, "plugins", PLUGIN_ID, "main.js"),
       join(process.cwd(), "main.js"),
@@ -2452,7 +2531,7 @@ async function main(): Promise<void> {
     }
     await abschnitt("Datei-Anwenden", () => abschnittDateiAnwenden(cdp));
     await abschnitt("Hub", () => abschnittHub(cdp));
-    await abschnitt("Abbruch", () => abschnittAbbruch(cdp, kandidaten));
+    await abschnitt("Abbruch", () => abschnittAbbruch(cdp));
     await abschnitt("Setter", () => abschnittSetter(cdp));
     await abschnitt("llm-lab", () => abschnittLlmLab(cdp));
     await abschnitt("Verbindung", () => abschnittVerbindung(cdp));
