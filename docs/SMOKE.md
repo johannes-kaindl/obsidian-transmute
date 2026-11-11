@@ -34,7 +34,7 @@ falsche nach vorn, und Chromium drosselt Timer in `hidden` Seiten auf 1 Hz — j
 Zeitmessung wird dann Unsinn. Der Treiber prüft das und bricht mit klarer Meldung ab,
 statt still falsch zu messen.
 
-**Den langen Lauf erzeugt der Treiber selbst.** Der Abschnitt „Abbruch“ legt `LANG_NOTIZEN` (6000) Notizen im Ordner `_transmute-smoke-lang` des Vaults an (direkt auf der Platte), wartet, bis Obsidian alle kennt, misst „Renderer atmet“ und „Abbrechen“ und nimmt den Ordner danach wieder weg; ein Rest eines abgebrochenen Laufs wird beim Start entfernt. Grund (Baseline Welle 32, Obsidian 1.15.1): im 411-Notizen-Staging-Vault ist der Lauf mit `[a-z]` vor der ersten 10-ms-Abfrage durch, die beiden Punkte standen seit Wochen auf „übersprungen“ und „nichts gemessen“. Kommen die Notizen innerhalb von 60 s nicht an, sind beide Punkte „nichts gemessen“ mit der Zahl der gesehenen Notizen im Grund, nie „übersprungen“. Der Staging-Vault selbst bleibt klein; ein 12.000-Notizen-Vault (`npm run lab:vault -- --out ./test-vault --notes 12000`) ist nicht mehr nötig, taugt aber weiter für Handproben.
+**Den langen Lauf erzeugt der Treiber selbst.** Der Abschnitt „Abbruch“ legt `LANG_NOTIZEN` (6000) Notizen im Ordner `_transmute-smoke-lang` des Vaults an (über `vault.create`; nur auf die Platte geschrieben kannte Obsidian unter Last nach 60 s erst 4695 davon), misst „Renderer atmet“ und „Abbrechen“ und nimmt den Ordner danach wieder weg; ein Rest eines abgebrochenen Laufs wird beim Start entfernt. Grund (Baseline Welle 32, Obsidian 1.15.1): im 411-Notizen-Staging-Vault ist der Lauf mit `[a-z]` vor der ersten 10-ms-Abfrage durch, die beiden Punkte standen seit Wochen auf „übersprungen“ und „nichts gemessen“. Kennt der Vault danach nicht alle Notizen, sind beide Punkte „nichts gemessen“ mit der Zahl der gesehenen Notizen im Grund, nie „übersprungen“. Das Anlegen dauert unter Last bis zwei Minuten (gemessen 114 s bei Load 20 bis 35). Der Staging-Vault selbst bleibt klein; ein 12.000-Notizen-Vault (`npm run lab:vault -- --out ./test-vault --notes 12000`) ist nicht mehr nötig, taugt aber weiter für Handproben.
 
 **Der Deploy-Schritt ist nicht optional, und der Treiber verlässt sich nicht darauf.** Vor
 dem ersten Prüfpunkt vergleicht er die `main.js` im Vault per sha1 mit der frisch gebauten
@@ -76,6 +76,10 @@ zweimal war der Lauf schlicht kürzer als der Freigabe-Takt. Der Punkt eicht des
 die Timer-Kette des Fensters und meldet die Bedingungen im Ergebnis mit.
 
 ## Durchläufe
+
+### 2026-11-11 — Obsidian 1.15.1, Welle 32 (Pin unverändert, `answer-retry` aus code-kit 0.63.0) · **68 grün · 0 rot · 0 übersprungen · 0 nichts gemessen von 68**
+
+Baseline davor 66 grün · 0 rot · 1 übersprungen · 1 nichts gemessen von 68 (411 Notizen, „Renderer atmet“: Lauf in 2 s nicht angelaufen, „Abbrechen“: Lauf beim Klick fertig). Der Treiber erzeugt den langen Lauf jetzt selbst (siehe oben). Zwischenläufe: Anlegen nur auf der Platte, 6000 Notizen: einmal 68/0/0/0, einmal 66/0/0/2 (4695 von 6000 nach 60 s, beide Punkte ehrlich „nichts gemessen“); über `vault.create` 68/0/0/0 (6000 in 114 s, „Renderer atmet“: 1 UI-Freigabe in 737 ms, „Abbrechen“: 3119 ms nach dem Klick). CL3 sieht eine Anfrage am Stub statt zwei: die Sitzung fragt bei einem Endpunktfehler nicht mehr nach (`answer-retry`).
 
 ### 2026-10-26 — Obsidian 1.14.5, Welle 28 (Pin obsidian-kit 0.72.0 / code-kit 0.38.0, LK1 neu) · **61 grün · 0 rot · 1 übersprungen · 1 nichts gemessen von 63**
 
