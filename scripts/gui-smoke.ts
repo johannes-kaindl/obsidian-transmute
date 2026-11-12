@@ -44,6 +44,7 @@ import { join } from "node:path";
 
 import { attachTo, beimAbbruch, bereiteInstanzVor, Cdp, entferneFakeManager, installFakeManager, closeExtraLeaves, istAbgebrochen, klicke, notices, pollUntil, releaseAlwaysOnTop, requireVisible, schliesseEinstellungen, setPluginSetting }
   from "../../tools/obsidian-cdp/cdp.js";
+import type { FakeEndpunkt } from "../../tools/obsidian-cdp/fake-manager.js";
 import { boxOf, capture } from "../../tools/obsidian-cdp/shot.js";
 import { startLlmStub } from "../../tools/obsidian-cdp/llm-stub.js";
 import { createBilanz, parseArgs, runDriver, Vorbedingung } from "../../tools/obsidian-cdp/bilanz.js";
@@ -173,7 +174,7 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
     "MZ1 Modellzeile im Panel (Fake-Manager, zwei Modelle): Liste, Standard-Modell im Namen von Automatisch, ein Wechsel schreibt choice.model, Automatisch leert sie",
     "MZ2 Ein Voll-Draw (draw() der View, wie beim Phasenwechsel) laesst die Zeile stehen: dasselbe Element, Fokus und Wahl bleiben (Gegenprobe: ein Feld im gezeichneten Bereich wird ersetzt)",
     "MZ3 Die Zeile ist waehrend der Erzeugung gesperrt und danach wieder bedienbar",
-    "MZ4 Der Denk-Knopf in der Zeile folgt der Quelle: Claude via Manager nennt die niedrigste Stufe mit dem Grund, ein lokales Modell ohne bekannte Familie bleibt bei „Thinking off“",
+    "MZ4 Der Denk-Knopf in der Zeile folgt der Quelle: Claude via Manager (Familie am Endpunkt, Modellname ohne Familie) nennt die niedrigste Stufe mit dem Grund; derselbe Name ohne Familie und ein lokales Modell ohne bekannte Familie bleiben bei „Thinking off“",
   ],
   "Globales Modell": [
     "G1 Altwert wandert in die Zeile, kein globales Modell in den Einstellungen",
@@ -2332,10 +2333,10 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
         `waehrend der Erzeugung (${waehrend?.phase ?? "nie generating gesehen"}): Dropdown ${waehrend?.gesperrt ? "gesperrt" : "NICHT gesperrt"}, Neu laden ${waehrend?.knopf ? "gesperrt" : "NICHT gesperrt"}; danach (${danach?.phase ?? "kein Ende"}): ${danach === null ? "-" : danach.gesperrt ? "BLEIBT gesperrt" : "bedienbar"}`);
     }
 
-    // ---- MZ4: Familie aus der Quelle (Claude via Manager, Modellname ohne Familie) gegen denselben Namen ohne Manager
-    // Der Fake-Manager traegt keine Familie je Endpunkt (nur Anbieter und Backend): die Familie kommt hier aus dem Namen des Claude-Modells.
-    // „Familie aus der Quelle, nicht aus dem Namen“ ist am Fake nicht messbar (Zeiger in der Abschlussmeldung); der Unit-Test der View hat es mit einem Namen ohne Familie.
-    const ALIAS = CLAUDE_MODELL;
+    // ---- MZ4: Familie aus der Quelle (Claude via Manager, Modellname ohne Familie) gegen denselben Namen ohne Familie und gegen ein lokales Modell
+    // Der Fake-Manager traegt die Familie seit Dach 2a29f88 (`family` am Endpunkt, landet in `models[].family` des Standardmodells). Der Alias nennt keine Familie:
+    // steht „Thinking: lowest level“ da, hat der Knopf die Familie der Quelle gelesen (`familySource: "manager"`) und nicht den Namen geraten. Gegenprobe: derselbe Name ohne `family`.
+    const ALIAS = "alias-ohne-familie";
     const LOKAL = "mz-a";
     // Der Denk-Knopf zeichnet sich nach der ersten Aufloesung neu (Familie): `erwartet` wartet, bis das Label so lautet, sonst gilt der letzte Stand.
     const label = async (erwartet: string | null): Promise<{ label: string; aria: string } | null> => {
@@ -2355,17 +2356,26 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
       models: [{ id: ALIAS, capabilities: { effort: { supported: true }, thinking: { types: { adaptive: { supported: true } } } } }],
       standard: { text: JSON.stringify(draft), model: ALIAS },
     });
+    const quelle = (): Promise<{ familie: string | null; herkunft: string }> => cdp.evaluate(`
+      const src = ${P}.llm.source();
+      return { familie: src.family, herkunft: src.familySource };
+    `);
+    const endpunkt = (family?: string): FakeEndpunkt => ({
+      id: "fake-claude", label: "Claude API", url: claude.url, models: [ALIAS], defaultModel: ALIAS, configModel: "default",
+      provider: "anthropic", backend: "anthropic", apiKey: CLAUDE_SCHLUESSEL, hasSecret: true, transport: "anthropic",
+      ...(family !== undefined ? { family } : {}),
+    });
     let mitManager: { label: string; aria: string } | null = null;
+    let quelleMit: { familie: string | null; herkunft: string } | null = null;
+    let ohneFamilie: { label: string; aria: string } | null = null;
+    let quelleOhne: { familie: string | null; herkunft: string } | null = null;
     let ohneManager: { label: string; aria: string } | null = null;
     let zeileDa = true;
     try {
       await cdp.evaluate(`${P}.settings.request.thinking = { ...(${P}.settings.request.thinking ?? {}), structured: "off" }; await ${P}.saveSettings(); return true;`);
       await installFakeManager(cdp, {
         pluginId: MANAGER_PLUGIN_ID,
-        endpunkte: [{
-          id: "fake-claude", label: "Claude API", url: claude.url, models: [ALIAS], defaultModel: ALIAS, configModel: "default",
-          provider: "anthropic", backend: "anthropic", apiKey: CLAUDE_SCHLUESSEL, hasSecret: true, transport: "anthropic",
-        }],
+        endpunkte: [endpunkt("claude")],
         invalidiere: [PLUGIN_ID],
       });
       await cdp.evaluate(`${P}.settings.choice = {}; await ${P}.saveSettings(); ${P}.llm.invalidate(); await ${P}.llm.resolve({ force: true }); return true;`);
@@ -2373,7 +2383,17 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
       if (zeileDa) {
         // Der Denk-Knopf zeichnet sich nach der Aufloesung neu (Familie): kurz warten, bis das Label steht.
         mitManager = await label("Thinking: lowest level");
+        quelleMit = await quelle();
       }
+      await fakeManagerAus(cdp);
+      // Gegenprobe: derselbe Name, derselbe Anbieter, aber ohne `family` am Endpunkt: der Name verraet nichts, der Knopf bleibt bei „Thinking off“.
+      await installFakeManager(cdp, { pluginId: MANAGER_PLUGIN_ID, endpunkte: [endpunkt()], invalidiere: [PLUGIN_ID] });
+      await cdp.evaluate(`${P}.settings.choice = {}; await ${P}.saveSettings(); ${P}.llm.invalidate(); await ${P}.llm.resolve({ force: true }); return true;`);
+      if (await zeileOeffnen(cdp, ALIAS)) {
+        await new Promise((r) => setTimeout(r, 1500));
+        ohneFamilie = await label(null);
+        quelleOhne = await quelle();
+      } else zeileDa = false;
       await fakeManagerAus(cdp);
       await cdp.evaluate(`
         const p = ${P};
@@ -2394,8 +2414,11 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
     }
     record(MZ4,
       zeileDa && mitManager !== null && mitManager.label === "Thinking: lowest level" && mitManager.aria.includes("can't be fully turned off")
+        && quelleMit?.familie === "claude" && quelleMit.herkunft === "manager"
+        && ohneFamilie !== null && ohneFamilie.label === "Thinking off" && quelleOhne !== null && quelleOhne.familie === null
         && ohneManager !== null && ohneManager.label === "Thinking off",
-      `${zeileDa ? "" : "Die Modellzeile kam in 10 s nicht ins Panel. "}Claude via Manager, Modell „${ALIAS}“: „${mitManager?.label ?? "kein Knopf"}“ (aria-label „${(mitManager?.aria ?? "").slice(0, 70)}“); lokales Modell „${LOKAL}“ ohne Manager: „${ohneManager?.label ?? "kein Knopf"}“`);
+      `${zeileDa ? "" : "Die Modellzeile kam in 10 s nicht ins Panel. "}Claude via Manager, Alias „${ALIAS}“ mit family „claude“: „${mitManager?.label ?? "kein Knopf"}“ (aria-label „${(mitManager?.aria ?? "").slice(0, 70)}“), Quelle family ${quelleMit?.familie ?? "null"}/${quelleMit?.herkunft ?? "-"}; ` +
+      `derselbe Alias ohne family: „${ohneFamilie?.label ?? "kein Knopf"}“, Quelle family ${quelleOhne?.familie ?? "null"}/${quelleOhne?.herkunft ?? "-"}; lokales Modell „${LOKAL}“ ohne Manager: „${ohneManager?.label ?? "kein Knopf"}“`);
   } catch (e) {
     for (const n of ABSCHNITTE.Modellzeile!) if (!bilanz.eintraege().some((x) => x.name === n)) unmeasured(n, `Messung abgebrochen: ${(e as Error).message}`);
   } finally {
