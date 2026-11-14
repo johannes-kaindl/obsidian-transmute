@@ -44,7 +44,7 @@ import { join } from "node:path";
 
 import { attachTo, beimAbbruch, bereiteInstanzVor, Cdp, entferneFakeManager, installFakeManager, closeExtraLeaves, istAbgebrochen, klicke, notices, pollUntil, releaseAlwaysOnTop, requireVisible, schliesseEinstellungen, setPluginSetting }
   from "../../tools/obsidian-cdp/cdp.js";
-import type { FakeEndpunkt } from "../../tools/obsidian-cdp/fake-manager.js";
+import { fakeManagerAendereMit as fakeManagerAendere, type FakeEndpunkt } from "../../tools/obsidian-cdp/fake-manager.js";
 import { boxOf, capture } from "../../tools/obsidian-cdp/shot.js";
 import { startLlmStub } from "../../tools/obsidian-cdp/llm-stub.js";
 import { createBilanz, parseArgs, runDriver, Vorbedingung } from "../../tools/obsidian-cdp/bilanz.js";
@@ -169,14 +169,22 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
   ],
   Hilfe: ["H1 Hilfe-Zeile ist die erste Zeile der Einstellungen"],
   Denken: [
-    "D1 Denk-Knopf (Kit-Baustein) schaltet die Stufe des Modus structured und zeigt den Zustand",
-    "D2 Modell ohne „aus“ (gpt-oss): das Label nennt „lowest level“ samt Hinweis im aria-label statt „Thinking off“, der Knopf bleibt bedienbar",
+    "D1 Denk-Dropdown der Modellzeile (Kit-Baustein) schaltet die Stufe des Modus structured und zeigt den Zustand",
+    "D2 Modell ohne „aus“ (gpt-oss): das Dropdown bietet statt „aus“ die niedrigste Stufe „minimal“ an, bleibt bedienbar, eine Wahl schreibt",
   ],
   Modellzeile: [
     "MZ1 Modellzeile im Panel (Fake-Manager, zwei Modelle): Liste, Standard-Modell im Namen von Automatisch, ein Wechsel schreibt choice.model, Automatisch leert sie",
     "MZ2 Ein Voll-Draw (draw() der View, wie beim Phasenwechsel) laesst die Zeile stehen: dasselbe Element, Fokus und Wahl bleiben (Gegenprobe: ein Feld im gezeichneten Bereich wird ersetzt)",
     "MZ3 Die Zeile ist waehrend der Erzeugung gesperrt und danach wieder bedienbar",
-    "MZ4 Der Denk-Knopf in der Zeile folgt der Quelle: Claude via Manager (Familie am Endpunkt, Modellname ohne Familie) nennt die niedrigste Stufe mit dem Grund; derselbe Name ohne Familie und ein lokales Modell ohne bekannte Familie bleiben bei „Thinking off“",
+    "MZ4 Die Stufenwahl in der Zeile folgt der Quelle: Claude via Manager (Familie am Endpunkt, Modellname ohne Familie) bietet Stufen ohne „off“ an; derselbe Name ohne Familie und ein lokales Modell ohne bekannte Familie und ohne LM-Studio-Pfad haben keine Stufenwahl",
+  ],
+  Gruppen: [
+    "GR1 Modellzeile mit Gruppen (obsidian-kit 0.89.0, Fake-Manager mit drei Endpunkten): ohne Manager keine Gruppe, mit Manager eine Gruppe je Endpunkt (der unerreichbare mit gesperrtem Hinweis), die Wahl unter dem zweiten Endpunkt bindet Endpunkt UND Modell",
+    "GR2 Verwaiste Wahl: schaltet der Manager den gewaehlten Endpunkt ab, zeigt die Zeile „Automatisch“ mit Warnzeichen und Text, die gespeicherte Wahl bleibt in der data.json und gilt wieder, sobald der Endpunkt zurueck ist",
+    "GR3 Selbst-Abo: meldet der Manager eine Aenderung (Endpunkt entfernt), zeichnet die Zeile neu, ohne dass das Panel neu geoeffnet wird (das Plugin selbst abonniert den Manager nicht)",
+  ],
+  Redline: [
+    "RD1 Redline der Trefferzeile (obsidian-kit 0.89.0): Streichung und Einfuegung erreichen im hellen und im dunklen Thema 4,5 zu 1 gegen den Grund des Panels (nicht nur Farbe: Durchstreichen und Unterstreichen stehen da)",
   ],
   "Globales Modell": [
     "G1 Altwert wandert in die Zeile, kein globales Modell in den Einstellungen",
@@ -1935,6 +1943,171 @@ async function abschnittClaude(cdp: Cdp): Promise<void> {
   }
 }
 
+
+// --- Abschnitt: Gruppen je Endpunkt (Modellzeile, obsidian-kit 0.89.0, Welle 34) -------------------------------------
+/** GR1–GR3 am echten Fenster. Im Staging-Vault gibt es keinen echten Endpoint Manager; der zentrale Fake (`installFakeManager`) traegt drei Endpunkte (`lm`, `zwei`, `aus` unerreichbar),
+ *  `fakeManagerAendere` aendert ihn und meldet „changed“. Gegenproben im Punkt: GR1 misst die flache Liste VOR dem Manager, GR2 den Zustand VOR dem Abschalten, GR3 die Zahl der Hoerer und dass
+ *  dasselbe Panel-Element weiterlebt. Das Plugin abonniert den Manager nicht selbst (kein `onEndpointManagerChanged` in `main.ts`): zeichnet die Zeile neu, war es das Abo der Zeile (Kit 0.87.0). */
+/** `--mutation endpoints|abo`: Gegenprobe des Treibers fuer GR1–GR3 (siehe abschnittGruppen). */
+const MUTATION_GR: string | undefined = args.value("mutation");
+interface ZeileGr { alle: string[]; gruppen: Array<{ label: string; optionen: Array<{ text: string; disabled: boolean; wert: string }> }>; erste: string; wert: string; text: string; warn: boolean; warnText: string }
+const LIES_GR = (bedingung: string): string => `
+  const s = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
+  if (!s) return null;
+  const w = document.querySelector(".okit-model-bar .okit-model-bar-warn");
+  const z = { alle: [...s.options].map((o) => o.textContent ?? ""),
+    gruppen: [...s.querySelectorAll("optgroup")].map((g) => ({ label: g.label, optionen: [...g.querySelectorAll("option")].map((o) => ({ text: o.textContent ?? "", disabled: o.disabled, wert: o.value })) })),
+    erste: s.options[0] ? s.options[0].textContent ?? "" : "", wert: s.value, text: s.selectedOptions[0] ? s.selectedOptions[0].textContent ?? "" : "",
+    warn: !!w && !w.classList.contains("is-hidden"), warnText: w ? (w.getAttribute("aria-label") ?? "") : "" };
+  return (${bedingung}) ? z : null;`;
+
+async function abschnittGruppen(cdp: Cdp): Promise<void> {
+  const [GR1, GR2, GR3] = ABSCHNITTE.Gruppen!;
+  const P = `app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}]`;
+  const vor = await cdp.evaluate<{ endpoints: unknown; choice: unknown }>(`const s = ${P}.settings; return { endpoints: s.endpoints, choice: s.choice };`);
+  const stub = await startLlmStub({ models: ["qwen-smoke"], standard: { text: "{}" } });
+  const warte = (bedingung: string, ms = 15_000): Promise<ZeileGr | null> => pollUntil<ZeileGr>(cdp, LIES_GR(bedingung), ms, 250).catch(() => null);
+  const oeffnePanel = async (): Promise<void> => {
+    await closeExtraLeaves(cdp);
+    await cdp.evaluate(`for (const l of app.workspace.getLeavesOfType(${JSON.stringify(VIEW_TYPE)})) l.detach(); ${P}.llm.invalidate(); return true;`);
+    await panelOeffnen(cdp);
+  };
+  const gespeicherteWahl = (): Promise<unknown> => cdp.evaluate<unknown>(`
+    try { return JSON.parse(await app.vault.adapter.read(app.vault.configDir + "/plugins/" + ${JSON.stringify(PLUGIN_ID)} + "/data.json")).choice ?? null; } catch { return "unlesbar"; }`);
+  const neuAufloesen = (): Promise<unknown> => cdp.evaluate(`${P}.llm.invalidate(); await ${P}.llm.resolve(); return true;`);
+  try {
+    // Ohne Manager: die flache Liste (Gegenprobe zu GR1).
+    await cdp.evaluate(`${P}.settings.endpoints = [{ url: ${JSON.stringify(stub.url)}, model: "qwen-smoke" }]; ${P}.settings.choice = {}; await ${P}.saveSettings(); ${P}.llm.invalidate(); return true;`);
+    await oeffnePanel();
+    const flach = await warte(`z.alle.length >= 1`);
+    if (flach === null) throw new Vorbedingung("die Modellzeile ist ohne Manager nicht erschienen (kein .okit-model-bar-select im Panel)");
+    const ep = (id: string, models: string[], extra: Partial<FakeEndpunkt> = {}): FakeEndpunkt => ({ id, label: `Smoke ${id}`, url: stub.url, models, ...extra });
+    const inst = await installFakeManager(cdp, { pluginId: MANAGER_PLUGIN_ID, endpunkte: [ep("lm", ["qwen-smoke", "lm-zwei"]), ep("zwei", ["z-eins", "z-zwei"]), ep("aus", ["aus-std"], { unerreichbar: true })], invalidiere: [PLUGIN_ID] });
+    if (!inst.installiert) throw new Vorbedingung(`Fake-Manager nicht eingebaut: ${inst.grund ?? "?"}`);
+    await cdp.evaluate(`${P}.settings.choice = {}; await ${P}.saveSettings(); ${P}.llm.invalidate(); return true;`);
+    // Gegenprobe des Treibers (`--mutation endpoints|abo`): macht die Modellzeile blind, damit der Punkt rot werden MUSS. `endpoints`: die Verbindung kennt keine Endpunkte (flache Liste), `abo`: weder Verbindung
+    // noch Manager melden der Zeile etwas. Ohne den Schalter bleibt alles unberuehrt.
+    if (MUTATION_GR === "endpoints") await cdp.evaluate(`const l = ${P}.llm; window.__tmMut = { e: l.endpoints }; l.endpoints = () => []; return true;`);
+    if (MUTATION_GR === "abo") await cdp.evaluate(`const l = ${P}.llm; const a = app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}].api; window.__tmMut = { s: l.subscribe, o: a.on }; l.subscribe = () => () => {}; a.on = () => () => {}; return true;`);
+    await oeffnePanel();
+
+    // GR1
+    const z = await warte(`z.gruppen.length === 3 && z.gruppen.every((g) => g.optionen.length > 0) && !z.gruppen.some((g) => g.optionen.some((o) => /loading|laedt|lädt/i.test(o.text)))`);
+    if (z === null) {
+      // Der Fake steht nachweislich im Slot (list liefert drei Chat-Endpunkte): zeigt die Zeile trotzdem keine Gruppen, ist das ein Befund am Plugin (rot), nicht „nichts gemessen“.
+      const jetzt = await cdp.evaluate<{ endpunkte: number; optionen: string[] }>(`const a = app.plugins.plugins[${JSON.stringify(MANAGER_PLUGIN_ID)}]?.api; const s = document.querySelector(${JSON.stringify(ZEILE_SELECT)}); return { endpunkte: a ? a.list({ capability: "chat" }).length : -1, optionen: s ? [...s.options].map((o) => o.textContent ?? "") : [] };`);
+      if (jetzt.endpunkte !== 3) unmeasured(GR1, `der Fake-Manager liefert ${jetzt.endpunkte} statt 3 Chat-Endpunkte: die Ausgangslage fehlt`);
+      else record(GR1, false, `der Manager liefert 3 Endpunkte, die Zeile zeigte nach 15 s keine drei fertigen Gruppen · Optionen ${JSON.stringify(jetzt.optionen)}`);
+    }
+    else {
+      const gr = (label: string) => z.gruppen.find((g) => g.label === label);
+      const lm = gr("Smoke lm"), zwei = gr("Smoke zwei"), aus = gr("Smoke aus");
+      const texte = (g?: { optionen: Array<{ text: string }> }) => (g ? g.optionen.map((o) => o.text).join("|") : "");
+      const gruppenOk = !!lm && !!zwei && !!aus && texte(lm) === "Default (qwen-smoke)|qwen-smoke|lm-zwei" && texte(zwei) === "Default (z-eins)|z-eins|z-zwei"
+        && aus.optionen.some((o) => o.disabled && o.wert === "" && /not reachable|nicht erreichbar/i.test(o.text));
+      const waehle = await cdp.evaluate<boolean>(`
+        const s = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
+        const o = [...s.querySelectorAll("optgroup")].filter((g) => g.label === "Smoke zwei").flatMap((g) => [...g.querySelectorAll("option")]).find((x) => x.textContent === "z-zwei");
+        if (!o) return false;
+        s.value = o.value; s.dispatchEvent(new Event("change", { bubbles: true })); return true;`);
+      const nach = await pollUntil<{ text: string }>(cdp, `
+        const w = ${P}.settings.choice; const s = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
+        return w && w.endpointId === "zwei" && w.model === "z-zwei" ? { text: s.selectedOptions[0] ? s.selectedOptions[0].textContent : "" } : null;`, 10_000, 250).catch(() => null);
+      const gespeichert = await gespeicherteWahl();
+      record(GR1, gruppenOk && waehle && nach !== null && nach.text === "z-zwei" && JSON.stringify(gespeichert) === JSON.stringify({ endpointId: "zwei", model: "z-zwei" }) && flach.gruppen.length === 0 && /Automatic|Automatisch/i.test(z.erste),
+        `ohne Manager ${flach.gruppen.length} Gruppen (Optionen ${JSON.stringify(flach.alle)}) · mit Manager ${z.gruppen.map((g) => `${g.label}[${g.optionen.map((o) => o.text + (o.disabled ? " (gesperrt)" : "")).join(", ")}]`).join(" · ")} · erste Option „${z.erste}“ · nach der Wahl: gewaehlt ${waehle ? "ja" : "NEIN"}, gezeigt „${nach?.text ?? "?"}“, data.json ${JSON.stringify(gespeichert)}`);
+    }
+
+    // GR2
+    const vorWaise = await warte(`z.text === "z-zwei"`, 5000);
+    if (vorWaise === null) unmeasured(GR2, "die Wahl z-zwei war vor dem Abschalten nicht gezeigt (GR1 hat sie nicht gesetzt): die Ausgangslage fehlt");
+    else {
+      const a1 = await fakeManagerAendere(cdp, { enabled: { zwei: false } });
+      if ("fehler" in a1) throw new Vorbedingung(a1.fehler);
+      await neuAufloesen();
+      const w = await warte(`z.warn && z.wert === "" && /Automatic|Automatisch/i.test(z.text)`, 10_000);
+      const waehrend = await gespeicherteWahl();
+      await fakeManagerAendere(cdp, { enabled: { zwei: true } });
+      await neuAufloesen();
+      const zurueck = await warte(`z.text === "z-zwei" && !z.warn`, 10_000);
+      if (w === null) record(GR2, false, `nach dem Abschalten von „zwei“ zeigte die Zeile kein Warnzeichen mit „Automatisch“ (vorher gezeigt „${vorWaise.text}“, Warnzeichen ${String(vorWaise.warn)}) · data.json ${JSON.stringify(waehrend)}`);
+      else record(GR2, !vorWaise.warn && /switched off|abgeschaltet/i.test(w.warnText) && /zwei/.test(w.warnText) && JSON.stringify(waehrend) === JSON.stringify({ endpointId: "zwei", model: "z-zwei" }) && zurueck !== null,
+        `vorher „${vorWaise.text}“ ohne Warnzeichen · abgeschaltet: gezeigt „${w.text}“, Warnzeichen „${w.warnText}“, data.json ${JSON.stringify(waehrend)} · wieder an: ${zurueck === null ? "Wahl NICHT zurueck" : `gezeigt „${zurueck.text}“, ohne Warnzeichen`}`);
+    }
+
+    // GR3
+    const vorAbo = await warte(`z.gruppen.length === 3`, 5000);
+    if (vorAbo === null) unmeasured(GR3, "vor der Aenderung standen nicht drei Gruppen: die Ausgangslage fehlt");
+    else {
+      await cdp.evaluate(`window.__tmGr3 = document.querySelector(${JSON.stringify(ZEILE_SELECT)}); return true;`);
+      const a2 = await fakeManagerAendere(cdp, { entferne: ["aus"] });
+      if ("fehler" in a2) throw new Vorbedingung(a2.fehler);
+      const nach = await warte(`z.gruppen.length === 2 && !z.gruppen.some((g) => g.label === "Smoke aus")`, 8000);
+      const gleich = await cdp.evaluate<boolean>(`const r = document.querySelector(${JSON.stringify(ZEILE_SELECT)}) === window.__tmGr3; delete window.__tmGr3; return r;`);
+      record(GR3, a2.hoerer >= 1 && a2.gemeldet >= 1 && nach !== null && gleich,
+        `Hoerer am Manager ${a2.hoerer}, gemeldet ${a2.gemeldet} · Gruppen vorher ${vorAbo.gruppen.length}, nachher ${nach === null ? "unveraendert/anders" : String(nach.gruppen.length)} (soll 2, ohne „Smoke aus“) · dieselbe Zeile (select) ${String(gleich)}, Panel nicht neu geoeffnet`);
+    }
+  } finally {
+    await cdp.evaluate(`const m = window.__tmMut; if (m) { if (m.e) ${P}.llm.endpoints = m.e; if (m.s) ${P}.llm.subscribe = m.s; delete window.__tmMut; } delete window.__tmGr3; ${P}.settings.endpoints = ${JSON.stringify(vor.endpoints)}; ${P}.settings.choice = ${JSON.stringify(vor.choice)}; await ${P}.saveSettings(); return true;`).catch(() => undefined);
+    await fakeManagerAus(cdp).catch(() => undefined);
+    await cdp.evaluate(`${P}.llm.invalidate(); return true;`).catch(() => undefined);
+    await stub.stop();
+  }
+}
+
+
+// --- Abschnitt: Redline (Kontrast und Bild, obsidian-kit 0.89.0, Welle 34) -------------------------------------------
+/** RD1: Die Trefferzeile steht in der Vorschau (`renderRedline`). Hier wird eine Probezeile mit denselben Klassen in das Panel gesetzt (die Farben stammen allein aus der `styles.css`), der Kontrast von
+ *  Streichung und Einfuegung gegen den wirksamen Grund gemessen (Pixel einer Canvas-Flaeche, damit `color-mix()` jedes Format haben darf), hell und dunkel, und mit `$SHOT_DIR` ein Bild je Thema
+ *  aufgenommen. Gegenprobe des Treibers: `--mutation redline` setzt die alte dunkle Einfuegung (80 statt 75 Prozent, gemessen 4,41) ein, der Punkt muss rot werden. */
+async function abschnittRedline(cdp: Cdp): Promise<void> {
+  const [RD1] = ABSCHNITTE.Redline!;
+  const war = await cdp.evaluate<boolean>(`return document.body.classList.contains("theme-dark");`);
+  const thema = (dunkel: boolean) => cdp.evaluate(`document.body.classList.toggle("theme-dark", ${dunkel}); document.body.classList.toggle("theme-light", ${!dunkel}); return true;`);
+  try {
+    await closeExtraLeaves(cdp);
+    await panelOeffnen(cdp);
+    const da = await pollUntil<boolean>(cdp, `return document.querySelector('.workspace-leaf-content[data-type="${VIEW_TYPE}"] .view-content') ? true : null;`, 8000, 200);
+    if (da !== true) throw new Vorbedingung("kein Panel (.view-content) fuer die Redline-Probe");
+    await cdp.evaluate(`
+      const host = document.querySelector('.workspace-leaf-content[data-type="${VIEW_TYPE}"] .view-content');
+      const probe = host.createDiv({ cls: "transmute-hit-probe" });
+      const z = (cls) => { const r = probe.createDiv({ cls: "okit-redline " + cls });
+        r.createSpan({ text: "Du kannst die Datei " }); r.createSpan({ cls: "okit-redline-del", text: "alte Schreibweise" }); r.createSpan({ text: " und weitere Treffer lesen." }); return r; };
+      z("transmute-before");
+      const r2 = probe.createDiv({ cls: "okit-redline transmute-after" });
+      r2.createSpan({ text: "Du kannst die Datei " }); r2.createSpan({ cls: "okit-redline-ins", text: "neue Schreibweise" }); r2.createSpan({ text: " und weitere Treffer lesen." });
+      probe.scrollIntoView({ block: "center" });
+      return true;`);
+    if (MUTATION_GR === "redline") await cdp.evaluate(`const st = document.createElement("style"); st.id = "tm-mut-redline"; st.textContent = ".theme-dark .okit-redline-ins { color: color-mix(in srgb, var(--color-blue) 80%, var(--text-normal)); }"; document.head.appendChild(st); return true;`);
+    const messe = (dunkel: boolean) => cdp.evaluate<{ del: number; ins: number; delStrich: string; insStrich: string; grund: string; delFarbe: string; insFarbe: string }>(`
+      const px = (css) => { const c = document.createElement("canvas"); c.width = c.height = 1; const x = c.getContext("2d", { willReadFrequently: true }); x.clearRect(0, 0, 1, 1); x.fillStyle = css; x.fillRect(0, 0, 1, 1); const d = x.getImageData(0, 0, 1, 1).data; return { r: d[0], g: d[1], b: d[2], a: d[3] / 255 }; };
+      const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+      const grund = (el) => { for (let e = el; e; e = e.parentElement) { const c = px(getComputedStyle(e).backgroundColor); if (c.a > 0.99) return c; } return px("white"); };
+      const kontrast = (a, b) => { const l1 = lum(a), l2 = lum(b); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
+      const del = document.querySelector(".transmute-hit-probe .okit-redline-del"), ins = document.querySelector(".transmute-hit-probe .okit-redline-ins");
+      const g = grund(del), cd = getComputedStyle(del), ci = getComputedStyle(ins);
+      return { del: kontrast(px(cd.color), g), ins: kontrast(px(ci.color), grund(ins)), delStrich: cd.textDecorationLine, insStrich: ci.textDecorationLine, grund: "rgb(" + g.r + "," + g.g + "," + g.b + ")", delFarbe: cd.color, insFarbe: ci.color };`);
+    const werte: Record<string, Awaited<ReturnType<typeof messe>>> = {};
+    for (const dunkel of [false, true]) {
+      await thema(dunkel);
+      await new Promise((r) => setTimeout(r, 300));
+      werte[dunkel ? "dunkel" : "hell"] = await messe(dunkel);
+      if (process.env.SHOT_DIR) {
+        mkdirSync(process.env.SHOT_DIR, { recursive: true });
+        const box = await boxOf(cdp, ".transmute-hit-probe", 12);
+        if (box) writeFileSync(join(process.env.SHOT_DIR, `redline-${dunkel ? "dunkel" : "hell"}.png`), await capture(cdp, box, 3));
+      }
+    }
+    const ok = Object.values(werte).every((w) => w.del >= 4.5 && w.ins >= 4.5 && /line-through/.test(w.delStrich) && /underline/.test(w.insStrich));
+    const text = (k: string) => { const w = werte[k]!; return `${k}: Streichung ${w.del.toFixed(2)} (${w.delFarbe}, ${w.delStrich}), Einfuegung ${w.ins.toFixed(2)} (${w.insFarbe}, ${w.insStrich}) gegen ${w.grund}`; };
+    record(RD1, ok, `${text("hell")} · ${text("dunkel")}${MUTATION_GR === "redline" ? " · MUTATION redline (dunkle Einfuegung 80 statt 75 Prozent)" : ""}`);
+  } finally {
+    await thema(war).catch(() => undefined);
+    await cdp.evaluate(`document.querySelector(".transmute-hit-probe")?.remove(); document.getElementById("tm-mut-redline")?.remove(); return true;`).catch(() => undefined);
+  }
+}
+
 /** G1: Das globale Modell ist abgeloest (Welle 17). Ein Altwert in der data.json steht nach dem Laden in der
  *  Endpunkt-Zeile, der Altschluessel ist aus der Datei verschwunden, die Einstellungen kennen weder eine Zeile
  *  „Model“ noch die Zeilenoption „global model“. Gegenprobe: mit dem Build von vor Welle 17 schlaegt er fehl. */
@@ -2005,91 +2178,93 @@ async function abschnittGlobalesModell(cdp: Cdp): Promise<void> {
 
 /** H1: Die Hilfe-Zeile ist die ERSTE Zeile im Einstellungs-Tab (UI-STANDARD §8), mit Text-Knopf
  *  und bug-Icon. Gezeichnet ueber `display()`, den Fallback-Renderer derselben Definitionen. */
-/** D1: Der Denk-Knopf im Panel ist der Kit-Baustein; ein Klick schaltet `request.thinking.structured` von „off“ auf die
- *  gemerkte Stufe und zurueck, Label und `aria-pressed` folgen. Der Vorwert wird zurueckgesetzt. */
-async function abschnittDenken(cdp: Cdp): Promise<void> {
-  const NAME = "D1 Denk-Knopf (Kit-Baustein) schaltet die Stufe des Modus structured und zeigt den Zustand";
-  await closeExtraLeaves(cdp);
-  await panelOeffnen(cdp);
-  const vorher = await cdp.evaluate<unknown>(`return app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.request.thinking.structured ?? null;`);
-  const zustand = (): Promise<{ da: boolean; pressed: string | null; label: string; stufe: string | null }> => cdp.evaluate(`
-    const b = document.querySelector(".okit-thinking-toggle");
-    const st = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.request.thinking.structured ?? null;
-    return { da: !!b, pressed: b ? b.getAttribute("aria-pressed") : null, label: b ? b.textContent.trim() : "", stufe: st };
+/** Die Denk-Steuerung der Modellzeile (Kit `thinking-control` in der Zeile, seit 0.73.0 immer ein Dropdown mit den Stufen des Modells; der Knopf gilt nur ausserhalb der Zeile). Gelesen wird das `<select>`:
+ *  Eintraege (Wert = Stufe), gewaehlter Wert, Sperre und `aria-label`. */
+interface DenkSteuerung { da: boolean; werte: string[]; wert: string; disabled: boolean; aria: string }
+const denkLese = (cdp: Cdp): Promise<DenkSteuerung> => cdp.evaluate(`
+  const s = document.querySelector(".okit-model-bar .okit-thinking-control select");
+  return { da: !!s, werte: s ? [...s.options].map((o) => o.value) : [], wert: s ? s.value : "", disabled: s ? s.disabled : true, aria: s ? (s.getAttribute("aria-label") ?? "") : "" };
+`);
+/** Waehlt eine Stufe wie ein Nutzer (Wert setzen, `change`). */
+const denkWaehle = (cdp: Cdp, stufe: string): Promise<unknown> => cdp.evaluate(`
+  const s = document.querySelector(".okit-model-bar .okit-thinking-control select");
+  s.value = ${JSON.stringify(stufe)}; s.dispatchEvent(new Event("change", { bubbles: true })); return true;
+`);
+const denkStufe = (cdp: Cdp): Promise<string | null> => cdp.evaluate(`return app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.request.thinking.structured ?? null;`);
+
+/** Setzt den Endpunkt auf einen Stub mit LM-Studio-Pfad (sonst kennt die Verbindung kein Backend und die Modellzeile zeigt keine Stufenwahl), das Modell `modell`, und oeffnet das Panel frisch. */
+async function denkPanel(cdp: Cdp, url: string, modell: string): Promise<boolean> {
+  await cdp.evaluate(`
+    const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
+    p.settings.endpoints = [{ url: ${JSON.stringify(url)}, model: ${JSON.stringify(modell)} }];
+    p.settings.choice = {};
+    p.settings.request.thinking.structured = "off";
+    await p.saveSettings();
+    p.llm.invalidate();
+    await p.llm.resolve({ force: true });
+    for (const l of app.workspace.getLeavesOfType(${JSON.stringify(VIEW_TYPE)})) l.detach();
+    return true;
   `);
+  await panelOeffnen(cdp);
+  return (await pollUntil<boolean>(cdp, `return document.querySelector(".okit-model-bar .okit-thinking-control select") ? true : null;`, 10_000, 200).catch(() => null)) === true;
+}
+
+/** D1: Die Denk-Steuerung in der Modellzeile ist der Kit-Baustein (Dropdown mit den Stufen des Modells); eine Wahl schreibt `request.thinking.structured`, die Anzeige folgt, „aus“ gilt wieder.
+ *  Lokales Modell mit LM-Studio-Pfad (Familie aus dem Namen: Qwen, „aus“ moeglich). Der Vorwert wird zurueckgesetzt. */
+async function abschnittDenken(cdp: Cdp): Promise<void> {
+  const NAME = ABSCHNITTE.Denken![0]!;
+  await closeExtraLeaves(cdp);
+  const vorher = await cdp.evaluate<{ eps: unknown; choice: unknown; stufe: unknown }>(`const s = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings; return { eps: s.endpoints, choice: s.choice, stufe: s.request.thinking.structured ?? null };`);
+  const stub = await startLlmStub({ models: ["qwen3-8b"], kontext: { geladen: 4096 }, standard: { text: "{}" } });
   try {
-    await cdp.evaluate(`
-      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
-      p.settings.request.thinking.structured = "off";
-      await p.saveSettings();
-      return true;
-    `);
+    if (!(await denkPanel(cdp, stub.url, "qwen3-8b"))) { unmeasured(NAME, "keine Denk-Steuerung (.okit-thinking-control select) in der Modellzeile, obwohl der Stub einen LM-Studio-Pfad hat"); return; }
     await bereichWaehlen(cdp, "Whole note");
-    const aus = await zustand();
-    if (!aus.da) { unmeasured(NAME, "kein .okit-thinking-toggle im Panel gefunden"); return; }
-    await klickAusdruck(cdp, `document.querySelector(".okit-thinking-toggle")`);
+    const aus = await denkLese(cdp);
+    await denkWaehle(cdp, "low");
     await new Promise((r) => setTimeout(r, 500));
-    const an = await zustand();
-    await klickAusdruck(cdp, `document.querySelector(".okit-thinking-toggle")`);
+    const an = await denkLese(cdp);
+    const stufeAn = await denkStufe(cdp);
+    await denkWaehle(cdp, "off");
     await new Promise((r) => setTimeout(r, 500));
-    const wieder = await zustand();
-    record(NAME,
-      aus.pressed === "false" && an.pressed === "true" && an.stufe !== "off" && wieder.pressed === "false" && wieder.stufe === "off",
-      `aus: ${aus.pressed}/${aus.label}/${aus.stufe}; nach Klick: ${an.pressed}/${an.label}/${an.stufe}; nach zweitem Klick: ${wieder.pressed}/${wieder.label}/${wieder.stufe}`);
+    const wieder = await denkLese(cdp);
+    const stufeAus = await denkStufe(cdp);
+    record(NAME, aus.werte.includes("off") && aus.werte.includes("low") && aus.wert === "off" && an.wert === "low" && stufeAn === "low" && wieder.wert === "off" && stufeAus === "off" && !aus.disabled,
+      `Stufen ${JSON.stringify(aus.werte)}; Ausgang ${aus.wert}; nach Wahl low: Anzeige ${an.wert}, gespeichert ${String(stufeAn)}; nach Wahl off: Anzeige ${wieder.wert}, gespeichert ${String(stufeAus)}`);
     await denkenOhneAus(cdp);
   } finally {
     await cdp.evaluate(`
       const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
-      if (${JSON.stringify(vorher)} === null) delete p.settings.request.thinking.structured; else p.settings.request.thinking.structured = ${JSON.stringify(vorher)};
-      await p.saveSettings();
+      p.settings.endpoints = ${JSON.stringify(vorher.eps)}; p.settings.choice = ${JSON.stringify(vorher.choice)};
+      if (${JSON.stringify(vorher.stufe)} === null) delete p.settings.request.thinking.structured; else p.settings.request.thinking.structured = ${JSON.stringify(vorher.stufe)};
+      await p.saveSettings(); p.llm.invalidate();
       return true;
     `).catch(() => undefined);
+    await stub.stop().catch(() => undefined);
   }
 }
 
-/** D2: Ein Modell der Familie gpt-oss kennt kein „aus“. Der Knopf bleibt wirksam (er wechselt zwischen der niedrigsten und der gewaehlten Stufe);
- *  das Label sagt „Thinking: lowest level“ (Text des Kits, `thinkingOffTexts`), der Grund steht im aria-label; es behauptet keine Sperre. Das Modell steht in der Endpunkt-Zeile, der Vorwert wird zurueckgesetzt. */
+/** D2: Ein Modell der Familie gpt-oss kennt kein „aus“ (seit code-kit 0.65.0 sendet „aus“ dort `minimal`): das Dropdown bietet statt „aus“ die niedrigste Stufe `minimal` an, ein gespeichertes „aus“
+ *  wird darauf gebracht, die Steuerung bleibt bedienbar, eine Wahl schreibt. Das Modell steht in der Endpunkt-Zeile, der Vorwert wird zurueckgesetzt. */
 async function denkenOhneAus(cdp: Cdp): Promise<void> {
-  const NAME = "D2 Modell ohne „aus“ (gpt-oss): das Label nennt „lowest level“ samt Hinweis im aria-label statt „Thinking off“, der Knopf bleibt bedienbar";
-  const vor = await cdp.evaluate<string>(`return JSON.stringify(app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}].settings.endpoints);`);
-  const lese = (): Promise<{ da: boolean; label: string; aria: string; disabled: boolean; pressed: string | null }> => cdp.evaluate(`
-    const b = document.querySelector(".okit-thinking-toggle");
-    return { da: !!b, label: b ? b.textContent.trim() : "", aria: b ? (b.getAttribute("aria-label") ?? "") : "", disabled: b ? b.disabled : true, pressed: b ? b.getAttribute("aria-pressed") : null };
-  `);
+  const NAME = ABSCHNITTE.Denken![1]!;
+  const stub = await startLlmStub({ models: ["gpt-oss-20b"], kontext: { geladen: 4096 }, standard: { text: "{}" } });
   try {
-    await cdp.evaluate(`
-      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
-      p.settings.endpoints = p.settings.endpoints.map((e, i) => (i === 0 ? { ...e, model: "gpt-oss-20b" } : e));
-      p.settings.request.thinking.structured = "off";
-      await p.saveSettings();
-      p.llm.invalidate();
-      for (const l of app.workspace.getLeavesOfType("transmute-panel")) l.detach();
-      return true;
-    `);
-    await panelOeffnen(cdp);
-    await new Promise((r) => setTimeout(r, 600));
-    const aus = await lese();
-    if (!aus.da) { unmeasured(NAME, "kein .okit-thinking-toggle im Panel gefunden"); return; }
-    // Abnahme am Bild (nicht Teil der Bilanz): die Modellzeile mit dem ehrlichen Label, Ablage ueber $SHOT_DIR.
+    if (!(await denkPanel(cdp, stub.url, "gpt-oss-20b"))) { unmeasured(NAME, "keine Denk-Steuerung (.okit-thinking-control select) in der Modellzeile fuer gpt-oss-20b mit LM-Studio-Pfad"); return; }
+    const aus = await denkLese(cdp);
+    // Abnahme am Bild (nicht Teil der Bilanz): die Modellzeile mit der niedrigsten Stufe, Ablage ueber $SHOT_DIR.
     if (process.env.SHOT_DIR) {
       const box = await boxOf(cdp, ".transmute-model-host", 0);
       mkdirSync(process.env.SHOT_DIR, { recursive: true });
       writeFileSync(join(process.env.SHOT_DIR, "thinking-gpt-oss.png"), await capture(cdp, box ?? undefined));
     }
-    await klickAusdruck(cdp, `document.querySelector(".okit-thinking-toggle")`);
+    await denkWaehle(cdp, "low");
     await new Promise((r) => setTimeout(r, 500));
-    const an = await lese();
-    const hinweis = aus.aria.startsWith("Thinking: lowest level.") && aus.aria.includes("can't be fully turned off");
-    record(NAME, aus.label === "Thinking: lowest level" && hinweis && !aus.disabled && an.label === "Thinking on" && !an.disabled,
-      `Ausgang „${aus.label}“ (gesperrt: ${aus.disabled}, aria-label „${aus.aria}“); nach Klick „${an.label}“ (gesperrt: ${an.disabled})`);
+    const an = await denkLese(cdp);
+    const stufe = await denkStufe(cdp);
+    record(NAME, !aus.werte.includes("off") && aus.werte[0] === "minimal" && aus.wert === "minimal" && !aus.disabled && aus.aria !== "" && an.wert === "low" && stufe === "low" && !an.disabled,
+      `Stufen ${JSON.stringify(aus.werte)} (kein „off“, niedrigste „minimal“); Ausgang ${aus.wert} (gesperrt: ${aus.disabled}, aria-label „${aus.aria}“); nach Wahl low: Anzeige ${an.wert}, gespeichert ${String(stufe)}`);
   } finally {
-    await cdp.evaluate(`
-      const p = app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}];
-      p.settings.endpoints = JSON.parse(${JSON.stringify(vor)});
-      await p.saveSettings();
-      p.llm.invalidate();
-      return true;
-    `).catch(() => undefined);
+    await stub.stop().catch(() => undefined);
   }
 }
 
@@ -2254,7 +2429,7 @@ async function zeileOeffnen(cdp: Cdp, erwartet: string): Promise<boolean> {
   await panelOeffnen(cdp);
   const da = await pollUntil<boolean>(cdp, `
     const sel = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
-    return sel && [...sel.options].some((o) => o.value === ${JSON.stringify(erwartet)}) ? true : null;
+    return sel && [...sel.options].some((o) => o.value === ${JSON.stringify(erwartet)} || o.value.endsWith("\u0001" + ${JSON.stringify(erwartet)})) ? true : null;
   `, 10_000, 200);
   if (da !== true) {
     const stand = await cdp.evaluate<string>(`
@@ -2271,7 +2446,9 @@ async function zeileOeffnen(cdp: Cdp, erwartet: string): Promise<boolean> {
 async function zeileWaehlen(cdp: Cdp, wert: string): Promise<void> {
   await cdp.evaluate(`
     const sel = document.querySelector(${JSON.stringify(ZEILE_SELECT)});
-    sel.value = ${JSON.stringify(wert)};
+    // Mit Gruppen (Kit 0.87.0) tragen die Eintraege kodierte Werte (Endpunkt, Trenner, Modell): gewaehlt wird der Eintrag, dessen Modell passt; "" ist „Automatisch“.
+    const o = ${JSON.stringify(wert)} === "" ? [...sel.options].find((x) => x.value === "") : [...sel.options].find((x) => x.value === ${JSON.stringify(wert)} || x.value.endsWith("\u0001" + ${JSON.stringify(wert)}));
+    sel.value = o ? o.value : ${JSON.stringify(wert)};
     sel.dispatchEvent(new Event("change", { bubbles: true }));
     return true;
   `);
@@ -2311,13 +2488,15 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
       await zeileWaehlen(cdp, MANAGER_CHOICE_MODEL);
       const gewaehlt = await pollUntil<{ choice: unknown; inUse: string }>(cdp, `
         const p = ${P};
-        return p.settings.choice?.model === ${JSON.stringify(MANAGER_CHOICE_MODEL)} ? { choice: p.settings.choice.model, inUse: p.llm.modelInUse() } : null;
+        // Mit Gruppen (Kit 0.87.0) schreibt setChoice die Wahl, dann loest die Verbindung neu auf: modelInUse() zieht erst danach nach, beides gehoert zur Bedingung.
+        return p.settings.choice?.model === ${JSON.stringify(MANAGER_CHOICE_MODEL)} && p.llm.modelInUse() === ${JSON.stringify(MANAGER_CHOICE_MODEL)} ? { choice: p.settings.choice.model, inUse: p.llm.modelInUse() } : null;
       `, 6_000, 200);
       await zeileWaehlen(cdp, "");
       const leer = await pollUntil<{ choice: unknown }>(cdp, `
         const p = ${P};
         return (p.settings.choice?.model ?? "") === "" ? { choice: p.settings.choice?.model ?? "" } : null;
       `, 6_000, 200);
+      start.werte = start.werte.map((v) => { const i = v.lastIndexOf("\u0001"); return v.startsWith("\u0001") && i > 0 ? v.slice(i + 1) : v; });   // kodierte Werte der Gruppen auf das Modell gekuerzt
       const auto = start.texte[start.werte.indexOf("")] ?? "";
       record(MZ1,
         start.werte.includes(MANAGER_DEFAULT_MODEL) && start.werte.includes(MANAGER_CHOICE_MODEL) && auto.includes(MANAGER_DEFAULT_MODEL)
@@ -2398,15 +2577,13 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
     const ALIAS = "alias-ohne-familie";
     const LOKAL = "mz-a";
     // Der Denk-Knopf zeichnet sich nach der ersten Aufloesung neu (Familie): `erwartet` wartet, bis das Label so lautet, sonst gilt der letzte Stand.
-    const label = async (erwartet: string | null): Promise<{ label: string; aria: string } | null> => {
-      const lies = (): Promise<{ label: string; aria: string } | null> => cdp.evaluate(`
-        const b = document.querySelector(".okit-model-bar .okit-thinking-toggle");
-        return b ? { label: (b.textContent ?? "").trim(), aria: b.getAttribute("aria-label") ?? "" } : null;
-      `);
-      let stand = await lies();
-      for (let i = 0; i < 32 && (stand === null || (erwartet !== null && stand.label !== erwartet)); i++) {
+    // Die Denk-Steuerung der Zeile ist seit Kit 0.73.0 ein Dropdown mit den Stufen des Modells; ohne bekannte Familie (und ohne LM-Studio-Pfad) gibt es keine Steuerung. `erwartet` wartet, bis sie
+    // (nicht) da ist: sie zeichnet sich nach der ersten Aufloesung neu (Familie).
+    const label = async (erwartet: boolean | null): Promise<DenkSteuerung> => {
+      let stand = await denkLese(cdp);
+      for (let i = 0; i < 32 && erwartet !== null && stand.da !== erwartet; i++) {
         await new Promise((r) => setTimeout(r, 250));
-        stand = await lies();
+        stand = await denkLese(cdp);
       }
       return stand;
     };
@@ -2424,11 +2601,11 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
       provider: "anthropic", backend: "anthropic", apiKey: CLAUDE_SCHLUESSEL, hasSecret: true, transport: "anthropic",
       ...(family !== undefined ? { family } : {}),
     });
-    let mitManager: { label: string; aria: string } | null = null;
+    let mitManager: DenkSteuerung | null = null;
     let quelleMit: { familie: string | null; herkunft: string } | null = null;
-    let ohneFamilie: { label: string; aria: string } | null = null;
+    let ohneFamilie: DenkSteuerung | null = null;
     let quelleOhne: { familie: string | null; herkunft: string } | null = null;
-    let ohneManager: { label: string; aria: string } | null = null;
+    let ohneManager: DenkSteuerung | null = null;
     let zeileDa = true;
     try {
       await cdp.evaluate(`${P}.settings.request.thinking = { ...(${P}.settings.request.thinking ?? {}), structured: "off" }; await ${P}.saveSettings(); return true;`);
@@ -2441,7 +2618,7 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
       zeileDa = await zeileOeffnen(cdp, ALIAS);
       if (zeileDa) {
         // Der Denk-Knopf zeichnet sich nach der Aufloesung neu (Familie): kurz warten, bis das Label steht.
-        mitManager = await label("Thinking: lowest level");
+        mitManager = await label(true);
         quelleMit = await quelle();
       }
       await fakeManagerAus(cdp);
@@ -2450,7 +2627,7 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
       await cdp.evaluate(`${P}.settings.choice = {}; await ${P}.saveSettings(); ${P}.llm.invalidate(); await ${P}.llm.resolve({ force: true }); return true;`);
       if (await zeileOeffnen(cdp, ALIAS)) {
         await new Promise((r) => setTimeout(r, 1500));
-        ohneFamilie = await label(null);
+        ohneFamilie = await label(false);
         quelleOhne = await quelle();
       } else zeileDa = false;
       await fakeManagerAus(cdp);
@@ -2466,18 +2643,18 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
       if (await zeileOeffnen(cdp, LOKAL)) {
         // Gegenprobe: ohne Familie bleibt es bei „Thinking off“; die Zeit gibt der Aufloesung Gelegenheit, es zu aendern.
         await new Promise((r) => setTimeout(r, 1500));
-        ohneManager = await label(null);
+        ohneManager = await label(false);
       } else zeileDa = false;
     } finally {
       await claude.stop().catch(() => undefined);
     }
     record(MZ4,
-      zeileDa && mitManager !== null && mitManager.label === "Thinking: lowest level" && mitManager.aria.includes("can't be fully turned off")
+      zeileDa && mitManager !== null && mitManager.da && !mitManager.werte.includes("off") && mitManager.werte.length > 0 && mitManager.aria !== ""
         && quelleMit?.familie === "claude" && quelleMit.herkunft === "manager"
-        && ohneFamilie !== null && ohneFamilie.label === "Thinking off" && quelleOhne !== null && quelleOhne.familie === null
-        && ohneManager !== null && ohneManager.label === "Thinking off",
-      `${zeileDa ? "" : "Die Modellzeile kam in 10 s nicht ins Panel. "}Claude via Manager, Alias „${ALIAS}“ mit family „claude“: „${mitManager?.label ?? "kein Knopf"}“ (aria-label „${(mitManager?.aria ?? "").slice(0, 70)}“), Quelle family ${quelleMit?.familie ?? "null"}/${quelleMit?.herkunft ?? "-"}; ` +
-      `derselbe Alias ohne family: „${ohneFamilie?.label ?? "kein Knopf"}“, Quelle family ${quelleOhne?.familie ?? "null"}/${quelleOhne?.herkunft ?? "-"}; lokales Modell „${LOKAL}“ ohne Manager: „${ohneManager?.label ?? "kein Knopf"}“`);
+        && ohneFamilie !== null && !ohneFamilie.da && quelleOhne !== null && quelleOhne.familie === null
+        && ohneManager !== null && !ohneManager.da,
+      `${zeileDa ? "" : "Die Modellzeile kam in 10 s nicht ins Panel. "}Claude via Manager, Alias „${ALIAS}“ mit family „claude“: ${mitManager?.da ? `Stufenwahl ${JSON.stringify(mitManager.werte)} ohne „off“, gewaehlt ${mitManager.wert}, aria-label „${mitManager.aria.slice(0, 70)}“` : "keine Stufenwahl"}, Quelle family ${quelleMit?.familie ?? "null"}/${quelleMit?.herkunft ?? "-"}; ` +
+      `derselbe Alias ohne family: ${ohneFamilie?.da ? `Stufenwahl ${JSON.stringify(ohneFamilie.werte)} (soll fehlen)` : "keine Stufenwahl"}, Quelle family ${quelleOhne?.familie ?? "null"}/${quelleOhne?.herkunft ?? "-"}; lokales Modell „${LOKAL}“ ohne Manager und ohne LM-Studio-Pfad: ${ohneManager?.da ? `Stufenwahl ${JSON.stringify(ohneManager.werte)} (soll fehlen)` : "keine Stufenwahl"}`);
   } catch (e) {
     for (const n of ABSCHNITTE.Modellzeile!) if (!bilanz.eintraege().some((x) => x.name === n)) unmeasured(n, `Messung abgebrochen: ${(e as Error).message}`);
   } finally {
@@ -2634,6 +2811,8 @@ async function main(): Promise<void> {
     await abschnitt("Hilfe", () => abschnittHilfe(cdp));
     await abschnitt("Denken", () => abschnittDenken(cdp));
     await abschnitt("Modellzeile", () => abschnittModellzeile(cdp));
+    await abschnitt("Gruppen", () => abschnittGruppen(cdp));
+    await abschnitt("Redline", () => abschnittRedline(cdp));
     await abschnitt("Globales Modell", () => abschnittGlobalesModell(cdp));
     await abschnitt("i18n", () => abschnittI18n(cdp));
   } finally {
