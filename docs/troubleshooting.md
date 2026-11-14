@@ -23,7 +23,7 @@ Each entry starts with the message you see, exactly as the plugin shows it (Engl
 
 **Cause:** A reasoning model spent its whole token budget on thinking and returned nothing.
 
-**Fix:** Set the thinking level of the **Structured** mode to *off* under **Request** in the settings (or use the **Thinking off** toggle in the panel). A model that cannot switch thinking off (gpt-oss; the button then reads **Thinking: lowest level**) needs a different model.
+**Fix:** Set the thinking level of the **Structured** mode to *off* under **Request** in the settings (or pick *off* in the thinking-level dropdown of the model row in the panel). A model that cannot switch thinking off (gpt-oss; its dropdown then has no *off* and starts at *minimal*) needs a different model.
 
 ## The model's answer was cut off at its token limit before anything usable came back. …
 
