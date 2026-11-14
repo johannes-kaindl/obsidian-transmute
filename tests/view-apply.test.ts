@@ -63,6 +63,13 @@ function deps(session: TransmuteSession): TransmuteViewDeps {
       setModel: () => Promise.resolve(),
       modelInUse: () => "",
       source: () => ({ family: null, backend: "lmstudio" as const }),
+      // Ein Adapter ohne Manager (ModelBarConnection ab Kit 0.87.0): keine Endpunkte, die Zeile zeigt eine Liste ohne Gruppen.
+      endpoints: () => [],
+      activeEndpointId: () => undefined,
+      modelsOf: () => Promise.resolve({ models: [], reachable: false }),
+      choice: () => ({}),
+      setChoice: () => Promise.resolve(),
+      subscribe: () => () => undefined,
     },
     thinking: { current: () => "off" as const, onLevel: () => "low" as const, setLevel: () => Promise.resolve() },
     runOptions: () => ({ sampleChars: 400, budgetMs: 2000, maxHits: 500 }),

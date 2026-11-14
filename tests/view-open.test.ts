@@ -6,6 +6,7 @@ import { TransmuteView, type TransmuteViewDeps } from "../src/obsidian/view";
 import { TransmuteSession } from "../src/core/session";
 import type { PresetDef } from "../src/core/settings";
 import type { FamilyId, ThinkingLevel } from "../src/vendor/kit/sampling-profiles";
+import type { ApiErrorCode } from "../src/vendor/kit/endpoint-source";
 import "../src/core/i18n/strings";
 
 /** Ein Vault mit `n` Notizen — die Zahl ist der ganze Gegenstand dieses Tests. */
@@ -29,14 +30,36 @@ function fakeApp(n: number): App {
   } as unknown as App;
 }
 
-/** Die Verbindung, wie die Modellzeile sie braucht (`ModelBarConnection` plus Familie und Backend fuer den Denk-Knopf). */
-function fakeLlm(over: { family?: FamilyId | null; model?: string } = {}) {
+export interface FakeEndpoints {
+  list: Array<{ id: string; label: string; defaultModel?: string }>;
+  active?: string;
+  choice?: { endpointId?: string; model?: string };
+  lists?: Record<string, { models: string[]; reachable: boolean }>;
+  /** Grund einer verwaisten Wahl (`source().reason`), wie ihn die Kit-Verbindung meldet. */
+  reason?: ApiErrorCode;
+}
+
+/** Die Verbindung, wie die Modellzeile sie braucht (`ModelBarConnection`, Kit 0.87.0 bis 0.89.0, plus Familie und Backend fuer den Denk-Knopf). Ohne `endpoints` ein Adapter ohne Manager
+ *  (die Zeile zeigt eine Liste ohne Gruppen); mit `endpoints` die Gruppen je Endpunkt, `setChoice` schreibt die Wahl und meldet an die Abonnenten wie `LlmConnection`. */
+function fakeLlm(over: { family?: FamilyId | null; model?: string; endpoints?: FakeEndpoints } = {}) {
   let model = over.model ?? "";
+  const fe: FakeEndpoints = over.endpoints ?? { list: [] };
+  const subs = new Set<() => void>();
+  const notify = (): void => { for (const cb of [...subs]) cb(); };
   const llm = {
+    fe,
+    subs,
+    notify,
     models: vi.fn(() => Promise.resolve({ models: ["qwen", "gemma"], reachable: true })),
     setModel: vi.fn((m: string) => { model = m; return Promise.resolve(); }),
     modelInUse: () => model,
-    source: () => ({ family: over.family ?? null, backend: "lmstudio" as const, defaultModel: "qwen" }),
+    source: () => ({ family: over.family ?? null, backend: "lmstudio" as const, defaultModel: "qwen", ...(fe.reason === undefined ? {} : { reason: fe.reason }) }),
+    endpoints: () => fe.list,
+    activeEndpointId: () => fe.active,
+    modelsOf: vi.fn((id: string) => Promise.resolve(fe.lists?.[id] ?? { models: [], reachable: false })),
+    choice: () => fe.choice ?? {},
+    setChoice: vi.fn((c: { endpointId?: string; model?: string }) => { fe.choice = c; if (c.endpointId !== undefined) fe.active = c.endpointId; fe.reason = undefined; notify(); return Promise.resolve(); }),
+    subscribe: (cb: () => void) => { subs.add(cb); return () => { subs.delete(cb); }; },
   };
   return llm;
 }
@@ -200,14 +223,17 @@ describe("TransmuteView — Modellzeile des Kits", () => {
   });
 
   // Die Familie kommt aus der Quelle (Manager/Erkennung), nicht aus dem Modellnamen: „Modell“ heisst hier nichts, die Quelle sagt gpt-oss.
-  it("der Denk-Knopf folgt der Familie der Quelle und nennt die niedrigste Stufe mit dem Grund im aria-label", async () => {
+  it("die Denk-Steuerung folgt der Familie der Quelle: gpt-oss kann nicht ganz aus, das Dropdown zeigt die niedrigste Stufe (minimal, code-kit 0.65.0) und bietet kein \"off\"", async () => {
+    type Dd = { getAttribute?(n: string): string | null; __component?: { getValue(): string; options: Record<string, string>; onChangeCB: ((v: string) => unknown) | null } };
     const d = deps("file", [], { llm: fakeLlm({ family: "gpt-oss", model: "irgendein-name" }) });
     const view = new TransmuteView({ app: fakeApp(1) } as unknown as WorkspaceLeaf, d);
     await oeffnen(view);
-    const knopf = findByClass<{ textContent?: string; getAttribute(n: string): string | null; click(): void }>(view.contentEl, "okit-thinking-toggle");
-    expect(knopf?.textContent).toContain("Thinking: lowest level");
-    expect(knopf?.getAttribute("aria-label")).toContain("Thinking can't be fully turned off here");
-    knopf?.click();
+    const ctl = findByClass<{ children?: Dd[] }>(view.contentEl, "okit-thinking-control");
+    const dd = (ctl?.children ?? []).find((c) => c.__component !== undefined);
+    expect(dd).toBeDefined();
+    expect(dd?.__component?.getValue()).toBe("minimal");
+    expect(Object.keys(dd?.__component?.options ?? {})).toEqual(["minimal", "low", "medium", "high"]);
+    await dd?.__component?.onChangeCB?.("low");
     expect(d.setLevel).toHaveBeenCalledWith("low");
   });
 
@@ -217,5 +243,72 @@ describe("TransmuteView — Modellzeile des Kits", () => {
     expect(findByClass(view.contentEl, "okit-model-bar")).not.toBeNull();
     await (view as unknown as { onClose(): Promise<void> }).onClose();
     expect(findByClass(view.contentEl, "okit-model-bar")).toBeNull();
+  });
+});
+
+describe("Modellzeile mit Endpunkten (Kit 0.89.0: Gruppen, verwaiste Wahl, Selbst-Abo)", () => {
+  type El = { children?: El[]; textContent?: string; value: string; className?: string; getAttribute?(n: string): string | null; _listeners?: Record<string, Array<() => void>> };
+  const zwei = (): FakeEndpoints => ({
+    list: [{ id: "a", label: "Lokal", defaultModel: "qwen" }, { id: "b", label: "Zweiter" }],
+    active: "a",
+    choice: {},
+    lists: { a: { models: ["qwen", "gemma"], reachable: true }, b: { models: ["x1"], reachable: true } },
+  });
+  const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+  const oeffneMit = async (endpoints: FakeEndpoints) => {
+    const llm = fakeLlm({ endpoints });
+    const view = new TransmuteView({ app: fakeApp(1) } as unknown as WorkspaceLeaf, deps("file", [], { llm }));
+    await oeffnen(view);
+    await tick(); await tick();
+    return { llm, view };
+  };
+  const gruppen = (view: TransmuteView): El[] => (findByClass<El>(view.contentEl, "okit-model-bar-select")?.children ?? []).filter((c) => (c.getAttribute?.("label") ?? null) !== null);
+  const texte = (g: El): string[] => (g.children ?? []).map((o) => o.textContent ?? "");
+
+  it("zeigt je Endpunkt eine Gruppe mit dessen Modellen", async () => {
+    const { view } = await oeffneMit(zwei());
+    const g = gruppen(view);
+    expect(g.map((x) => x.getAttribute?.("label"))).toEqual(["Lokal", "Zweiter"]);
+    expect(texte(g[0])).toEqual(expect.arrayContaining(["qwen", "gemma"]));
+    expect(texte(g[1])).toContain("x1");
+  });
+
+  it("eine Wahl unter einem anderen Endpunkt ruft setChoice mit Endpunkt UND Modell, nie setModel", async () => {
+    const { view, llm } = await oeffneMit(zwei());
+    const select = findByClass<El>(view.contentEl, "okit-model-bar-select")!;
+    const wert = gruppen(view)[1].children?.find((o) => o.textContent === "x1")?.getAttribute?.("value");
+    expect(wert).toBeTruthy();
+    select.value = wert as string;
+    select._listeners?.change?.forEach((cb) => cb());
+    await tick(); await tick();
+    expect(llm.setChoice).toHaveBeenCalledWith({ endpointId: "b", model: "x1" });
+    expect(llm.setModel).not.toHaveBeenCalled();
+  });
+
+  it("verwaiste Wahl: Automatisch mit Warnzeichen und Grund, die gespeicherte Wahl bleibt unangetastet", async () => {
+    const e = zwei();
+    e.choice = { endpointId: "gone", model: "alt" };
+    e.reason = "not-found";
+    const { view, llm } = await oeffneMit(e);
+    const warn = findByClass<El>(view.contentEl, "okit-model-bar-warn")!;
+    expect(warn.className).not.toContain("is-hidden");
+    expect((warn.getAttribute?.("aria-label") ?? "").length).toBeGreaterThan(0);
+    expect(findByClass<El>(view.contentEl, "okit-model-bar-select")?.value).toBe("");
+    expect(e.choice).toEqual({ endpointId: "gone", model: "alt" });
+    expect(llm.setChoice).not.toHaveBeenCalled();
+  });
+
+  it("Selbst-Abo: ein Wechsel, den die Verbindung meldet, zeichnet die Zeile neu; onClose meldet ab", async () => {
+    const e = zwei();
+    const { view, llm } = await oeffneMit(e);
+    expect(llm.subs.size).toBe(1);
+    expect(findByClass<El>(view.contentEl, "okit-model-bar-select")?.value).toBe("");
+    e.choice = { endpointId: "b", model: "x1" };
+    e.active = "b";
+    llm.notify();
+    await tick();
+    expect(findByClass<El>(view.contentEl, "okit-model-bar-select")?.value).not.toBe("");
+    await (view as unknown as { onClose(): Promise<void> }).onClose();
+    expect(llm.subs.size).toBe(0);
   });
 });

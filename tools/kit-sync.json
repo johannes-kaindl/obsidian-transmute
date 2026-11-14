@@ -33,7 +33,10 @@
         "model-context",
         "embeddings-client",
         "llm-json",
-        "sampling-profiles",
+        {
+          "name": "sampling-profiles",
+          "ref": "0.68.0"
+        },
         {
           "name": "rotation",
           "ref": "0.60.0"
@@ -61,6 +64,10 @@
         {
           "name": "answer-retry",
           "ref": "0.63.0"
+        },
+        {
+          "name": "error-message",
+          "ref": "0.68.0"
         }
       ]
     },
@@ -93,7 +100,10 @@
       "modules": [
         "anthropic-wire",
         "endpoint-secret-hook",
-        "endpoint-source",
+        {
+          "name": "endpoint-source",
+          "ref": "0.89.0"
+        },
         "override-guard",
         "shortcut-failure"
       ],
@@ -118,24 +128,45 @@
         "collapsible",
         "endpoint-list",
         "endpoint-secrets",
-        "endpoint-source",
+        {
+          "name": "endpoint-source",
+          "ref": "0.89.0"
+        },
         "folder-suggest",
         "help-setting",
         "hub",
         "lab-client",
-        "llm-connection",
-        "llm-connection-strings",
+        {
+          "name": "llm-connection",
+          "ref": "0.89.0"
+        },
+        {
+          "name": "llm-connection-strings",
+          "ref": "0.89.0"
+        },
         "endpoint-status-text",
-        "endpoint-plumbing",
+        {
+          "name": "endpoint-plumbing",
+          "ref": "0.89.0"
+        },
         "embedding-connection",
         "confirm",
         {
           "name": "dom-guard",
           "ref": "0.88.0"
         },
-        "thinking-control",
-        "model-bar",
-        "model-bar-strings",
+        {
+          "name": "thinking-control",
+          "ref": "0.89.0"
+        },
+        {
+          "name": "model-bar",
+          "ref": "0.89.0"
+        },
+        {
+          "name": "model-bar-strings",
+          "ref": "0.89.0"
+        },
         "model-picker",
         "plugin-api",
         "request-section",
@@ -145,7 +176,7 @@
         "shortcuts-bridge",
         {
           "name": "redline",
-          "ref": "0.80.4"
+          "ref": "0.89.0"
         }
       ],
       "rewrite": [
@@ -168,7 +199,10 @@
       "source": "obsidian-kit",
       "from": "src/testing",
       "modules": [
-        "kit-css",
+        {
+          "name": "kit-css",
+          "ref": "0.89.0"
+        },
         "obsidian-mock",
         "linear-probe"
       ]

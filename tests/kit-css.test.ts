@@ -11,4 +11,7 @@ describe("Kit-CSS in styles.css", () => {
   it("jede steht wortgleich in styles.css", () => {
     expect(missingKitCss(vendorDir, readFileSync("styles.css", "utf8"))).toEqual([]);
   });
+  it("styles.css traegt keine Einsetzung `${...}` (Rohtext-Kopie einer Kit-Konstante mit Einsetzung: Store-Scorecard \"Caution\", Unknown word)", () => {
+    expect(readFileSync("styles.css", "utf8")).not.toContain("${");
+  });
 });
