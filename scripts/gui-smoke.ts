@@ -138,7 +138,9 @@ const ABSCHNITTE: Record<string, readonly string[]> = {
     "V4 Schwaerzung mit PEM: das JSON bleibt gueltig, das mehrzeilige Original ist da",
   ],
   Gemma: ["K1 Gemma-Stub: Denken ohne Oeffner vor <channel|> im Antworttext, die Regel ist die Antwort, nicht ein Entwurf aus dem Denken"],
-  Linkschutz: ["LK1 Link-Waechter: ein gekappter Link im Denktext sieht aus wie Text (Farbe, Unterstrich, Zeiger, Icon), ein Link mit Ziel bleibt ein Link"],
+  Linkschutz: ["LK1 Link-Waechter: ein gekappter Link im Denktext sieht aus wie Text (Farbe, Unterstrich, Zeiger, Icon), ein Link mit Ziel bleibt ein Link",
+    "LK2 Linkschutz-Haertung (code-kit 0.68.0, dom-guard 0.88.0): rohes HTML mit on*, ping, formaction und form, waehrend `renderMarkdownGuarded` den Denktext rendert, verliert diese Marker im Beobachter, der https-Link bleibt; Gegenprobe: dasselbe HTML ausserhalb behaelt alle",
+  ],
   Pflicht: [
     "P1 Tippen ins Regex-Feld behaelt den Fokus (das Panel zeichnet bei jedem Tastendruck neu)",
     "P1b Gegenprobe: ein Neuzeichnen mit Fokusverlust macht P1 rot",
@@ -1270,6 +1272,63 @@ async function abschnittLinkschutz(cdp: Cdp): Promise<void> {
       return true;
     `).catch(() => undefined);
   }
+}
+
+/** LK2: Haertung des Linkschutzes (code-kit 0.68.0 `link-guard`, obsidian-kit 0.88.0 `dom-guard`) am echten Weg des Denktexts. Modelltext erreicht den Waechter im Betrieb nie
+ *  (`neutralizeModelMarkdown` maskiert `<`); gemessen wird deshalb der Waechter selbst. `require("obsidian")` gibt es im Renderer nicht, also ruft der Treiber den Handler, den die
+ *  View dem Panel gibt (`view.handlers().renderMarkdown(el, text)` -> `renderMarkdownGuarded`, derselbe Aufruf wie fuer `.transmute-reasoning-body`), und setzt SYNCHRON danach rohes
+ *  HTML per `innerHTML` in den Zielknoten: der Beobachter haengt, das Render-Promise ist offen. Gezaehlt wird zweimal: nach zwei Mikroaufgaben („sofort“, Beobachter-Callback; ob das Render-Promise
+ *  da schon aufgeloest war, sieht der Treiber nicht) und nach 800 ms (mit dem Abschlussdurchgang `guard.run()`). Beide muessen sauber sein, der https-Anker muss stehen (sonst haette
+ *  der Render das HTML nur weggeraeumt). Gegenprobe: dasselbe HTML in einem Knoten ausserhalb jedes Beobachters behaelt alle Marker. */
+async function abschnittLinkschutzHaertung(cdp: Cdp): Promise<void> {
+  const NAME = ABSCHNITTE.Linkschutz![1]!;
+  const MARKER = "__trOnMarker";
+  const HTML = [
+    `<a href="https://example.org/ok" onclick="window.${MARKER} = 1" ping="https://example.invalid/ping">h-ok</a>`,
+    `<p onmouseover="window.${MARKER} = 2">h-p</p>`,
+    '<form action="https://example.invalid/form"><button formaction="https://example.invalid/fa">h-form</button></form>',
+  ].join("");
+  type Zahl = { anker: { h: string | null; attrs: string[] } | null; forms: number; formaction: number; on: number; ping: number };
+  const d = await cdp.evaluate<{ gegen: Zahl; sofort: Zahl; spaeter: Zahl; marker: string } | { fehler: string }>(`
+    delete window.${MARKER};
+    const view = app.workspace.getLeavesOfType(${JSON.stringify(VIEW_TYPE)})[0]?.view;
+    if (!view || typeof view.handlers !== "function") return { fehler: "keine Panel-View mit handlers()" };
+    const handlers = view.handlers();
+    if (typeof handlers.renderMarkdown !== "function") return { fehler: "handlers().renderMarkdown fehlt" };
+    const HTML = ${JSON.stringify(HTML)};
+    const zaehle = (root) => {
+      const all = Array.from(root.querySelectorAll("*"));
+      const anker = all.find((e) => e.localName === "a" && e.textContent === "h-ok");
+      return {
+        anker: anker ? { h: anker.getAttribute("href"), attrs: anker.getAttributeNames().filter((n) => n.startsWith("on") || n === "ping") } : null,
+        forms: all.filter((e) => e.localName === "form").length,
+        formaction: all.filter((e) => e.hasAttribute("formaction")).length,
+        on: all.filter((e) => e.getAttributeNames().some((n) => n.startsWith("on"))).length,
+        ping: all.filter((e) => e.hasAttribute("ping")).length,
+      };
+    };
+    const aussen = document.body.createDiv();
+    aussen.innerHTML = HTML;
+    const gegen = zaehle(aussen);
+    const host = document.body.createDiv({ cls: "transmute-reasoning-body" });
+    handlers.renderMarkdown(host, "Denktext.");
+    host.createDiv({ cls: "tr-lk2-probe" }).innerHTML = HTML;
+    await Promise.resolve(); await Promise.resolve();
+    const sofort = zaehle(host);
+    await new Promise((r) => setTimeout(r, 800));
+    const spaeter = zaehle(host);
+    const marker = String(window.${MARKER});
+    host.remove(); aussen.remove();
+    return { gegen, sofort, spaeter, marker };
+  `).catch((e: unknown) => ({ fehler: e instanceof Error ? e.message : String(e) }));
+  if ("fehler" in d) { unmeasured(NAME, `Handler der View nicht erreicht: ${d.fehler}`); return; }
+  const g = d.gegen;
+  const gegenWirkt = g.forms >= 1 && g.formaction >= 1 && g.on >= 2 && g.ping >= 1 && g.anker !== null && g.anker.attrs.length >= 2;
+  if (!gegenWirkt) { unmeasured(NAME, `die Gegenprobe ausserhalb des Beobachters behielt nicht alle Marker (form ${g.forms}, formaction ${g.formaction}, on* ${g.on}, ping ${g.ping}, Anker ${JSON.stringify(g.anker)})`); return; }
+  const sauber = (m: Zahl): boolean => m.anker !== null && m.anker.h === "https://example.org/ok" && m.anker.attrs.length === 0 && m.forms === 0 && m.formaction === 0 && m.on === 0 && m.ping === 0;
+  const zeile = (m: Zahl): string => `Anker ${m.anker ? `da (href ${String(m.anker.h)}, on*/ping [${m.anker.attrs.join(",")}])` : "FEHLT"}, form ${m.forms}, formaction ${m.formaction}, on* ${m.on}, ping ${m.ping}`;
+  record(NAME, sauber(d.sofort) && sauber(d.spaeter) && d.marker === "undefined",
+    `sofort (2 Mikroaufgaben): ${zeile(d.sofort)} · nach 800 ms: ${zeile(d.spaeter)} · Marker ${d.marker} (verlangt: undefined) · Gegenprobe ausserhalb: form ${g.forms}, formaction ${g.formaction}, on* ${g.on}, ping ${g.ping}, Anker-Attribute [${g.anker?.attrs.join(",")}] (alle > 0 verlangt)`);
 }
 
 // --- Abschnitt: Pflichtpunkte (Welle 30) --------------------------------------------
@@ -2567,7 +2626,7 @@ async function main(): Promise<void> {
     await abschnitt("llm-lab", () => abschnittLlmLab(cdp));
     await abschnitt("Verbindung", () => abschnittVerbindung(cdp));
     await abschnitt("Gemma", () => abschnittGemma(cdp));
-    await abschnitt("Linkschutz", () => abschnittLinkschutz(cdp));
+    await abschnitt("Linkschutz", async () => { await abschnittLinkschutz(cdp); await abschnittLinkschutzHaertung(cdp); });
     await abschnitt("Pflicht", () => abschnittPflicht(cdp));
     await abschnitt("Manager", () => abschnittManager(cdp));
     await abschnitt("Apple Intelligence", () => abschnittApple(cdp));
