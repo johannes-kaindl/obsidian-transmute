@@ -35,7 +35,7 @@
         "llm-json",
         {
           "name": "sampling-profiles",
-          "ref": "0.68.0"
+          "ref": "0.73.0"
         },
         {
           "name": "rotation",
@@ -43,7 +43,7 @@
         },
         {
           "name": "safe-markdown",
-          "ref": "0.68.0"
+          "ref": "0.73.0"
         },
         "secrets",
         "settings",
@@ -63,11 +63,11 @@
         "clip-context",
         {
           "name": "answer-retry",
-          "ref": "0.63.0"
+          "ref": "0.73.0"
         },
         {
           "name": "error-message",
-          "ref": "0.68.0"
+          "ref": "0.73.0"
         }
       ]
     },
@@ -79,11 +79,15 @@
         "clipboard",
         {
           "name": "remote-resources",
-          "ref": "0.68.0"
+          "ref": "0.73.0"
         },
         {
           "name": "link-guard",
-          "ref": "0.68.0"
+          "ref": "0.73.0"
+        },
+        {
+          "name": "leave-tree",
+          "ref": "0.73.0"
         }
       ],
       "rewrite": [
@@ -102,7 +106,7 @@
         "endpoint-secret-hook",
         {
           "name": "endpoint-source",
-          "ref": "0.89.0"
+          "ref": "0.93.0"
         },
         "override-guard",
         "shortcut-failure"
@@ -124,13 +128,16 @@
         "chat-client",
         "chat-transport",
         "clipboard",
-        "clock",
+        {
+          "name": "clock",
+          "ref": "0.93.0"
+        },
         "collapsible",
         "endpoint-list",
         "endpoint-secrets",
         {
           "name": "endpoint-source",
-          "ref": "0.89.0"
+          "ref": "0.93.0"
         },
         "folder-suggest",
         "help-setting",
@@ -138,34 +145,34 @@
         "lab-client",
         {
           "name": "llm-connection",
-          "ref": "0.89.0"
+          "ref": "0.93.0"
         },
         {
           "name": "llm-connection-strings",
-          "ref": "0.89.0"
+          "ref": "0.93.0"
         },
         "endpoint-status-text",
         {
           "name": "endpoint-plumbing",
-          "ref": "0.89.0"
+          "ref": "0.93.0"
         },
         "embedding-connection",
         "confirm",
         {
           "name": "dom-guard",
-          "ref": "0.88.0"
+          "ref": "0.93.0"
         },
         {
           "name": "thinking-control",
-          "ref": "0.89.0"
+          "ref": "0.93.0"
         },
         {
           "name": "model-bar",
-          "ref": "0.89.0"
+          "ref": "0.93.0"
         },
         {
           "name": "model-bar-strings",
-          "ref": "0.89.0"
+          "ref": "0.93.0"
         },
         "model-picker",
         "plugin-api",
@@ -176,7 +183,7 @@
         "shortcuts-bridge",
         {
           "name": "redline",
-          "ref": "0.89.0"
+          "ref": "0.93.0"
         }
       ],
       "rewrite": [
@@ -201,10 +208,14 @@
       "modules": [
         {
           "name": "kit-css",
-          "ref": "0.89.0"
+          "ref": "0.93.0"
         },
         "obsidian-mock",
-        "linear-probe"
+        "linear-probe",
+        {
+          "name": "dom-guard-probe",
+          "ref": "0.93.0"
+        }
       ]
     }
   ]
