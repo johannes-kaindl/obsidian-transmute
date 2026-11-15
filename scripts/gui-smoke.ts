@@ -15,19 +15,16 @@
  *
  * ## Voraussetzung
  *
- * Zweitinstanz mit eigenem Profil und eigenem Port, nie die regulaere Instanz (kein `quit`,
- * kein Neustart fremder Fenster). `--port` ist Pflicht.
+ * Zweitinstanz mit eigenem Profil und eigenem Port, nie die regulaere Instanz (kein `quit`, kein Neustart fremder Fenster). `--port` ist Pflicht. Der Treiber startet keine
+ * Instanz und kennt kein `--launch`: er haengt sich an die laufende auf `--port`. Start, Profil, `.asar`, fremdes `HOME` und Beenden der eigenen PID macht
+ * `tools/obsidian-cdp/messlauf.sh` (README dort § Messlauf in einem Aufruf). Dieser Treiber hat kein `--setup`, der Staging-Vault wird vorher mit `npm run deploy`
+ * gefuellt, darum `OHNE_SETUP=1`. Aus dem Plugin-Ordner:
  *
  * ```bash
- * UD=/tmp/obs-test-obsidian-transmute; mkdir -p "$UD"
- * lsof -nP -iTCP:<port> -sTCP:LISTEN; pgrep -f "user-data-dir=$UD"      # beides leer
- * cp ~/Library/Application\ Support/obsidian/obsidian-*.asar "$UD"/      # aktuelle Version
- * # $UD/obsidian.json: {"vaults":{"nt":{"path":"$STAGING_VAULTS_DIR/obsidian-transmute","ts":1,"open":true}},"language":"en"}
- * python3 ~/.claude/hooks/obsidian-cdp-lock.py acquire --label obsidian-transmute --intent "GUI-Smoke" --exclusive focus --port <port> --ttl 300
- * OBSIDIAN_PLUGIN_DIR="$STAGING_VAULTS_DIR/obsidian-transmute/.obsidian/plugins/transmute" npm run deploy
- * /Applications/Obsidian.app/Contents/MacOS/Obsidian --user-data-dir="$UD" --remote-debugging-port=<port> &
- * npm run smoke:gui -- --port <port>
- * python3 ~/.claude/hooks/obsidian-cdp-lock.py release
+ * npm run build && OBSIDIAN_PLUGIN_DIR="$STAGING_VAULTS_DIR/obsidian-transmute/.obsidian/plugins/transmute" npm run deploy
+ * export REPO=obsidian-transmute PORT=<port> OHNE_SETUP=1 \
+ *   && python3 ~/.claude/hooks/obsidian-cdp-lock.py acquire --label obsidian-transmute --intent "GUI-Smoke" --exclusive focus --port <port> --ttl 900 \
+ *   && ../tools/obsidian-cdp/messlauf.sh
  * ```
  *
  * Vertrauensdialog, Restricted Mode und Aktivierung erledigt `bereiteInstanzVor` im Treiber.
@@ -50,6 +47,7 @@ import { startLlmStub } from "../../tools/obsidian-cdp/llm-stub.js";
 import { createBilanz, parseArgs, runDriver, Vorbedingung } from "../../tools/obsidian-cdp/bilanz.js";
 import { gegenprobeErreichbarkeit, gegenprobeFokus, messeErreichbarkeit, messeFokusErhalt, mitHoehe, zeichnePflicht } from "../../tools/obsidian-cdp/pflichtpunkte.js";
 import { requireEigenerBuild } from "../../tools/obsidian-cdp/vault.js";
+import { lehneLaunchAb } from "../../tools/obsidian-cdp/zweitinstanz.js";
 import { LAB_API_VERSION } from "../src/vendor/kit-obsidian/lab-client";
 
 const PLUGIN_ID = "transmute";
@@ -2665,6 +2663,7 @@ async function abschnittModellzeile(cdp: Cdp): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  lehneLaunchAb(args, "obsidian-transmute");
   // attachTo statt Cdp.attach: Obsidian gibt dem Einstellungen-Fenster denselben
   // Vault-Namen im Titel, ein Titel-Filter waere also mehrdeutig (und sprachabhaengig).
   // Das Kriterium ist die Sache selbst — nur das Hauptfenster traegt einen Workspace.
