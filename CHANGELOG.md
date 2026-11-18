@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A vault-wide run no longer crawls while Obsidian's window is hidden or in the background.** The short pauses that keep the app responsive during a long scan took about 130 ms each in a hidden window (against well under a millisecond now); the pause uses the shared library's macrotask pause (code-kit 0.75.0). Closing the panel also stops a running scan.
+
 ## [0.19.1] — 2026-11-15
 
 ### Changed
