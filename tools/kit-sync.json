@@ -1,10 +1,10 @@
 {
   "sources": {
     "obsidian-kit": {
-      "ref": "0.72.0"
+      "ref": "0.95.0"
     },
     "code-kit": {
-      "ref": "0.38.0"
+      "ref": "0.75.0"
     }
   },
   "targets": [
@@ -24,51 +24,28 @@
         "model-choice",
         "model-list-cache",
         "reasoning",
-        {
-          "name": "redact",
-          "ref": "0.60.0"
-        },
+        "redact",
         "rounds",
         "run-state",
         "model-context",
         "embeddings-client",
         "llm-json",
-        {
-          "name": "sampling-profiles",
-          "ref": "0.73.0"
-        },
-        {
-          "name": "rotation",
-          "ref": "0.60.0"
-        },
-        {
-          "name": "safe-markdown",
-          "ref": "0.73.0"
-        },
+        "sampling-profiles",
+        "rotation",
+        "safe-markdown",
         "secrets",
         "settings",
         "sse",
         "think-splitter",
         "timeout",
         "rel-path",
-        {
-          "name": "folder-scope",
-          "ref": "0.44.0"
-        },
-        {
-          "name": "fold-case",
-          "ref": "0.44.0"
-        },
+        "folder-scope",
+        "fold-case",
         "text-anchor",
         "clip-context",
-        {
-          "name": "answer-retry",
-          "ref": "0.73.0"
-        },
-        {
-          "name": "error-message",
-          "ref": "0.73.0"
-        }
+        "answer-retry",
+        "error-message",
+        "anthropic-wire"
       ]
     },
     {
@@ -77,18 +54,10 @@
       "from": "src/ts/web",
       "modules": [
         "clipboard",
-        {
-          "name": "remote-resources",
-          "ref": "0.73.0"
-        },
-        {
-          "name": "link-guard",
-          "ref": "0.73.0"
-        },
-        {
-          "name": "leave-tree",
-          "ref": "0.73.0"
-        }
+        "remote-resources",
+        "link-guard",
+        "leave-tree",
+        "macrotask-pause"
       ],
       "rewrite": [
         [
@@ -102,12 +71,8 @@
       "source": "obsidian-kit",
       "from": "src/pure",
       "modules": [
-        "anthropic-wire",
         "endpoint-secret-hook",
-        {
-          "name": "endpoint-source",
-          "ref": "0.93.0"
-        },
+        "endpoint-source",
         "override-guard",
         "shortcut-failure"
       ],
@@ -128,52 +93,25 @@
         "chat-client",
         "chat-transport",
         "clipboard",
-        {
-          "name": "clock",
-          "ref": "0.93.0"
-        },
+        "clock",
         "collapsible",
         "endpoint-list",
         "endpoint-secrets",
-        {
-          "name": "endpoint-source",
-          "ref": "0.93.0"
-        },
+        "endpoint-source",
         "folder-suggest",
         "help-setting",
         "hub",
         "lab-client",
-        {
-          "name": "llm-connection",
-          "ref": "0.93.0"
-        },
-        {
-          "name": "llm-connection-strings",
-          "ref": "0.93.0"
-        },
+        "llm-connection",
+        "llm-connection-strings",
         "endpoint-status-text",
-        {
-          "name": "endpoint-plumbing",
-          "ref": "0.93.0"
-        },
+        "endpoint-plumbing",
         "embedding-connection",
         "confirm",
-        {
-          "name": "dom-guard",
-          "ref": "0.93.0"
-        },
-        {
-          "name": "thinking-control",
-          "ref": "0.93.0"
-        },
-        {
-          "name": "model-bar",
-          "ref": "0.93.0"
-        },
-        {
-          "name": "model-bar-strings",
-          "ref": "0.93.0"
-        },
+        "dom-guard",
+        "thinking-control",
+        "model-bar",
+        "model-bar-strings",
         "model-picker",
         "plugin-api",
         "request-section",
@@ -181,10 +119,9 @@
         "secrets",
         "settings_walker",
         "shortcuts-bridge",
-        {
-          "name": "redline",
-          "ref": "0.93.0"
-        }
+        "redline",
+        "setting-body-host",
+        "status-indicator"
       ],
       "rewrite": [
         [
@@ -206,16 +143,10 @@
       "source": "obsidian-kit",
       "from": "src/testing",
       "modules": [
-        {
-          "name": "kit-css",
-          "ref": "0.93.0"
-        },
+        "kit-css",
         "obsidian-mock",
         "linear-probe",
-        {
-          "name": "dom-guard-probe",
-          "ref": "0.93.0"
-        }
+        "dom-guard-probe"
       ]
     }
   ]
