@@ -71,13 +71,18 @@ sonst eine Datei, die mit dem Lauf nichts zu tun hat.
 
 ### Der Prüfpunkt, um den es eigentlich geht
 
-**„Renderer atmet während des Laufs"** zählt, wie oft der Lauf `setTimeout(…, 0)` aufruft —
-also die UI-Freigabe **direkt**, nicht ihre Nebenwirkung. Drei Anläufe über die Nebenwirkung
+**„Renderer atmet während des Laufs"** zählt, wie oft der Lauf eine Nachricht (`null`) an einen `MessagePort` schickt —
+das ist die Makrotask-Pause des Kits (`macrotask-pause`, seit Welle 36; vorher `setTimeout(…, 0)`, das Chromium im Hintergrund drosselt) —
+also die UI-Freigabe **direkt**, nicht ihre Nebenwirkung. `setTimeout(…, 0)` anderer Herkunft zählt der Treiber getrennt mit (Obsidian ruft es selbst oft) und wertet es nicht. Drei Anläufe über die Nebenwirkung
 („laufen fremde Makrotasks?") waren allesamt irreführend: einmal maß die Drosselung mit,
 zweimal war der Lauf schlicht kürzer als der Freigabe-Takt. Der Punkt eicht deshalb zuerst
 die Timer-Kette des Fensters und meldet die Bedingungen im Ergebnis mit.
 
 ## Durchläufe
+
+### 2026-11-18 — Obsidian 1.15.1, Welle 36 (Pin obsidian-kit 0.95.0 / code-kit 0.75.0, Makrotask-Pause) · **72 grün · 0 rot · 1 übersprungen · 0 nichts gemessen von 73**
+
+Die UI-Freigabe des Vault-Laufs ist die Kit-Pause `createMacrotaskPause` statt `setTimeout(resolve, 0)`. Gemessen in einer Zweitinstanz (Port 9763, Profil frisch, 40 aufeinanderfolgende Pausen je Arm): sichtbar 4,3 ms je `setTimeout(0)`-Pause, versteckt (Prozess per System Events versteckt, `visibilityState` hidden) 125 bis 135 ms, bei +2 s, +1 min, +5 min und +6 min gleich; die `MessageChannel`-Pause kostet in allen fünf Armen 0,005 bis 0,013 ms. Der Zähler des Punktes „Renderer atmet“ zählt jetzt Nachrichten (`null`) an einen `MessagePort`. Mutationsprobe: mit der alten `setTimeout`-Pause im Plugin ist der Punkt rot (0 UI-Freigaben in 1216 ms), mit der Kit-Pause grün (2 UI-Freigaben). Baseline davor 71 grün · 0 rot · 1 übersprungen · 1 nichts gemessen (der Punkt „Renderer atmet“ erkannte den Lauf nicht, derselbe Befund wie in den Läufen davor). „Abbrechen beendet den Lauf“ bleibt übersprungen: der Lauf ist beim Klick fertig.
 
 ### 2026-11-14 — Obsidian 1.15.1, Welle 34 (Pin obsidian-kit 0.89.0 / code-kit 0.68.0, Modellzeile mit Gruppen, Redline) · **71 grün · 0 rot · 1 übersprungen · 1 nichts gemessen von 73**
 

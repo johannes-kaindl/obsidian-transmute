@@ -7,6 +7,7 @@ import { buildModelBar, type ModelBar, type ModelBarConnection } from "../vendor
 import { thinkingOffTexts } from "../vendor/kit-obsidian/thinking-control";
 import { copyToClipboard } from "../vendor/kit-obsidian/clipboard";
 import { locateQuote } from "../vendor/kit/text-anchor";
+import { createMacrotaskPause } from "../vendor/kit/macrotask-pause";
 import { activeMarkdownView, applyHitsToEditor, readScope, viewForPath } from "./editor-io";
 import { renderLibrary, renderOutcome, renderPanel, type PanelHandlers, type PanelModel, type PanelParts } from "./view-render";
 import { effectiveFlags } from "../core/regex/compile";
@@ -102,6 +103,8 @@ export class TransmuteView extends ItemView {
    *  `pinScope()` synchron bleiben kann. */
   private vaultSample: { text: string; label: string } | null = null;
   private abortCtrl: AbortController | null = null;
+  /** Pause des Vault-Laufs (Kit `macrotask-pause`): ein Makrotask ohne Timer, den Chromium im Hintergrund nicht drosselt. In `onClose` geschlossen. */
+  private readonly macrotask = createMacrotaskPause();
   private lastSnapshot: string | null = null;
 
   constructor(
@@ -155,6 +158,8 @@ export class TransmuteView extends ItemView {
    *  Der Timer dagegen muss weg, sonst feuert er in ein geleertes Panel. */
   protected onClose(): Promise<void> {
     this.clearEditTimer();
+    this.abortCtrl?.abort();
+    this.macrotask.close();
     this.bar?.destroy();
     this.bar = null;
     this.hub?.destroy();
@@ -571,8 +576,7 @@ export class TransmuteView extends ItemView {
         signal: ctrl.signal,
         onProgress: (done, _total, path) => this.setRun(runProgressed(this.vault.run, done, path)),
         // Echter Makrotask: ohne ihn wird der Klick auf „Abbrechen" nie zugestellt.
-        // window, nicht activeWindow — wie beim Tipp-Timer: kein DOM-Bezug.
-        yieldToUi: () => new Promise((resolve) => { window.setTimeout(resolve, 0); }),
+        yieldToUi: () => this.macrotask.pause(),
       },
     );
     this.abortCtrl = null;

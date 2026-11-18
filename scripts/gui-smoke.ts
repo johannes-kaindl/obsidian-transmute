@@ -826,7 +826,7 @@ async function abschnittAbbruchMessen(cdp: Cdp, kandidaten: number): Promise<voi
   }
 
   const mess = await cdp.evaluate<{
-    yields: number; runden: number; abortSichtbar: boolean; dauer: number; refMs: number;
+    yields: number; fremdTimer: number; runden: number; abortSichtbar: boolean; dauer: number; refMs: number;
     gestartet: boolean; hidden: boolean; zeilen: number; kopf: string; vorher: string; muster: string;
   }>(`
     // Eichmessung: laeuft die Timer-Kette in diesem Fenster normal? document.hidden
@@ -837,14 +837,26 @@ async function abschnittAbbruchMessen(cdp: Cdp, kandidaten: number): Promise<voi
     const refMs = (performance.now() - ref0) / 3;
 
     // Den Mechanismus DIREKT zaehlen statt seine Nebenwirkung zu erraten: yieldToUi
-    // ruft setTimeout(resolve, 0). Ueber die Nebenwirkung (laufen fremde Makrotasks?)
-    // war der Punkt dreimal falsch — mal gedrosselt, mal war der Lauf zu kurz.
+    // ruft die Makrotask-Pause des Kits (macrotask-pause), und die schickt je Pause eine
+    // Nachricht (null) an einen MessagePort — NICHT mehr setTimeout(resolve, 0), das
+    // Chromium im Hintergrund drosselt (gemessen 2026-11-18: 125 ms je Pause statt 4 ms).
+    // Ueber die Nebenwirkung (laufen fremde Makrotasks?) war der Punkt dreimal falsch —
+    // mal gedrosselt, mal war der Lauf zu kurz. setTimeout(…, 0) zaehlt weiter mit, aber
+    // nur als Fremdzaehler: Obsidian ruft es selbst oft (402 in 2 s ohne Lauf), er darf
+    // den Punkt nicht gruen machen.
     let yields = 0;
+    let fremdTimer = 0;
     const orig = window.setTimeout;
     window.setTimeout = function (fn, ms, ...rest) {
-      if (ms === 0) yields++;
+      if (ms === 0) fremdTimer++;
       return orig.call(this, fn, ms, ...rest);
     };
+    const origPost = MessagePort.prototype.postMessage;
+    MessagePort.prototype.postMessage = function (msg, ...rest) {
+      if (msg === null) yields++;
+      return origPost.call(this, msg, ...rest);
+    };
+    const abbauen = () => { window.setTimeout = orig; MessagePort.prototype.postMessage = origPost; };
 
     // Lage VOR dem Klick festhalten. Ohne sie ist „kein Lauf" nicht von „nichts zu tun"
     // zu unterscheiden — und das ist genau die Verwechslung, an der dieser Pruefpunkt
@@ -856,8 +868,8 @@ async function abschnittAbbruchMessen(cdp: Cdp, kandidaten: number): Promise<voi
 
     const compute = document.querySelector(".transmute-compute");
     if (!compute || compute.disabled) {
-      window.setTimeout = orig;
-      return { yields: -1, runden: -1, abortSichtbar: false, dauer: 0, refMs, gestartet: false, hidden: document.hidden, vorher, muster, zeilen: -1, kopf: !compute ? "Knopf fehlt" : "Knopf gesperrt" };
+      abbauen();
+      return { yields: -1, fremdTimer: 0, runden: -1, abortSichtbar: false, dauer: 0, refMs, gestartet: false, hidden: document.hidden, vorher, muster, zeilen: -1, kopf: !compute ? "Knopf fehlt" : "Knopf gesperrt" };
     }
 
     const t0 = performance.now();
@@ -897,12 +909,12 @@ async function abschnittAbbruchMessen(cdp: Cdp, kandidaten: number): Promise<voi
       runden++;
     }
     const dauer = performance.now() - t0;
-    window.setTimeout = orig;
+    abbauen();
     // Mitberichten, WAS gelaufen ist: ohne das ist „0 Freigaben" nicht von „gar kein
     // Lauf" zu unterscheiden.
     const kopfEl = document.querySelector(".transmute-affected");
     return {
-      yields, runden, abortSichtbar, dauer, refMs, gestartet, vorher, muster, hidden: document.hidden,
+      yields, fremdTimer, runden, abortSichtbar, dauer, refMs, gestartet, vorher, muster, hidden: document.hidden,
       zeilen: document.querySelectorAll(".transmute-file-row").length,
       kopf: kopfEl ? kopfEl.textContent.trim() : "(keine Zusammenfassung)",
     };
@@ -918,7 +930,7 @@ async function abschnittAbbruchMessen(cdp: Cdp, kandidaten: number): Promise<voi
   // Zusammenfassung ist „zu kurz" nicht von „hat nichts getan" zu unterscheiden — und
   // genau diese Verwechslung hat den Punkt am 2026-09-02 stillgelegt.
   const lage = `vor dem Klick: „${mess.vorher}", Muster „${mess.muster}" — danach ${mess.zeilen} Dateizeilen,`
-    + ` „${mess.kopf}"; ${mess.yields} UI-Freigaben in ${Math.round(mess.dauer)} ms,`
+    + ` „${mess.kopf}"; ${mess.yields} UI-Freigaben (Makrotask-Nachrichten) und ${mess.fremdTimer} setTimeout(0) anderer Herkunft in ${Math.round(mess.dauer)} ms,`
     + ` Fremdrunden ${mess.runden}, gestartet=${mess.gestartet}, abortSichtbar=${mess.abortSichtbar},`
     + ` Eichung ${Math.round(mess.refMs)} ms`;
   if (!mess.gestartet) {
