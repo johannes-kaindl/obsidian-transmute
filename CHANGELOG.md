@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-11-19
+
 ### Changed
 - The check for patterns that can hang the editor is now the shared guard of the kit. It refuses everything it refused before and two more shapes, each with its own message: alternatives of which one starts like another inside a repeated group (`(a|aa)+`), and the same item twice in a row with unbounded repetition (`.*.*=`). A repeated group that holds an unbounded repetition anywhere in its body, not only at its end (`(\w+\s?)+$`), is refused as well. As before, a hand-written pattern can still be run anyway after you confirm.
 - `u` together with `v` is reported as an unusable flag instead of an engine syntax error.
