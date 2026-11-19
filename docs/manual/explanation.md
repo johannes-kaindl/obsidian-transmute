@@ -93,12 +93,12 @@ problem, the UI is already frozen.
 Given that constraint, Transmute defends in two layers that both run *before* the point
 where interruption would even be needed:
 
-1. **A static heuristic, before the pattern ever runs.** `assessPattern`
-   (`src/core/regex/guard.ts`) inspects the *source* of the generated pattern — not its
+1. **A static heuristic, before the pattern ever runs.** `assessRegexRisk`
+   (the shared guard of the kit, `user-regex`) inspects the *source* of the generated pattern — not its
    behaviour — for the specific shapes that are known to cause catastrophic
-   backtracking: a quantified group whose body itself ends in an unbounded quantifier
+   backtracking: a quantified group whose body contains an unbounded quantifier
    (`(a+)+`), a quantified group containing alternation with a duplicate branch
-   (`(a|a)+`), or an unbounded quantifier directly on a backreference (`(a)\1+`). A
+   (`(a|a)+`) or with a branch that starts like another (`(a|aa)+`), the same item twice in a row with unbounded quantifiers (`.*.*`), or an unbounded quantifier directly on a backreference (`(a)\1+`). A
    pattern that matches one of these shapes is rejected outright, with a plain-language
    reason, and is never compiled into a `RegExp` at all. This is deliberately
    conservative in one direction only: a false positive here merely means Transmute asks

@@ -1,16 +1,14 @@
+import { compileUserRegex, type RegexRiskRule } from "../../vendor/kit/user-regex";
 import type { RuleDraft } from "../types";
-import { assessPattern } from "./guard";
-import type { RiskRule } from "./guard-types";
 
 export type CompileResult =
   | { ok: true; re: RegExp }
-  | { ok: false; kind: "risky"; rule: RiskRule }
+  | { ok: false; kind: "risky"; rule: RegexRiskRule }
   | { ok: false; kind: "syntax"; message: string }
   | { ok: false; kind: "flags"; message: string };
 
 /** Kanonische Reihenfolge, in der `RegExp.prototype.flags` die Flags ausgibt. */
 const FLAG_ORDER = ["d", "g", "i", "m", "s", "u", "v", "y"];
-const ALLOWED_FLAGS = new Set(FLAG_ORDER);
 
 /** Muster, die zeilenweise Ausfuehrung ausschliessen: s/m-Flag oder ein \n im Pattern. */
 export function isMultilinePattern(draft: RuleDraft): boolean {
@@ -36,21 +34,24 @@ export type CompileOptions = {
   allowRisky?: boolean;
 };
 
+/**
+ * Kompiliert die Regel mit dem Baustein des Kits (code-kit `user-regex`: Flags, dann Risiko, dann Syntax) und den Flags von `effectiveFlags`.
+ *
+ * Was hier bleibt, ist die Pflicht des Plugins: `g` erzwingen und die Flags normalisieren (`effectiveFlags`). Die Normalisierung wirft unbekannte
+ * Zeichen weg, deshalb prueft diese Funktion sie vorher selbst; sonst liefe `gz` als `g` durch.
+ * Unterschiede zur frueheren Eigenfassung, alle vom Kit: ein doppeltes Flag ist nach `effectiveFlags` keins mehr; `u` zusammen mit `v` meldet jetzt
+ * `flags` (frueher `syntax` mit dem Text der Engine); die Wache kennt zwei Regeln mehr (`overlapping-alternation`, `adjacent-quantifiers`) und liest
+ * eine unbegrenzte Wiederholung irgendwo im Gruppenrumpf statt nur an seinem Ende. Ein leeres Muster meldet das Kit als eigene Antwort; es erreicht
+ * diese Funktion nicht (Session und Antwort-Parser fangen es vorher), waere es so sonst `(?:)` und traefe ueberall.
+ */
 export function compileRule(draft: RuleDraft, opts: CompileOptions = {}): CompileResult {
   for (const flag of draft.flags) {
-    if (!ALLOWED_FLAGS.has(flag)) return { ok: false, kind: "flags", message: flag };
+    if (!FLAG_ORDER.includes(flag)) return { ok: false, kind: "flags", message: flag };
   }
-  // Die Freigabe gilt bewusst NUR fuer das Risiko-Veto. Syntax und Flags sind kein
+  // Die Freigabe gilt bewusst NUR fuer das Risiko-Veto (das Kit haelt das ebenso). Syntax und Flags sind kein
   // Abwaegen, sondern schlicht nicht ausfuehrbar — da gaebe es nichts freizugeben.
-  if (opts.allowRisky !== true) {
-    const risk = assessPattern(draft.regex);
-    if (!risk.ok) return { ok: false, kind: "risky", rule: risk.rule };
-  }
-
-  const flags = effectiveFlags(draft.flags);
-  try {
-    return { ok: true, re: new RegExp(draft.regex, flags) };
-  } catch (err) {
-    return { ok: false, kind: "syntax", message: err instanceof Error ? err.message : String(err) };
-  }
+  const res = compileUserRegex(draft.regex, effectiveFlags(draft.flags), opts);
+  if (res.ok) return res;
+  if (res.kind === "empty") return { ok: false, kind: "syntax", message: "empty pattern" };
+  return res;
 }

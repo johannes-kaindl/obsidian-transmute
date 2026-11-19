@@ -1,10 +1,10 @@
 {
   "sources": {
     "obsidian-kit": {
-      "ref": "0.95.0"
+      "ref": "0.102.0"
     },
     "code-kit": {
-      "ref": "0.75.0"
+      "ref": "0.82.0"
     }
   },
   "targets": [
@@ -45,7 +45,8 @@
         "clip-context",
         "answer-retry",
         "error-message",
-        "anthropic-wire"
+        "anthropic-wire",
+        "user-regex"
       ]
     },
     {
@@ -120,6 +121,7 @@
         "settings_walker",
         "shortcuts-bridge",
         "redline",
+        "redline-strings",
         "setting-body-host",
         "status-indicator"
       ],

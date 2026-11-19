@@ -1,4 +1,4 @@
-import type { RiskRule } from "./regex/guard-types";
+import type { RegexRiskRule } from "../vendor/kit/user-regex";
 import type { ProbeFinding } from "./regex/relax";
 
 /**
@@ -11,7 +11,7 @@ import type { ProbeFinding } from "./regex/relax";
 export type RuleProblem =
   | { kind: "syntax"; message: string }
   | { kind: "flags"; message: string }
-  | { kind: "risky"; rule: RiskRule }
+  | { kind: "risky"; rule: RegexRiskRule }
   | { kind: "too-many"; limit: number }
   | { kind: "too-slow"; ms: number; sampleChars: number; longestLine: number };
 

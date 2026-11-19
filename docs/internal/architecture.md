@@ -11,7 +11,7 @@ src/
 ├── main.ts           Plugin-Einstieg, verdrahtet Kern und Adapter (this.llm = createLlmConnection)
 ├── core/
 │   ├── llm/          prompt · response (Regel/Diagnose lesen, JSON aus code-kit llm-json) · client
-│   ├── regex/        compile (allowRisky) · execute (Zeitbudget + maxHits) · guard · guard-types ·
+│   ├── regex/        compile (allowRisky, über code-kit user-regex) · execute (Zeitbudget + maxHits) ·
 │   │                 probe (Kanarienvogel) · relax (Lockerungs-Sonden) · evaluate ← der EINE Ausführungspfad
 │   ├── vault/        scope (Kandidaten) · run (Lauf) · selection (zwei Ebenen) · snapshot · apply ·
 │   │                 sample · state · labels — alles pure, IO injiziert

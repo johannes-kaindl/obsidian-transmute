@@ -125,15 +125,17 @@ rejected with the "unknown flag" error before the pattern is even compiled.
 ## Risk messages
 
 Before a syntactically valid pattern is compiled and run, a static heuristic
-(`assessPattern`) screens it for constructs known to cause catastrophic backtracking.
+(`assessRegexRisk`) screens it for constructs known to cause catastrophic backtracking.
 A pattern that trips one of these rules is rejected outright — it is never executed,
 regardless of the time budget:
 
 | Rule | Message shown | What it catches |
 | --- | --- | --- |
-| `nested-quantifier` | "The pattern nests quantifiers, which can hang the editor." | A quantified group whose own body ends in an unbounded quantifier, e.g. `(a+)+`, `(\d+)+$`. |
+| `nested-quantifier` | "The pattern nests quantifiers, which can hang the editor." | A quantified group with an unbounded quantifier anywhere in its body, e.g. `(a+)+`, `(\d+)+$`, `(\w+\s?)+$`. |
 | `quantified-alternation` | "The pattern repeats overlapping alternatives, which can hang the editor." | A quantified group containing alternation with a duplicate branch, e.g. `(a|a)+`, `(x|x)*`. |
 | `unbounded-backreference` | "The pattern repeats a backreference without a bound." | An unbounded quantifier directly on a backreference, e.g. `(a)\1+`. |
+| `overlapping-alternation` | "The pattern repeats alternatives of which one starts like another, which can hang the editor." | A quantified group in which one plain branch is the start of another, e.g. `(a|aa)+`, `(a|b|ab)*c`. |
+| `adjacent-quantifiers` | "The pattern repeats the same item twice in a row without a bound, which can hang the editor." | The same item twice in a row, each with an unbounded quantifier, e.g. `.*.*=`, `\d*\d*x`. |
 
 Patterns that merely *look* similar but aren't actually risky pass through unchanged —
 for example `(foo|bar)+` (distinct branches), `a+b+` (sibling quantifiers, not nested),

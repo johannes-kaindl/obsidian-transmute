@@ -43,7 +43,7 @@ Each entry starts with the message you see, exactly as the plugin shows it (Engl
 
 **Fix:** Press **Preview** again, or edit the pattern in the panel yourself.
 
-## The pattern nests quantifiers, which can hang the editor. (also: "…repeats overlapping alternatives…", "…repeats a backreference without a bound.")
+## The pattern nests quantifiers, which can hang the editor. (also: "…repeats overlapping alternatives…", "…repeats a backreference without a bound.", "…starts like another…", "…the same item twice in a row…")
 
 **Cause:** The safety screen rejected a pattern that can run for a very long time. It is never executed.
 
