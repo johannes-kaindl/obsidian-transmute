@@ -48,6 +48,24 @@ describe("snapshotRoot", () => {
   });
 });
 
+describe("writeSnapshot, Ordnerkette", () => {
+  it("legt auch den obersten Ordner der Kette an, wenn der Adapter nicht rekursiv anlegt", async () => {
+    const { app, dirs } = fakeApp();
+    // Adapter wie auf Mobilgeräten: mkdir verlangt den Elternordner; configDir existiert hier noch nicht
+    const adapter = app.vault.adapter as unknown as { mkdir: (p: string) => Promise<void> };
+    adapter.mkdir = (p: string) => {
+      const parent = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
+      if (parent !== "" && !dirs.has(parent)) return Promise.reject(new Error(`ENOENT ${p}`));
+      dirs.add(p);
+      return Promise.resolve();
+    };
+    const dir = await writeSnapshot(app, "2026-08-14T17:02:11.000Z", RULE, ["sub/a.md"],
+      () => Promise.resolve("alt"));
+    expect(dirs.has(".obsidian")).toBe(true);
+    expect(dirs.has(`${snapshotRoot(app)}/${dir}/files/sub`)).toBe(true);
+  });
+});
+
 describe("writeSnapshot", () => {
   it("legt je Datei eine Kopie und ein Manifest ohne Hashes an", async () => {
     const { app, disk } = fakeApp();

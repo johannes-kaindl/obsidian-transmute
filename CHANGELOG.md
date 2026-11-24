@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **A snapshot before a vault-wide run now creates the whole folder chain**, including the top-level folder. Before, the topmost folder of the chain was never checked, so on a device whose file adapter does not create parents the snapshot (and with it the run) failed. The folder creation is the shared one of the kit now.
+
+### Changed
+- Shared library updated (obsidian-kit 0.108.0, code-kit 0.88.0); the hub tab bar styles gain the rules for the overflow menu (not used here yet).
+
 ## [0.20.0] — 2026-11-19
 
 ### Changed

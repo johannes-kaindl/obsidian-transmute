@@ -4,17 +4,11 @@ import {
   type SnapshotEntry, type SnapshotManifest,
 } from "../core/vault/snapshot";
 import type { RuleDraft } from "../core/types";
+import { ensureDir } from "../vendor/kit/ensure-dir";
 
 /** `configDir` statt ".obsidian" — der Pfad ist konfigurierbar (`hardcoded-config-path`). */
 export function snapshotRoot(app: App): string {
   return `${app.vault.configDir}/plugins/transmute/snapshots`;
-}
-
-async function ensureDir(app: App, path: string): Promise<void> {
-  if (await app.vault.adapter.exists(path)) return;
-  const parent = path.slice(0, path.lastIndexOf("/"));
-  if (parent.includes("/")) await ensureDir(app, parent);
-  await app.vault.adapter.mkdir(path);
 }
 
 /**
@@ -35,13 +29,13 @@ export async function writeSnapshot(
 ): Promise<string> {
   const dir = snapshotDirName(at);
   const root = `${snapshotRoot(app)}/${dir}`;
-  await ensureDir(app, `${root}/files`);
+  await ensureDir(app.vault.adapter, `${root}/files`);
 
   for (const path of paths) {
     const text = await read(path);
     if (text === null) throw new Error(path);
     const target = `${root}/files/${path}`;
-    await ensureDir(app, target.slice(0, target.lastIndexOf("/")));
+    await ensureDir(app.vault.adapter, target.slice(0, target.lastIndexOf("/")));
     await app.vault.adapter.write(target, text);
   }
 
