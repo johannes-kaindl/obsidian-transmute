@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.20.1] — 2026-11-24
+
 ### Fixed
 - **A snapshot before a vault-wide run now creates the whole folder chain**, including the top-level folder. Before, the topmost folder of the chain was never checked, so on a device whose file adapter does not create parents the snapshot (and with it the run) failed. The folder creation is the shared one of the kit now.
 
